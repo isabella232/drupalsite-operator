@@ -1,0 +1,222 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: drupal-template
+  annotations:
+    description: "Description"
+    iconClass: "icon-drupal"
+    tags: "drupal"
+objects:
+- kind: Secret
+  apiVersion: v1
+  metadata:
+    name: mysql-pass-${APP_NAME}
+  data:
+    password: cm9vdA==
+  type: Opaque
+
+- kind: DeploymentConfig
+  apiVersion: apps.openshift.io/v1
+  metadata:
+    name: drupal-mysql-${APP_NAME}
+  spec:
+    triggers:
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      app: drupal-mysql-${APP_NAME}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: drupal-mysql-${APP_NAME}
+      spec:
+        volumes:
+          - name: mysql-persistent-storage
+            emptyDir: {}
+        containers:
+          - name: mysql
+            env:
+              - name: MYSQL_ROOT_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mysql-pass-${APP_NAME}
+                    key: password
+              - name: MYSQL_DATABASE
+                value: drupal
+            ports:
+              - containerPort: 3306
+                protocol: TCP
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+              - name: mysql-persistent-storage
+                mountPath: /var/lib/mysql
+            image: 'mysql:5.6'
+
+- kind: DeploymentConfig
+  apiVersion: apps.openshift.io/v1
+  metadata:
+    name: drupal-nginx-${APP_NAME}
+  spec:
+    triggers:
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      app: drupal-nginx-${APP_NAME}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: drupal-nginx-${APP_NAME}
+      spec:
+        restartPolicy: Always
+        containers:
+          - name: nginx
+            env:
+              - name: DRUPAL_SHARED_VOLUME
+                value: drupal-data
+              - name: DB_HOST
+                value: drupal-mysql
+              - name: DB_PORT
+                value: '3306'
+              - name: DB_NAME
+                value: drupal
+              - name: DB_USER
+                value: root
+              - name: DB_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mysql-pass-${APP_NAME}
+                    key: password
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+            imagePullPolicy: Always
+            volumeMounts:
+              - name: drupal-directory-${APP_NAME}
+                mountPath: /drupal-data
+            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/nginx
+        volumes:
+          - name: drupal-directory-${APP_NAME}
+            persistentVolumeClaim:
+              claimName: drupal-pv-claim-${APP_NAME}
+
+- kind: DeploymentConfig
+  apiVersion: apps.openshift.io/v1
+  metadata:
+    name: drupal-php-${APP_NAME}
+  spec:
+    triggers:
+      - type: ConfigChange
+    replicas: 1
+    selector:
+      app: drupal-php-${APP_NAME}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: drupal-php-${APP_NAME}
+      spec:
+        volumes:
+          - name: drupal-directory-${APP_NAME}
+            persistentVolumeClaim:
+              claimName: drupal-pv-claim-${APP_NAME}
+        containers:
+          - name: php
+            env:  
+              - name: DRUPAL_SHARED_VOLUME
+                value: drupal-data
+              - name: DB_HOST
+                value: drupal-mysql
+              - name: DB_PORT
+                value: '3306'
+              - name: DB_NAME
+                value: drupal
+              - name: DB_USER
+                value: root
+              - name: DB_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mysql-pass-${APP_NAME}
+                    key: password
+            ports:
+              - containerPort: 9000
+                protocol: TCP
+            imagePullPolicy: Always
+            volumeMounts:
+              - name: drupal-directory-${APP_NAME}
+                mountPath: /drupal-data
+            image: >-
+              gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:latest
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: drupal-pv-claim-${APP_NAME}
+  spec:
+    storageClassName: manual
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 5Gi
+
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: php-fpm
+  spec:
+    ports:
+      - protocol: TCP
+        port: 80
+        targetPort: 9000
+    selector:
+      app: drupal-php-${APP_NAME}
+
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: drupal-mysql
+  spec:
+    ports:
+      - protocol: TCP
+        port: 3306
+        targetPort: 3306
+    selector:
+      app: drupal-mysql-${APP_NAME}
+    
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: drupal-nginx-${APP_NAME}
+  spec:
+    ports:
+      - protocol: TCP
+        port: 80
+        targetPort: 8080
+    selector:
+      app: drupal-nginx-${APP_NAME}
+
+- kind: Route
+  apiVersion: route.openshift.io/v1
+  metadata:
+    name: drupal-${APP_NAME}
+    annotations:
+      haproxy.router.openshift.io/set-forwarded-headers: replace
+  spec:
+    host: drupal-${APP_NAME}-ravineet-drupal1.clu-ravineet.cern.ch
+    to:
+      kind: Service
+      name: drupal-nginx-${APP_NAME}
+      weight: 100
+    port:
+      targetPort: 8080
+    wildcardPolicy: None
+
+parameters:
+- description: Drupal application name
+  from: '[A-Z0-9]{8}'
+  generate: expression
+  name: APP_NAME
+labels:
+  drupal: master

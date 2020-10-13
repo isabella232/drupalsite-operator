@@ -60,7 +60,7 @@ Build nginx (latest):
   variables:
     DOCKERFILE_FOLDER: 'images/nginx'
     IMAGE_NAME: 'nginx'
-    OPTIONS: '--build-arg SITE_BUILDER_VERSION=$CI_SITE_BUILDER_VERSION --build-arg NGINX_VERSION=CI_NGINX_VERSION'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=$CI_SITE_BUILDER_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
 
 Build php-fpm (latest):
   stage: build
