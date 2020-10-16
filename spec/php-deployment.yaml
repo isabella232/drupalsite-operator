@@ -1,0 +1,40 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  creationTimestamp: null
+  name: php
+spec:
+  replicas: 1
+  selector:
+    deployment-config.name: php
+  strategy:
+    resources: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        deployment-config.name: php
+    spec:
+      initContainers:
+      - name: siteBuilder-init
+        image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/site-builder
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: /drupal-code
+          name: drupal-directory
+      containers:
+      - name: php
+        image: centos/php-73-centos7
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: /drupal-code
+          name: drupal-directory
+        - mountPath: /drupal-site-content
+          name: drupal-pv
+        resources: {}
+      volumes:
+      - name: drupal-directory
+        emptyDir: {}
+      - name: drupal-pv
+        persistentVolumeClaim:
+          claimName: drupal-pv

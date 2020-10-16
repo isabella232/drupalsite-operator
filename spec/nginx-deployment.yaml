@@ -1,0 +1,55 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  creationTimestamp: null
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    deployment-config.name: nginx
+  strategy:
+    resources: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        deployment-config.name: nginx
+    spec:
+      initContainers:
+      - name: sitebuilder-init
+        image: busybox
+        imagePullPolicy: Always
+        command:
+        - touch
+        - drupal-code/{1..10}
+        volumeMounts:
+        - mountPath: /drupal-code
+          name: drupal-directory
+      containers:
+      - name: nginx
+        image: openshift-registry.web.cern.ch/drupal-container-site/nginx-example
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+        volumeMounts:
+        - mountPath: /drupal-code
+          name: drupal-directory
+        - mountPath: /drupal-site-content
+          name: drupal-pv
+        resources: {}
+      volumes:
+      - name: drupal-directory
+        emptyDir: {}
+      - name: drupal-pv
+        persistentVolumeClaim:
+          claimName: drupal-pv
