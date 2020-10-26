@@ -51,7 +51,7 @@ objects:
             volumeMounts:
               - name: mysql-persistent-storage
                 mountPath: /var/lib/mysql
-            image: 'mysql:5.6'
+            image: 'mysql:5.7'
 
 - kind: DeploymentConfig
   apiVersion: apps.openshift.io/v1
@@ -74,9 +74,9 @@ objects:
           - name: nginx
             env:
               - name: DRUPAL_SHARED_VOLUME
-                value: drupal-data
+                value: /drupal-data
               - name: DB_HOST
-                value: drupal-mysql
+                value: drupal-mysql-${APP_NAME}
               - name: DB_PORT
                 value: '3306'
               - name: DB_NAME
@@ -95,7 +95,7 @@ objects:
             volumeMounts:
               - name: drupal-directory-${APP_NAME}
                 mountPath: /drupal-data
-            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/nginx
+            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/nginx:drupal-${DRUPAL_VERSION}
         volumes:
           - name: drupal-directory-${APP_NAME}
             persistentVolumeClaim:
@@ -125,9 +125,9 @@ objects:
           - name: php
             env:  
               - name: DRUPAL_SHARED_VOLUME
-                value: drupal-data
+                value: /drupal-data
               - name: DB_HOST
-                value: drupal-mysql
+                value: drupal-mysql-${APP_NAME}
               - name: DB_PORT
                 value: '3306'
               - name: DB_NAME
@@ -147,14 +147,14 @@ objects:
               - name: drupal-directory-${APP_NAME}
                 mountPath: /drupal-data
             image: >-
-              gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:latest
+              gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:drupal-${DRUPAL_VERSION}
 
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:
     name: drupal-pv-claim-${APP_NAME}
   spec:
-    storageClassName: manual
+    storageClassName: cephfs-no-backup
     accessModes:
       - ReadWriteOnce
     resources:
@@ -176,7 +176,7 @@ objects:
 - kind: Service
   apiVersion: v1
   metadata:
-    name: drupal-mysql
+    name: drupal-mysql-${APP_NAME}
   spec:
     ports:
       - protocol: TCP
@@ -204,7 +204,7 @@ objects:
     annotations:
       haproxy.router.openshift.io/set-forwarded-headers: replace
   spec:
-    host: drupal-${APP_NAME}-ravineet-drupal1.clu-ravineet.cern.ch
+    host: ${APP_NAME}-drupaltemplate.${CLUSTER_NAME}.cern.ch
     to:
       kind: Service
       name: drupal-nginx-${APP_NAME}
@@ -216,7 +216,12 @@ objects:
 parameters:
 - description: Drupal application name
   from: '[A-Z0-9]{8}'
-  generate: expression
   name: APP_NAME
+- description: Drupal version
+  from: '[0-9]{1}'
+  name: DRUPAL_VERSION
+- description: Cluster name
+  from: '[0-9]{1}'
+  name: CLUSTER_NAME
 labels:
   drupal: master
