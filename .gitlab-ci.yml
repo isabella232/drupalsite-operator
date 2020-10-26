@@ -13,6 +13,13 @@ stages:
   script:  
     - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME $OPTIONS
 
+.build_drupal_version: &build_drupal_version
+  # Build and push the image from the Dockerfile at the root of the project.
+  # To push to a specific docker tag, amend the --destination parameter, e.g. --destination $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+  # See https://docs.gitlab.com/ee/ci/variables/predefined_variables.html#variables-reference for available variables
+  script:  
+    - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME:drupal-$CI_DRUPAL_VERSION $OPTIONS
+
 default:
   before_script:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
@@ -43,11 +50,11 @@ Build site-builder (latest):
   only:      
     changes:
       - images/site-builder/*
-  <<: *build_latest
+  <<: *build_drupal_version
   variables:
     DOCKERFILE_FOLDER: 'images/site-builder'
     IMAGE_NAME: 'site-builder'
-    OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+    OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION --build-arg DRUPAL_VERSION=$CI_DRUPAL_VERSION --build-arg COMPOSER_VERSION=$CI_COMPOSER_VERSION --build-arg SETTINGS_FILE_NAME=$CI_SETTINGS_FILE_NAME'
 
 Build nginx (latest):
   stage: build
@@ -56,11 +63,11 @@ Build nginx (latest):
   only:      
     changes:
       - images/nginx/*
-  <<: *build_latest
+  <<: *build_drupal_version
   variables:
     DOCKERFILE_FOLDER: 'images/nginx'
     IMAGE_NAME: 'nginx'
-    OPTIONS: '--build-arg SITE_BUILDER_VERSION=$CI_SITE_BUILDER_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
 
 Build php-fpm (latest):
   stage: build
@@ -69,11 +76,11 @@ Build php-fpm (latest):
   only:      
     changes:
       - images/php-fpm/*
-  <<: *build_latest
+  <<: *build_drupal_version
   variables:
     DOCKERFILE_FOLDER: 'images/php-fpm'
     IMAGE_NAME: 'php-fpm'
-    OPTIONS: '--build-arg SITE_BUILDER_VERSION=$CI_SITE_BUILDER_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
 
 
 # Triggers a complete build of all components regarding its specified version.
