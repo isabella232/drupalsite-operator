@@ -1,0 +1,20 @@
+# permissions for end users to view drupalsiterequests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: drupalsiterequest-viewer-role
+rules:
+- apiGroups:
+  - webservices.cern.ch.webservices.cern.ch
+  resources:
+  - drupalsiterequests
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - webservices.cern.ch.webservices.cern.ch
+  resources:
+  - drupalsiterequests/status
+  verbs:
+  - get

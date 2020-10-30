@@ -1,0 +1,7 @@
+apiVersion: webservices.cern.ch.webservices.cern.ch/v1alpha1
+kind: DrupalSiteRequest
+metadata:
+  name: drupalsiterequest-sample
+spec:
+  # Add fields here
+  foo: bar
