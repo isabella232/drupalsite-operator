@@ -2,7 +2,7 @@
 set -x
 
 # Setup drupal site
-/init-app.sh
+# /init-app.sh
 
 ## OPERATOR ACTIONS
 # If site does not exist, install it.

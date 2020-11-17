@@ -70,6 +70,16 @@ objects:
           app: drupal-nginx-${APP_NAME}
       spec:
         restartPolicy: Always
+        initContainers:
+          - name: pvc-init
+            image: bash
+            command: ['bash', '-c', 'mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}']
+            env:
+              - name: DRUPAL_SHARED_VOLUME
+                value: /drupal-data
+            volumeMounts:
+              - name: drupal-directory-${APP_NAME}
+                mountPath: /drupal-data
         containers:
           - name: nginx
             env:
@@ -117,10 +127,17 @@ objects:
         labels:
           app: drupal-php-${APP_NAME}
       spec:
-        volumes:
-          - name: drupal-directory-${APP_NAME}
-            persistentVolumeClaim:
-              claimName: drupal-pv-claim-${APP_NAME}
+        restartPolicy: Always
+        initContainers:
+          - name: pvc-init
+            image: bash
+            command: ['bash', '-c', 'mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}']
+            env:
+              - name: DRUPAL_SHARED_VOLUME
+                value: /drupal-data
+            volumeMounts:
+              - name: drupal-directory-${APP_NAME}
+                mountPath: /drupal-data
         containers:
           - name: php
             env:  
@@ -148,6 +165,10 @@ objects:
                 mountPath: /drupal-data
             image: >-
               gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:drupal-${DRUPAL_VERSION}
+        volumes:
+          - name: drupal-directory-${APP_NAME}
+            persistentVolumeClaim:
+              claimName: drupal-pv-claim-${APP_NAME}
 
 - apiVersion: v1
   kind: PersistentVolumeClaim

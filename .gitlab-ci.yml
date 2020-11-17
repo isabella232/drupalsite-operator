@@ -13,12 +13,19 @@ stages:
   script:  
     - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME $OPTIONS
 
-.build_drupal_version: &build_drupal_version
+.build_drupal_version_8: &build_drupal_version_8
   # Build and push the image from the Dockerfile at the root of the project.
   # To push to a specific docker tag, amend the --destination parameter, e.g. --destination $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
   # See https://docs.gitlab.com/ee/ci/variables/predefined_variables.html#variables-reference for available variables
   script:  
-    - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME:drupal-$CI_DRUPAL_VERSION $OPTIONS
+    - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME:drupal-$CI_DRUPAL_8_VERSION $OPTIONS
+  
+.build_drupal_version_9: &build_drupal_version_9
+  # Build and push the image from the Dockerfile at the root of the project.
+  # To push to a specific docker tag, amend the --destination parameter, e.g. --destination $CI_REGISTRY_IMAGE:$CI_BUILD_REF_NAME
+  # See https://docs.gitlab.com/ee/ci/variables/predefined_variables.html#variables-reference for available variables
+  script:  
+    - /kaniko/executor --context $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/ --dockerfile $CI_PROJECT_DIR/$DOCKERFILE_FOLDER/Dockerfile --destination $CI_REGISTRY_IMAGE/$IMAGE_NAME:drupal-$CI_DRUPAL_9_VERSION $OPTIONS
 
 default:
   before_script:
@@ -43,44 +50,83 @@ Build php-base (latest):
     OPTIONS: '--build-arg PHP_VERSION=$CI_PHP_VERSION'
 
 # Build images
-Build site-builder (latest):
+Build site-builder-drupal-8 (latest):
   stage: build-site-builder
   except:
     - tags
   only:      
     changes:
       - images/site-builder/*
-  <<: *build_drupal_version
+  <<: *build_drupal_version_8
   variables:
     DOCKERFILE_FOLDER: 'images/site-builder'
     IMAGE_NAME: 'site-builder'
-    OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION --build-arg DRUPAL_VERSION=$CI_DRUPAL_VERSION --build-arg COMPOSER_VERSION=$CI_COMPOSER_VERSION --build-arg SETTINGS_FILE_NAME=$CI_SETTINGS_FILE_NAME'
+    OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION --build-arg DRUPAL_VERSION=$CI_DRUPAL_8_VERSION --build-arg COMPOSER_VERSION=$CI_COMPOSER_VERSION --build-arg SETTINGS_FILE_NAME=$CI_SETTINGS_FILE_NAME_DRUPAL_8'
+  
+Build site-builder-drupal-9 (latest):
+  stage: build-site-builder
+  except:
+    - tags
+  only:      
+    changes:
+      - images/site-builder/*
+  <<: *build_drupal_version_9
+  variables:
+    DOCKERFILE_FOLDER: 'images/site-builder'
+    IMAGE_NAME: 'site-builder'
+    OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION --build-arg DRUPAL_VERSION=$CI_DRUPAL_9_VERSION --build-arg COMPOSER_VERSION=$CI_COMPOSER_VERSION --build-arg SETTINGS_FILE_NAME=$CI_SETTINGS_FILE_NAME_DRUPAL_9'
 
-Build nginx (latest):
+Build nginx-drupal-8 (latest):
   stage: build
   except:
     - tags
   only:      
     changes:
       - images/nginx/*
-  <<: *build_drupal_version
+  <<: *build_drupal_version_8
   variables:
     DOCKERFILE_FOLDER: 'images/nginx'
     IMAGE_NAME: 'nginx'
-    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_8_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
 
-Build php-fpm (latest):
+Build nginx-drupal-9 (latest):
+  stage: build
+  except:
+    - tags
+  only:      
+    changes:
+      - images/nginx/*
+  <<: *build_drupal_version_9
+  variables:
+    DOCKERFILE_FOLDER: 'images/nginx'
+    IMAGE_NAME: 'nginx'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_9_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
+
+Build php-fpm-drupal-8 (latest):
   stage: build
   except:
     - tags
   only:      
     changes:
       - images/php-fpm/*
-  <<: *build_drupal_version
+  <<: *build_drupal_version_8
   variables:
     DOCKERFILE_FOLDER: 'images/php-fpm'
     IMAGE_NAME: 'php-fpm'
-    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_8_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+  
+Build php-fpm-drupal-9 (latest):
+  stage: build
+  except:
+    - tags
+  only:      
+    changes:
+      - images/php-fpm/*
+  <<: *build_drupal_version_9
+  variables:
+    DOCKERFILE_FOLDER: 'images/php-fpm'
+    IMAGE_NAME: 'php-fpm'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_9_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
 
 
 # Triggers a complete build of all components regarding its specified version.
