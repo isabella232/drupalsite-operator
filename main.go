@@ -29,7 +29,9 @@ import (
 
 	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	"gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
+
 	// +kubebuilder:scaffold:imports
+	appsv1 "github.com/openshift/api/apps/v1"
 )
 
 var (
@@ -42,6 +44,7 @@ func init() {
 
 	utilruntime.Must(webservicescernchv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+	utilruntime.Must(appsv1.AddToScheme(scheme))
 }
 
 func main() {

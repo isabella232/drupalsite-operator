@@ -29,14 +29,45 @@ type DrupalSiteRequestSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of DrupalSiteRequest. Edit DrupalSiteRequest_types.go to remove/update
+
+	// ApplicationName is used to construct the Application's "display name" following a naming convention:
+	// `Web frameworks site <applicationName> (<instance>)` (see also https://gitlab.cern.ch/paas-tools/operators/authz-operator/issues/5 ).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ApplicationName string `json:"applicationName" valid:"matches(^[0-9a-z_\\-]+$),length(1|100)"`
+
+	// Publish defines if the site has to be published or not
+	// +kubebuilder:validation:Required
 	Publish bool `json:"publish"`
-	DrupalVersion string `json:"drupalVersion"` //enum
+
+	// DrupalVerion defines the version of the Drupal to install
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	DrupalVersion string `json:"drupalVersion"` // Convert to enum
+
+	// DisplayName is the user-facing name of the ApplicationRegistration as stored in the Authzsvc API
+	// +optional
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 // DrupalSiteRequestStatus defines the observed state of DrupalSiteRequest
 type DrupalSiteRequestStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	// TODO: ensure empty conditions
+
+	// Created defines if the site has to been created or not
+	// +kubebuilder:validation:Required
+	Created bool `json:"created"`
+	// ProvisioningStatus shows whether:
+	// - Created: the ApplicationRegistration has been successfully provisioned
+	// - Creating: provisioning is still in progress (including any potentially transient errors
+	//   from the Authorization API where reconciliation will be reattempted, like
+	//   the API not responding or 5xx HTTP errors)
+	// - ProvisioningError: provisioning has failed and won't be retried; look at ErrorMessage for details.
+	//   It is set for permanent errors, such as name conflicts, invalid initialOwner, 4xx HTTP errors.
+	// +kubebuilder:validation:Enum="Created";"Creating";"ProvisioningError";"DeletedFromAPI"
+	// ProvisioningStatus string `json:"provisioningStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -62,4 +93,9 @@ type DrupalSiteRequestList struct {
 
 func init() {
 	SchemeBuilder.Register(&DrupalSiteRequest{}, &DrupalSiteRequestList{})
+}
+
+// DisplayNameConvention implements the naming convention {ApplicationName -> DisplayName}
+func (a DrupalSiteRequest) DisplayNameConvention(clusterInstanceName string) string {
+	return "Web frameworks site " + a.Spec.ApplicationName + " (" + clusterInstanceName + ")"
 }

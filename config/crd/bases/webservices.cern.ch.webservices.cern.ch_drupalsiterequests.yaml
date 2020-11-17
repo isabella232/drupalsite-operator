@@ -36,18 +36,37 @@ spec:
         spec:
           description: DrupalSiteRequestSpec defines the desired state of DrupalSiteRequest
           properties:
+            applicationName:
+              description: 'ApplicationName is used to construct the Application''s
+                "display name" following a naming convention: `Web frameworks site
+                <applicationName> (<instance>)` (see also https://gitlab.cern.ch/paas-tools/operators/authz-operator/issues/5
+                ).'
+              minLength: 1
+              type: string
+            displayName:
+              description: DisplayName is the user-facing name of the ApplicationRegistration
+                as stored in the Authzsvc API
+              type: string
             drupalVersion:
+              description: DrupalVerion defines the version of the Drupal to install
+              minLength: 1
               type: string
             publish:
-              description: Foo is an example field of DrupalSiteRequest. Edit DrupalSiteRequest_types.go
-                to remove/update
+              description: Publish defines if the site has to be published or not
               type: boolean
           required:
+          - applicationName
           - drupalVersion
           - publish
           type: object
         status:
           description: DrupalSiteRequestStatus defines the observed state of DrupalSiteRequest
+          properties:
+            created:
+              description: Created defines if the site has to been created or not
+              type: boolean
+          required:
+          - created
           type: object
       type: object
   version: v1alpha1
