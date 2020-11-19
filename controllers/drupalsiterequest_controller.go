@@ -22,7 +22,9 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "github.com/openshift/api/apps/v1"
+	routev1 "github.com/openshift/api/route/v1"
 	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -80,6 +82,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 	//Handle deletion
 	if drupalSiteRequest.GetDeletionTimestamp() != nil {
+		r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Deleted")
 		return r.cleanupDrupalSiteRequest(ctx, log, drupalSiteRequest)
 	}
 
@@ -88,8 +91,10 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
 			// r.ensureErrorMsg(log, &application.Status, transientErr)
 			// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+			r.updateCRStatusConditionorFailReconcile(ctx, log, drupalSiteRequest, "Error", "TransientErr", fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
 			return reconcile.Result{}, transientErr
 		}
+
 		log.Error(transientErr, "Permanent error marked as transient!")
 		return reconcile.Result{}, nil
 	}
@@ -100,21 +105,18 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		// return reconcile.Result{}, nil
 		return r.updateCRorFailReconcile(ctx, log, drupalSiteRequest)
 	}
-
 	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
 		appErr := newApplicationError(err, ErrInvalidSpec)
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", appErr.Unwrap()))
 		// r.ensureErrorMsg(log, &application.Status, appErr)
 		// return reconcile.Result{}, err
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+		return r.updateCRStatusConditionorFailReconcile(ctx, log, drupalSiteRequest, "Error", "Spec", "Failed to validate DrupalSiteRequest spec")
 	}
-
 	if update := ensureStatusInit(drupalSiteRequest); update {
 		log.Info("Initializing DrupalSiteRequest Status")
 		// return reconcile.Result{}, nil
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Creating")
 	}
-
 	if transientErr := r.ensurePersistentVolumeClaim(ctx, drupalSiteRequest, persistentVolumeClaimForDrupalSiteRequest(drupalSiteRequest)); transientErr != nil {
 		handleTransientErr(transientErr, "%v trying to persistent volume claim")
 		return reconcile.Result{}, err
@@ -158,6 +160,11 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		return reconcile.Result{}, err
 	}
 
+	if created := r.checkAllResourcesCreated(ctx, log, drupalSiteRequest); created {
+		log.Info("Checking if all resources are created")
+		// return reconcile.Result{}, nil
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Created")
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -166,6 +173,9 @@ func (r *DrupalSiteRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicescernchv1alpha1.DrupalSiteRequest{}).
 		Owns(&appsv1.DeploymentConfig{}).
+		Owns(&corev1.Service{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&routev1.Route{}).
 		Complete(r)
 }
 
@@ -196,5 +206,5 @@ func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Conte
 		}
 	}
 	app.SetFinalizers(remainingFinalizers)
-	return reconcile.Result{}, nil
+	return r.updateCRorFailReconcile(ctx, log, app)
 }

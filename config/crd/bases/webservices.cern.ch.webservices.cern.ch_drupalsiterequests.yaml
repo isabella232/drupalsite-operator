@@ -36,17 +36,6 @@ spec:
         spec:
           description: DrupalSiteRequestSpec defines the desired state of DrupalSiteRequest
           properties:
-            applicationName:
-              description: 'ApplicationName is used to construct the Application''s
-                "display name" following a naming convention: `Web frameworks site
-                <applicationName> (<instance>)` (see also https://gitlab.cern.ch/paas-tools/operators/authz-operator/issues/5
-                ).'
-              minLength: 1
-              type: string
-            displayName:
-              description: DisplayName is the user-facing name of the ApplicationRegistration
-                as stored in the Authzsvc API
-              type: string
             drupalVersion:
               description: DrupalVerion defines the version of the Drupal to install
               minLength: 1
@@ -55,18 +44,59 @@ spec:
               description: Publish defines if the site has to be published or not
               type: boolean
           required:
-          - applicationName
           - drupalVersion
           - publish
           type: object
         status:
           description: DrupalSiteRequestStatus defines the observed state of DrupalSiteRequest
           properties:
-            created:
-              description: Created defines if the site has to been created or not
-              type: boolean
+            conditions:
+              description: TODO conditions
+              items:
+                description: "Condition represents an observation of an object's state.
+                  Conditions are an extension mechanism intended to be used when the
+                  details of an observation are not a priori known or would not apply
+                  to all instances of a given Kind. \n Conditions should be added
+                  to explicitly convey properties that users and components care about
+                  rather than requiring those properties to be inferred from other
+                  observations. Once defined, the meaning of a Condition can not be
+                  changed arbitrarily - it becomes part of the API, and has the same
+                  backwards- and forwards-compatibility concerns of any other part
+                  of the API."
+                properties:
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  reason:
+                    description: ConditionReason is intended to be a one-word, CamelCase
+                      representation of the category of cause of the current status.
+                      It is intended to be used in concise output, such as one-line
+                      kubectl get output, and in summarizing occurrences of causes.
+                    type: string
+                  status:
+                    type: string
+                  type:
+                    description: "ConditionType is the type of the condition and is
+                      typically a CamelCased word or short phrase. \n Condition types
+                      should indicate state in the \"abnormal-true\" polarity. For
+                      example, if the condition indicates when a policy is invalid,
+                      the \"is valid\" case is probably the norm, so the condition
+                      should be called \"Invalid\"."
+                    type: string
+                required:
+                - status
+                - type
+                type: object
+              type: array
+            phase:
+              description: 'Phase aggregates the information from all the conditions
+                and reports on the lifecycle phase of the resource Enum: {Creating,Created,Deleted}'
+              type: string
           required:
-          - created
+          - conditions
+          - phase
           type: object
       type: object
   version: v1alpha1

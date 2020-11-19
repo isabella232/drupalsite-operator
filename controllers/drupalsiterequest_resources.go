@@ -19,21 +19,22 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
 	appsv1 "github.com/openshift/api/apps/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	"github.com/operator-framework/operator-lib/status"
 	"github.com/prometheus/common/log"
 	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -47,14 +48,14 @@ func validateSpec(appSpec webservicescernchv1alpha1.DrupalSiteRequestSpec) error
 	if err != nil {
 		return err
 	}
-	// _, err = govalidator.ValidateStruct(appSpec.InitialOwner)
 	return err
 }
 
 // ensureStatusInit ensures that the status have been initialized, returns true if it is required an update
 func ensureStatusInit(app *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
-	if !app.Status.Created {
-		app.Status.Created = true
+	if app.Status.Phase == "" {
+		app.Status.Phase = "Creating"
+		app.Status.Conditions = status.Conditions{}
 		return true
 	}
 	return false
@@ -74,10 +75,6 @@ func contains(a []string, x string) bool {
 func ensureSpecFinalizer(app *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
 	if !contains(app.GetFinalizers(), finalizerStr) {
 		app.SetFinalizers(append(app.GetFinalizers(), finalizerStr))
-		update = true
-	}
-	if app.Spec.DisplayName == "" {
-		app.Spec.DisplayName = app.DisplayNameConvention(os.Getenv("CLUSTER_NAME"))
 		update = true
 	}
 	return
@@ -100,6 +97,7 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 			Namespace: d.Namespace,
 		},
 		Spec: appsv1.DeploymentConfigSpec{
+			Replicas: 1,
 			Selector: ls,
 			Template: &corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -124,9 +122,9 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 								Name: "MYSQL_ROOT_PASSWORD",
 								ValueFrom: &corev1.EnvVarSource{
 									SecretKeyRef: &corev1.SecretKeySelector{
-										Key: "password",
+										Key: "DB_PASSWORD",
 										LocalObjectReference: corev1.LocalObjectReference{
-											Name: objectName,
+											Name: "drupal-mysql-secret",
 										},
 									},
 								},
@@ -147,6 +145,8 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
@@ -160,6 +160,7 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 			Namespace: d.Namespace,
 		},
 		Spec: appsv1.DeploymentConfigSpec{
+			Replicas: 1,
 			Selector: ls,
 			Template: &corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -180,30 +181,12 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
-							corev1.EnvVar{
-								Name:  "DB_HOST",
-								Value: "drupal-mysql-" + d.Name,
-							},
-							corev1.EnvVar{
-								Name:  "DB_PORT",
-								Value: "3306",
-							},
-							corev1.EnvVar{
-								Name:  "DB_NAME",
-								Value: "drupal",
-							},
-							corev1.EnvVar{
-								Name:  "DB_USER",
-								Value: "root",
-							},
-							corev1.EnvVar{
-								Name: "DB_PASSWORD",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										Key: "password",
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "mysql-pass-" + d.Name,
-										},
+						},
+						EnvFrom: []corev1.EnvFromSource{
+							corev1.EnvFromSource{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "drupal-mysql-secret",
 									},
 								},
 							},
@@ -227,6 +210,8 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
@@ -240,6 +225,7 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 			Namespace: d.Namespace,
 		},
 		Spec: appsv1.DeploymentConfigSpec{
+			Replicas: 1,
 			Selector: ls,
 			Template: &corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -260,30 +246,12 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
-							corev1.EnvVar{
-								Name:  "DB_HOST",
-								Value: "drupal-mysql-" + d.Name,
-							},
-							corev1.EnvVar{
-								Name:  "DB_PORT",
-								Value: "3306",
-							},
-							corev1.EnvVar{
-								Name:  "DB_NAME",
-								Value: "drupal",
-							},
-							corev1.EnvVar{
-								Name:  "DB_USER",
-								Value: "root",
-							},
-							corev1.EnvVar{
-								Name: "DB_PASSWORD",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										Key: "password",
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "mysql-pass-" + d.Name,
-										},
+						},
+						EnvFrom: []corev1.EnvFromSource{
+							corev1.EnvFromSource{
+								SecretRef: &corev1.SecretEnvSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "drupal-mysql-secret",
 									},
 								},
 							},
@@ -307,12 +275,14 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
 // persistentVolumeClaimForDrupalSiteRequest returns a drupalSiteRequest DeploymentConfigPHP object
 func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.PersistentVolumeClaim {
-	ls := labelsForDrupalSiterequest(d.Name)
+	// ls := labelsForDrupalSiterequest(d.Name)
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -320,9 +290,9 @@ func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.Drup
 			Namespace: d.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
+			// Selector: &metav1.LabelSelector{
+			// 	MatchLabels: ls,
+			// },
 			StorageClassName: pointer.StringPtr("cephfs-no-backup"),
 			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
 			Resources: corev1.ResourceRequirements{
@@ -334,6 +304,8 @@ func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.Drup
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, pvc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(pvc, asOwner(d))
 	return pvc
 }
 
@@ -358,6 +330,8 @@ func serviceForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteReque
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
@@ -367,7 +341,7 @@ func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteReq
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-nginx" + d.Name,
+			Name:      "drupal-nginx",
 			Namespace: d.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -382,6 +356,8 @@ func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteReq
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
@@ -391,7 +367,7 @@ func serviceForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteReq
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-mysql" + d.Name,
+			Name:      "drupal-mysql",
 			Namespace: d.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -406,6 +382,8 @@ func serviceForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteReq
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
@@ -419,10 +397,10 @@ func routeForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *
 			Namespace: d.Namespace,
 		},
 		Spec: routev1.RouteSpec{
-			Host: d.Name + "-drupaltemplate.clustername.cern.ch",
+			Host: d.Name + "-drupal-operator.drupal-containers-ceph.cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
-				Name:   "drupal-nginx" + d.Name,
+				Name:   "drupal-nginx",
 				Weight: pointer.Int32Ptr(100),
 			},
 			Port: &routev1.RoutePort{
@@ -432,6 +410,8 @@ func routeForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(route, asOwner(d))
 	return route
 }
 
@@ -445,22 +425,25 @@ func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context
 		}
 		return r.Create(ctx, dep)
 	}
-	log.Info("Creating DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
-	err := r.Create(ctx, dep)
-	if err != nil {
-		switch {
-		case apierrors.IsAlreadyExists(err):
-			err = deleteRecreate()
-			if err != nil {
-				log.Error(err, "Failed to create new DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
+	err := r.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, dep)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
+		err := r.Create(ctx, dep)
+		if err != nil {
+			switch {
+			case apierrors.IsAlreadyExists(err):
+				err = deleteRecreate()
+				if err != nil {
+					log.Error(err, "Failed to create new DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			default:
 				return newApplicationError(err, ErrClientK8s)
 			}
-		default:
-			return newApplicationError(err, ErrClientK8s)
 		}
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
-	ctrl.SetControllerReference(d, dep, r.Scheme)
+	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	return nil
 }
 
@@ -472,22 +455,25 @@ func (r *DrupalSiteRequestReconciler) ensureService(ctx context.Context, d *webs
 		}
 		return r.Create(ctx, svc)
 	}
-	log.Info("Creating Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-	err := r.Create(ctx, svc)
-	if err != nil {
-		switch {
-		case apierrors.IsAlreadyExists(err):
-			err = deleteRecreate()
-			if err != nil {
-				log.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+	err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, svc)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+		err := r.Create(ctx, svc)
+		if err != nil {
+			switch {
+			case apierrors.IsAlreadyExists(err):
+				err = deleteRecreate()
+				if err != nil {
+					log.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			default:
 				return newApplicationError(err, ErrClientK8s)
 			}
-		default:
-			return newApplicationError(err, ErrClientK8s)
 		}
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
-	ctrl.SetControllerReference(d, svc, r.Scheme)
+	// ctrl.SetControllerReference(d, svc, r.Scheme)
 	return nil
 }
 
@@ -499,22 +485,25 @@ func (r *DrupalSiteRequestReconciler) ensurePersistentVolumeClaim(ctx context.Co
 		}
 		return r.Create(ctx, pvc)
 	}
-	log.Info("Creating PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
-	err := r.Create(ctx, pvc)
-	if err != nil {
-		switch {
-		case apierrors.IsAlreadyExists(err):
-			err = deleteRecreate()
-			if err != nil {
-				log.Error(err, "Failed to create new PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+		err := r.Create(ctx, pvc)
+		if err != nil {
+			switch {
+			case apierrors.IsAlreadyExists(err):
+				err = deleteRecreate()
+				if err != nil {
+					log.Error(err, "Failed to create new PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			default:
 				return newApplicationError(err, ErrClientK8s)
 			}
-		default:
-			return newApplicationError(err, ErrClientK8s)
 		}
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
-	ctrl.SetControllerReference(d, pvc, r.Scheme)
+	// ctrl.SetControllerReference(d, pvc, r.Scheme)
 	return nil
 }
 
@@ -526,22 +515,25 @@ func (r *DrupalSiteRequestReconciler) ensureRoute(ctx context.Context, d *webser
 		}
 		return r.Create(ctx, route)
 	}
-	log.Info("Creating Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
-	err := r.Create(ctx, route)
-	if err != nil {
-		switch {
-		case apierrors.IsAlreadyExists(err):
-			err = deleteRecreate()
-			if err != nil {
-				log.Error(err, "Failed to create new Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
+	err := r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
+		err := r.Create(ctx, route)
+		if err != nil {
+			switch {
+			case apierrors.IsAlreadyExists(err):
+				err = deleteRecreate()
+				if err != nil {
+					log.Error(err, "Failed to create new Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			default:
 				return newApplicationError(err, ErrClientK8s)
 			}
-		default:
-			return newApplicationError(err, ErrClientK8s)
 		}
 	}
 	// Set DrupalSiteRequest instance as the owner and controller
-	ctrl.SetControllerReference(d, route, r.Scheme)
+	// ctrl.SetControllerReference(d, route, r.Scheme)
 	return nil
 }
 
@@ -556,11 +548,112 @@ func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Contex
 }
 
 // updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest) (
+func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest, p string) (
 	reconcile.Result, error) {
+	// app.Status.Conditions = status.Conditions{}
+	// (app.Status.Conditions)
+	app.Status.Phase = p
 	if err := r.Status().Update(ctx, app); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// updateCRStatusConditionorFailReconcile tries to update the Custom Resource Status and logs any error
+func (r *DrupalSiteRequestReconciler) updateCRStatusConditionorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest, ct status.ConditionType, cs corev1.ConditionStatus, m string) (
+	reconcile.Result, error) {
+	// conditions := Conditions{}
+	condition := status.Condition{
+		Type:    ct,
+		Status:  cs,
+		Message: m,
+		// Message: fmt.Sprintf("Condition %s is %s"),
+	}
+	app.Status.Conditions.SetCondition(condition)
+	// (app.Status.Conditions)
+	if err := r.Status().Update(ctx, app); err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
+}
+
+// addOwnerRefToObject appends the desired OwnerReference to the object
+func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
+	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
+}
+
+// asOwner returns an OwnerReference set as the memcached CR
+func asOwner(d *webservicescernchv1alpha1.DrupalSiteRequest) metav1.OwnerReference {
+	trueVar := true
+	return metav1.OwnerReference{
+		APIVersion: d.APIVersion,
+		Kind:       d.Kind,
+		Name:       d.Name,
+		UID:        d.UID,
+		Controller: &trueVar,
+	}
+}
+
+// checkAllResourcesCreated checks if all the child resources are created and updates the Status of the CR accordingly
+func (r *DrupalSiteRequestReconciler) checkAllResourcesCreated(ctx context.Context, log logr.Logger, d *webservicescernchv1alpha1.DrupalSiteRequest) (created bool) {
+
+	pvc := persistentVolumeClaimForDrupalSiteRequest(d)
+	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PVC not found")
+		return false
+	}
+
+	dep1 := deploymentConfigForDrupalSiteRequestMySQL(d)
+	err = r.Get(ctx, types.NamespacedName{Name: dep1.Name, Namespace: dep1.Namespace}, dep1)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP deployment config not found")
+		return false
+	}
+
+	dep2 := deploymentConfigForDrupalSiteRequestNginx(d)
+	err = r.Get(ctx, types.NamespacedName{Name: dep2.Name, Namespace: dep2.Namespace}, dep2)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Nginx deployment config not found")
+		return false
+	}
+
+	dep3 := deploymentConfigForDrupalSiteRequestPHP(d)
+	err = r.Get(ctx, types.NamespacedName{Name: dep3.Name, Namespace: dep3.Namespace}, dep3)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP deployment config not found")
+		return false
+	}
+
+	svc1 := serviceForDrupalSiteRequestPHP(d)
+	err = r.Get(ctx, types.NamespacedName{Name: svc1.Name, Namespace: svc1.Namespace}, svc1)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP Service not found")
+		return false
+	}
+
+	svc2 := serviceForDrupalSiteRequestNginx(d)
+	err = r.Get(ctx, types.NamespacedName{Name: svc2.Name, Namespace: svc2.Namespace}, svc2)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Nginx Service not found")
+		return false
+	}
+
+	svc3 := serviceForDrupalSiteRequestMySQL(d)
+	err = r.Get(ctx, types.NamespacedName{Name: svc3.Name, Namespace: svc3.Namespace}, svc3)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Mysql Service not found")
+		return false
+	}
+
+	route := routeForDrupalSiteRequest(d)
+	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route)
+	if err != nil && errors.IsNotFound(err) {
+		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Route not found")
+		return false
+	}
+	r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Ready", "All resources created")
+	return true
 }
