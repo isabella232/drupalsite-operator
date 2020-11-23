@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -435,7 +436,7 @@ func routeForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *
 			Namespace: d.Namespace,
 		},
 		Spec: routev1.RouteSpec{
-			Host: d.Name + "-drupal-operator.drupal-containers-ceph.cern.ch",
+			Host: d.Name + "." + os.Getenv("CLUSTER_NAME") + ".cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   "drupal-nginx",
