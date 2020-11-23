@@ -169,6 +169,22 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{{
+						Image:           "bash",
+						Name:            "pvc-init",
+						ImagePullPolicy: "Always",
+						Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
+						Env: []corev1.EnvVar{
+							corev1.EnvVar{
+								Name:  "DRUPAL_SHARED_VOLUME",
+								Value: "/drupal-data",
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "drupal-directory-" + d.Name,
+							MountPath: "/drupal-data",
+						}},
+					}},
 					Containers: []corev1.Container{{
 						Image:           "gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/nginx:drupal-" + d.Spec.DrupalVersion,
 						Name:            "nginx",
@@ -235,6 +251,22 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{{
+						Image:           "bash",
+						Name:            "pvc-init",
+						ImagePullPolicy: "Always",
+						Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
+						Env: []corev1.EnvVar{
+							corev1.EnvVar{
+								Name:  "DRUPAL_SHARED_VOLUME",
+								Value: "/drupal-data",
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{{
+							Name:      "drupal-directory-" + d.Name,
+							MountPath: "/drupal-data",
+						}},
+					}},
 					Containers: []corev1.Container{{
 						Image:           "gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:drupal-" + d.Spec.DrupalVersion,
 						Name:            "php-fpm",
