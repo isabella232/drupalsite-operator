@@ -24,8 +24,6 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin -
 # DRUPAL_APP_DIR is the drupal final destination. Must be in consonance with nginx.
 # DRUPAL_CODE_DIR is used to pre-set drupal code.
 ENV DRUPAL_APP_DIR /app
-ENV DRUPAL_CODE_DIR /code
-RUN mkdir -p ${DRUPAL_APP_DIR}
 
 # From here we will manage all central/non central modules + drupal version
 # RUN git clone -b okd-manual-deployment https://gitlab.cern.ch/drupal/paas/composer-drupal-project ${DRUPAL_CODE_DIR}    
@@ -33,10 +31,10 @@ RUN mkdir -p ${DRUPAL_APP_DIR}
 ENV COMPOSER_MEMORY_LIMIT -1
 ENV DRUPAL_VERSION=${DRUPAL_VERSION:-8}
 # Note: to review if we will use the project `drupal/paas/composer-drupal-project` again to specify the standard modules we provide
-RUN composer create-project drupal/recommended-project:${DRUPAL_VERSION} ${DRUPAL_CODE_DIR} --no-interaction
+RUN composer create-project drupal/recommended-project:${DRUPAL_VERSION} ${DRUPAL_APP_DIR} --no-interaction
 
-ENV HOME ${DRUPAL_CODE_DIR}
-WORKDIR ${DRUPAL_CODE_DIR}
+ENV HOME ${DRUPAL_APP_DIR}
+WORKDIR ${DRUPAL_APP_DIR}
 # Composer as root/super user! See https://getcomposer.org/root for details
 # Set up drupal minimum stack
 # RUN composer install --optimize-autoloader --no-cache -vv	
@@ -52,12 +50,12 @@ RUN chmod +x /toremove.sh && /toremove.sh
 # post-update-cmd: DrupalProject\composer\ScriptHandler::createRequiredFiles
 # Overwrite settings.php with ours.
 # - settings.php
-ADD config/sites/default/${SETTINGS_FILE_NAME} ${DRUPAL_CODE_DIR}/web/sites/default/settings.php
-# Remove ${DRUPAL_CODE_DIR}/web/sites/default/files, preparing it to be symbolic link after init-app.sh;
-RUN rm -rf ${DRUPAL_CODE_DIR}/web/sites/default/files
+ADD config/sites/default/${SETTINGS_FILE_NAME} ${DRUPAL_APP_DIR}/web/sites/default/settings.php
+# Remove ${DRUPAL_APP_DIR}/web/sites/default/files, preparing it to be symbolic link after init-app.sh;
+RUN rm -rf ${DRUPAL_APP_DIR}/web/sites/default/files
 # Fix-permissions
-RUN /fix-permissions ${DRUPAL_CODE_DIR}
+RUN /fix-permissions ${DRUPAL_APP_DIR}
 
 # Add init-container for every container that contains drupal code
-ADD init-app.sh /
-RUN chmod +x /init-app.sh
+# ADD init-app.sh /
+# RUN chmod +x /init-app.sh
