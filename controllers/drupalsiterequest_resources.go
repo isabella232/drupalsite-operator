@@ -83,12 +83,13 @@ func ensureSpecFinalizer(app *webservicescernchv1alpha1.DrupalSiteRequest) (upda
 // labelsForDrupalSiterequest returns the labels for selecting the resources
 // belonging to the given drupalSiteRequest CR name.
 func labelsForDrupalSiterequest(name string) map[string]string {
-	return map[string]string{"app": "drupalSiteRequest", "drupalSiteRequest_cr": name}
+	return map[string]string{"CRD": "drupalSiteRequest", "drupalSiteRequest_cr": name}
 }
 
 // deploymentConfigForDrupalSiteRequestMySQL returns a drupalSiteRequest DeploymentConfigMySQL object
 func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "mysql"
 	objectName := "drupal-mysql-" + d.Name
 
 	dep := &appsv1.DeploymentConfig{
@@ -153,6 +154,7 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 // deploymentConfigForDrupalSiteRequestNginx returns a drupalSiteRequest DeploymentConfigNginx object
 func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "nginx"
 
 	dep := &appsv1.DeploymentConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,6 +220,7 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 // deploymentConfigForDrupalSiteRequestPHP returns a drupalSiteRequest DeploymentConfigPHP object
 func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "php"
 
 	dep := &appsv1.DeploymentConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -312,6 +315,7 @@ func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.Drup
 // serviceForDrupalSiteRequestPHP returns a drupalSiteRequest servicePHP object
 func serviceForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "php"
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -338,6 +342,7 @@ func serviceForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteReque
 // serviceForDrupalSiteRequestNginx returns a drupalSiteRequest servicePHP object
 func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "nginx"
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -364,6 +369,7 @@ func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteReq
 // serviceForDrupalSiteRequestMySQL returns a drupalSiteRequest servicePHP object
 func serviceForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
+	ls["app"] = "mysql"
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
