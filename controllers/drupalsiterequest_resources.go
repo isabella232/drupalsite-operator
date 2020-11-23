@@ -587,30 +587,11 @@ func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Contex
 }
 
 // updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest, p string) (
+func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest) (
 	reconcile.Result, error) {
 	// app.Status.Conditions = status.Conditions{}
 	// (app.Status.Conditions)
-	app.Status.Phase = p
-	if err := r.Status().Update(ctx, app); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
-// updateCRStatusConditionorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusConditionorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest, ct status.ConditionType, cs corev1.ConditionStatus, m string) (
-	reconcile.Result, error) {
-	// conditions := Conditions{}
-	condition := status.Condition{
-		Type:    ct,
-		Status:  cs,
-		Message: m,
-		// Message: fmt.Sprintf("Condition %s is %s"),
-	}
-	app.Status.Conditions.SetCondition(condition)
-	// (app.Status.Conditions)
+	// app.Status.Phase = p
 	if err := r.Status().Update(ctx, app); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
 		return reconcile.Result{}, err
@@ -641,58 +622,129 @@ func (r *DrupalSiteRequestReconciler) checkAllResourcesCreated(ctx context.Conte
 	pvc := persistentVolumeClaimForDrupalSiteRequest(d)
 	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PVC not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "PVC not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	dep1 := deploymentConfigForDrupalSiteRequestMySQL(d)
 	err = r.Get(ctx, types.NamespacedName{Name: dep1.Name, Namespace: dep1.Namespace}, dep1)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP deployment config not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "PHP deploymentconfig not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	dep2 := deploymentConfigForDrupalSiteRequestNginx(d)
 	err = r.Get(ctx, types.NamespacedName{Name: dep2.Name, Namespace: dep2.Namespace}, dep2)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Nginx deployment config not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "Nginx deploymentconfig not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	dep3 := deploymentConfigForDrupalSiteRequestPHP(d)
 	err = r.Get(ctx, types.NamespacedName{Name: dep3.Name, Namespace: dep3.Namespace}, dep3)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP deployment config not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "PHP deployment config not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	svc1 := serviceForDrupalSiteRequestPHP(d)
 	err = r.Get(ctx, types.NamespacedName{Name: svc1.Name, Namespace: svc1.Namespace}, svc1)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "PHP Service not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "PHP Service not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	svc2 := serviceForDrupalSiteRequestNginx(d)
 	err = r.Get(ctx, types.NamespacedName{Name: svc2.Name, Namespace: svc2.Namespace}, svc2)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Nginx Service not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "Nginx Service not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	svc3 := serviceForDrupalSiteRequestMySQL(d)
 	err = r.Get(ctx, types.NamespacedName{Name: svc3.Name, Namespace: svc3.Namespace}, svc3)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Mysql Service not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "MySQL service not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
 
 	route := routeForDrupalSiteRequest(d)
 	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route)
 	if err != nil && errors.IsNotFound(err) {
-		r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Not Ready", "Route not found")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Resource doesn't exist",
+			Message: "Route not found",
+			// Message: fmt.Sprintf("Condition %s is %s"),
+		}
+		d.Status.Conditions.SetCondition(condition)
+		r.updateCRStatusorFailReconcile(ctx, log, d)
 		return false
 	}
-	r.updateCRStatusConditionorFailReconcile(ctx, log, d, "Resources", "Ready", "All resources created")
+	condition := status.Condition{
+		Type:    "Ready",
+		Status:  "True",
+		Message: "All resources created",
+		// Message: fmt.Sprintf("Condition %s is %s"),
+	}
+	d.Status.Conditions.SetCondition(condition)
+	r.updateCRStatusorFailReconcile(ctx, log, d)
 	return true
 }

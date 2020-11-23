@@ -51,7 +51,7 @@ var _ = Describe("DrupalSiteRequest controller", func() {
 			}
 			drupalSiteRequestObject := &webservicescernchv1alpha1.DrupalSiteRequest{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "webservices.cern.ch.webservices.cern.ch/v1alpha1",
+					APIVersion: "webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSiteRequest",
 				},
 				ObjectMeta: metav1.ObjectMeta{

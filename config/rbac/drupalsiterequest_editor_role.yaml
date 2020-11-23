@@ -5,7 +5,7 @@ metadata:
   name: drupalsiterequest-editor-role
 rules:
 - apiGroups:
-  - webservices.cern.ch.webservices.cern.ch
+  - webservices.cern.ch
   resources:
   - drupalsiterequests
   verbs:
@@ -17,7 +17,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - webservices.cern.ch.webservices.cern.ch
+  - webservices.cern.ch
   resources:
   - drupalsiterequests/status
   verbs:

@@ -5,7 +5,7 @@ metadata:
   name: drupalsiterequest-viewer-role
 rules:
 - apiGroups:
-  - webservices.cern.ch.webservices.cern.ch
+  - webservices.cern.ch
   resources:
   - drupalsiterequests
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - webservices.cern.ch.webservices.cern.ch
+  - webservices.cern.ch
   resources:
   - drupalsiterequests/status
   verbs:

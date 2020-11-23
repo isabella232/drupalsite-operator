@@ -1,4 +1,4 @@
-apiVersion: webservices.cern.ch.webservices.cern.ch/v1alpha1
+apiVersion: webservices.cern.ch/v1alpha1
 kind: DrupalSiteRequest
 metadata:
   name: drupalsiterequest-sample

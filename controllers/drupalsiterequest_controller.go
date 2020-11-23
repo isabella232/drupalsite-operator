@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "github.com/openshift/api/apps/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	"github.com/operator-framework/operator-lib/status"
 	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -49,8 +50,8 @@ The Reconcile(req ctrl.Request) (ctrl.Result, error) steps
   - Check if resources are created. Check error and resolve. Check resource spec also for detailed error and report it
 */
 
-// +kubebuilder:rbac:groups=webservices.cern.ch.webservices.cern.ch,resources=drupalsiterequests,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=webservices.cern.ch.webservices.cern.ch,resources=drupalsiterequests/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
@@ -82,7 +83,8 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 	//Handle deletion
 	if drupalSiteRequest.GetDeletionTimestamp() != nil {
-		r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Deleted")
+		// drupalSiteRequest.Status.Phase = "Deleted"
+		// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 		return r.cleanupDrupalSiteRequest(ctx, log, drupalSiteRequest)
 	}
 
@@ -91,7 +93,15 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
 			// r.ensureErrorMsg(log, &application.Status, transientErr)
 			// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
-			r.updateCRStatusConditionorFailReconcile(ctx, log, drupalSiteRequest, "Error", "TransientErr", fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
+			condition := status.Condition{
+				Type:    "Ready",
+				Status:  "False",
+				Reason:  "Transient Err",
+				Message: fmt.Sprintf(logstrFmt, transientErr.Unwrap()),
+				// Message: fmt.Sprintf("Condition %s is %s"),
+			}
+			drupalSiteRequest.Status.Conditions.SetCondition(condition)
+			r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 			return reconcile.Result{}, transientErr
 		}
 
@@ -110,12 +120,20 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", appErr.Unwrap()))
 		// r.ensureErrorMsg(log, &application.Status, appErr)
 		// return reconcile.Result{}, err
-		return r.updateCRStatusConditionorFailReconcile(ctx, log, drupalSiteRequest, "Error", "Spec", "Failed to validate DrupalSiteRequest spec")
+		condition := status.Condition{
+			Type:    "Ready",
+			Status:  "False",
+			Reason:  "Spec Error",
+			Message: "Failed to validate DrupalSiteRequest spec",
+		}
+		drupalSiteRequest.Status.Conditions.SetCondition(condition)
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if update := ensureStatusInit(drupalSiteRequest); update {
 		log.Info("Initializing DrupalSiteRequest Status")
 		// return reconcile.Result{}, nil
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Creating")
+		drupalSiteRequest.Status.Phase = "Creating"
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if transientErr := r.ensurePersistentVolumeClaim(ctx, drupalSiteRequest, persistentVolumeClaimForDrupalSiteRequest(drupalSiteRequest)); transientErr != nil {
 		handleTransientErr(transientErr, "%v trying to persistent volume claim")
@@ -163,7 +181,8 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	if created := r.checkAllResourcesCreated(ctx, log, drupalSiteRequest); created {
 		log.Info("Checking if all resources are created")
 		// return reconcile.Result{}, nil
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest, "Created")
+		drupalSiteRequest.Status.Phase = "Created"
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	return ctrl.Result{}, nil
 }
