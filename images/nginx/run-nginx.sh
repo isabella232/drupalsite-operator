@@ -5,4 +5,5 @@ set -ex
 # /init-app.sh
 
 # Run Nginx
-exec nginx-debug -g "daemon off;"
+# For debugging change nginx to nginx-debug
+exec nginx -g "daemon off;"

@@ -94,9 +94,6 @@ spec:
               description: 'Phase aggregates the information from all the conditions
                 and reports on the lifecycle phase of the resource Enum: {Creating,Created,Deleted}'
               type: string
-          required:
-          - conditions
-          - phase
           type: object
       type: object
   version: v1alpha1

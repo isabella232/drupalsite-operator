@@ -45,11 +45,11 @@ type DrupalSiteRequestSpec struct {
 type DrupalSiteRequestStatus struct {
 	// Phase aggregates the information from all the conditions and reports on the lifecycle phase of the resource
 	// Enum: {Creating,Created,Deleted}
-	Phase string `json:"phase"`
+	Phase string `json:"phase,omitempty"`
 
 	// TODO conditions
 	// +kubebuilder:validation:type=array
-	Conditions status.Conditions `json:"conditions"`
+	Conditions status.Conditions `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

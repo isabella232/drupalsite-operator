@@ -4,4 +4,5 @@ metadata:
   name: drupalsiterequest-sample
 spec:
   # Add fields here
-  foo: bar
+  publish: false
+  drupalVersion: "9.0.7"

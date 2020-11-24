@@ -8,19 +8,9 @@ import (
 // ErrorConditions
 var (
 	// Generic temporary error
-	ErrTemporary                = errors.New("TemporaryError")
-	ErrApplicationAlreadyExists = errors.New("ApplicationAlreadyExists")
-	ErrInvalidSpec              = errors.New("InvalidSpec")
-	ErrClientK8s                = errors.New("k8sAPIClientError")
-	ErrClientAuthz              = errors.New("AuthzAPIClientError")
-	ErrAuthzAPITemp             = errors.New("AuthzAPIError")
-	ErrAuthzAPIPermanent        = errors.New("AuthzAPIPermanentError")
-	ErrAuthzInvalidResponse     = errors.New("AuthzAPIInvalidResponse")
-	ErrAuthzAPIUnauthorized     = errors.New("AuthzAPIUnauthorized")
-	ErrApplicationConflict      = errors.New("ApplicationConflict")
-	ErrAssociatedAppNotFound    = errors.New("AssociatedApplicationNotFound")
-	ErrInvalidOwner             = errors.New("InvalidOwner")
-	ErrUnsupportedChangeInAuthz = errors.New("UnsupportedChangeInAuthz")
+	ErrTemporary   = errors.New("TemporaryError")
+	ErrInvalidSpec = errors.New("InvalidSpec")
+	ErrClientK8s   = errors.New("k8sAPIClientError")
 )
 
 type reconcileError interface {
@@ -28,7 +18,6 @@ type reconcileError interface {
 	Wrap(msg string) reconcileError
 	Unwrap() error
 	Temporary() bool
-	ProvisioningError() string
 }
 
 // applicationError wraps an error condition and gives it more context from where it occurred
@@ -60,30 +49,9 @@ func (e *applicationError) Error() string {
 func (e *applicationError) Temporary() bool {
 	// NOTE: List all permanent errors
 	switch e.errorCondition {
-	case ErrApplicationAlreadyExists:
-		return false
 	case ErrInvalidSpec:
-		return false
-	case ErrAuthzAPIPermanent:
-		return false
-	case ErrAssociatedAppNotFound:
-		return false
-	case ErrApplicationConflict:
-		return false
-	case ErrInvalidOwner:
-		return false
-	case ErrUnsupportedChangeInAuthz:
 		return false
 	default:
 		return true
-	}
-}
-
-func (e *applicationError) ProvisioningError() string {
-	switch e.errorCondition {
-	case ErrAssociatedAppNotFound:
-		return "DeletedFromAPI"
-	default:
-		return "ProvisioningError"
 	}
 }
