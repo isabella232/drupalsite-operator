@@ -44,12 +44,12 @@ const (
 	finalizerStr = "finalizer.controller-drupalsiterequest.webservices.cern.ch"
 )
 
-func validateSpec(appSpec webservicescernchv1alpha1.DrupalSiteRequestSpec) error {
+func validateSpec(appSpec webservicescernchv1alpha1.DrupalSiteRequestSpec) reconcileError {
 	_, err := govalidator.ValidateStruct(appSpec)
 	if err != nil {
-		return err
+		return newApplicationError(err, ErrInvalidSpec)
 	}
-	return err
+	return nil
 }
 
 // ensureStatusInit ensures that the status have been initialized, returns true if it is required an update
@@ -116,11 +116,11 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 							Protocol:      "TCP",
 						}},
 						Env: []corev1.EnvVar{
-							corev1.EnvVar{
+							{
 								Name:  "MYSQL_DATABASE",
 								Value: "drupal",
 							},
-							corev1.EnvVar{
+							{
 								Name: "MYSQL_ROOT_PASSWORD",
 								ValueFrom: &corev1.EnvVarSource{
 									SecretKeyRef: &corev1.SecretKeySelector{
@@ -176,7 +176,7 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 						ImagePullPolicy: "Always",
 						Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
 						Env: []corev1.EnvVar{
-							corev1.EnvVar{
+							{
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
@@ -196,13 +196,13 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 							Protocol:      "TCP",
 						}},
 						Env: []corev1.EnvVar{
-							corev1.EnvVar{
+							{
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
 						},
 						EnvFrom: []corev1.EnvFromSource{
-							corev1.EnvFromSource{
+							{
 								SecretRef: &corev1.SecretEnvSource{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: "drupal-mysql-secret",
@@ -258,7 +258,7 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 						ImagePullPolicy: "Always",
 						Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
 						Env: []corev1.EnvVar{
-							corev1.EnvVar{
+							{
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
@@ -278,13 +278,13 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 							Protocol:      "TCP",
 						}},
 						Env: []corev1.EnvVar{
-							corev1.EnvVar{
+							{
 								Name:  "DRUPAL_SHARED_VOLUME",
 								Value: "/drupal-data",
 							},
 						},
 						EnvFrom: []corev1.EnvFromSource{
-							corev1.EnvFromSource{
+							{
 								SecretRef: &corev1.SecretEnvSource{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: "drupal-mysql-secret",

@@ -116,8 +116,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		return r.updateCRorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
-		appErr := newApplicationError(err, ErrInvalidSpec)
-		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", appErr.Unwrap()))
+		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", err.Unwrap()))
 		// r.ensureErrorMsg(log, &application.Status, appErr)
 		// return reconcile.Result{}, err
 		condition := status.Condition{
