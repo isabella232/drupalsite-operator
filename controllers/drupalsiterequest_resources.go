@@ -27,7 +27,7 @@ import (
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
 	"github.com/prometheus/common/log"
-	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,25 +41,15 @@ import (
 
 const (
 	// finalizerStr string that is going to added to every DrupalSiteRequest created
-	finalizerStr = "finalizer.controller-drupalsiterequest.webservices.cern.ch"
+	finalizerStr = "controller.drupalsiterequest.webservices.cern.ch"
 )
 
-func validateSpec(appSpec webservicescernchv1alpha1.DrupalSiteRequestSpec) reconcileError {
+func validateSpec(appSpec webservicesv1a1.DrupalSiteRequestSpec) reconcileError {
 	_, err := govalidator.ValidateStruct(appSpec)
 	if err != nil {
 		return newApplicationError(err, ErrInvalidSpec)
 	}
 	return nil
-}
-
-// ensureStatusInit ensures that the status have been initialized, returns true if it is required an update
-func ensureStatusInit(app *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
-	if app.Status.Phase == "" {
-		app.Status.Phase = "Creating"
-		app.Status.Conditions = status.Conditions{}
-		return true
-	}
-	return false
 }
 
 func contains(a []string, x string) bool {
@@ -73,12 +63,57 @@ func contains(a []string, x string) bool {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func ensureSpecFinalizer(app *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
+func ensureSpecFinalizer(app *webservicesv1a1.DrupalSiteRequest) (update bool) {
 	if !contains(app.GetFinalizers(), finalizerStr) {
 		app.SetFinalizers(append(app.GetFinalizers(), finalizerStr))
 		update = true
 	}
 	return
+}
+
+// ensureInstalled implements the site install workflow and updates the Status conditions accordingly
+func (r *DrupalSiteRequestReconciler) ensureInstalled(drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
+	if transientErr := r.ensureDependentResources(drp); transientErr != nil {
+		drp.Status.Conditions.SetCondition(status.Condition{
+			Type:   "Installed",
+			Status: "False",
+		})
+		return transientErr
+	}
+	drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Installed",
+		Status: "True",
+	})
+	return nil
+}
+
+func (r *DrupalSiteRequestReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
+	ctx := context.TODO()
+	if transientErr := r.ensurePersistentVolumeClaim(ctx, drp, persistentVolumeClaimForDrupalSiteRequest(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for PVC")
+	}
+	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestMySQL(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for Mysql DC")
+	}
+	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestNginx(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for Nginx DC")
+	}
+	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestPHP(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for PHP DC")
+	}
+	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestMySQL(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for Mysql SVC")
+	}
+	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestNginx(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for Nginx SVC")
+	}
+	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestPHP(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for PHP SVC")
+	}
+	if transientErr := r.ensureRoute(ctx, drp, routeForDrupalSiteRequest(drp)); transientErr != nil {
+		return transientErr.Wrap("%v: for Route")
+	}
+	return nil
 }
 
 // labelsForDrupalSiterequest returns the labels for selecting the resources
@@ -88,7 +123,7 @@ func labelsForDrupalSiterequest(name string) map[string]string {
 }
 
 // deploymentConfigForDrupalSiteRequestMySQL returns a drupalSiteRequest DeploymentConfigMySQL object
-func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+func deploymentConfigForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "mysql"
 	objectName := "drupal-mysql-" + d.Name
@@ -153,7 +188,7 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.Drup
 }
 
 // deploymentConfigForDrupalSiteRequestNginx returns a drupalSiteRequest DeploymentConfigNginx object
-func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+func deploymentConfigForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "nginx"
 
@@ -235,7 +270,7 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.Drup
 }
 
 // deploymentConfigForDrupalSiteRequestPHP returns a drupalSiteRequest DeploymentConfigPHP object
-func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+func deploymentConfigForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "php"
 
@@ -317,7 +352,7 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.Drupal
 }
 
 // persistentVolumeClaimForDrupalSiteRequest returns a drupalSiteRequest DeploymentConfigPHP object
-func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.PersistentVolumeClaim {
+func persistentVolumeClaimForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *corev1.PersistentVolumeClaim {
 	// ls := labelsForDrupalSiterequest(d.Name)
 
 	pvc := &corev1.PersistentVolumeClaim{
@@ -346,7 +381,7 @@ func persistentVolumeClaimForDrupalSiteRequest(d *webservicescernchv1alpha1.Drup
 }
 
 // serviceForDrupalSiteRequestPHP returns a drupalSiteRequest servicePHP object
-func serviceForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
+func serviceForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "php"
 
@@ -373,7 +408,7 @@ func serviceForDrupalSiteRequestPHP(d *webservicescernchv1alpha1.DrupalSiteReque
 }
 
 // serviceForDrupalSiteRequestNginx returns a drupalSiteRequest servicePHP object
-func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
+func serviceForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "nginx"
 
@@ -400,7 +435,7 @@ func serviceForDrupalSiteRequestNginx(d *webservicescernchv1alpha1.DrupalSiteReq
 }
 
 // serviceForDrupalSiteRequestMySQL returns a drupalSiteRequest servicePHP object
-func serviceForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteRequest) *corev1.Service {
+func serviceForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "mysql"
 
@@ -427,7 +462,7 @@ func serviceForDrupalSiteRequestMySQL(d *webservicescernchv1alpha1.DrupalSiteReq
 }
 
 // routeForDrupalSiteRequest returns a drupalSiteRequest route object
-func routeForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *routev1.Route {
+func routeForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *routev1.Route {
 	// ls := labelsForDrupalSiterequest(d.Name)
 
 	route := &routev1.Route{
@@ -454,7 +489,7 @@ func routeForDrupalSiteRequest(d *webservicescernchv1alpha1.DrupalSiteRequest) *
 	return route
 }
 
-func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context, d *webservicescernchv1alpha1.DrupalSiteRequest, dep *appsv1.DeploymentConfig) (transientErr reconcileError) {
+func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, dep *appsv1.DeploymentConfig) (transientErr reconcileError) {
 	// dep := deploymentConfigForDrupalSiteRequestMySQL(d)
 	// dep *appsv1.DeploymentConfig
 	deleteRecreate := func() error {
@@ -486,7 +521,7 @@ func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context
 	return nil
 }
 
-func (r *DrupalSiteRequestReconciler) ensureService(ctx context.Context, d *webservicescernchv1alpha1.DrupalSiteRequest, svc *corev1.Service) (transientErr reconcileError) {
+func (r *DrupalSiteRequestReconciler) ensureService(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, svc *corev1.Service) (transientErr reconcileError) {
 	deleteRecreate := func() error {
 		err := r.Delete(ctx, svc)
 		if err != nil {
@@ -516,7 +551,7 @@ func (r *DrupalSiteRequestReconciler) ensureService(ctx context.Context, d *webs
 	return nil
 }
 
-func (r *DrupalSiteRequestReconciler) ensurePersistentVolumeClaim(ctx context.Context, d *webservicescernchv1alpha1.DrupalSiteRequest, pvc *corev1.PersistentVolumeClaim) (transientErr reconcileError) {
+func (r *DrupalSiteRequestReconciler) ensurePersistentVolumeClaim(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, pvc *corev1.PersistentVolumeClaim) (transientErr reconcileError) {
 	deleteRecreate := func() error {
 		err := r.Delete(ctx, pvc)
 		if err != nil {
@@ -546,7 +581,7 @@ func (r *DrupalSiteRequestReconciler) ensurePersistentVolumeClaim(ctx context.Co
 	return nil
 }
 
-func (r *DrupalSiteRequestReconciler) ensureRoute(ctx context.Context, d *webservicescernchv1alpha1.DrupalSiteRequest, route *routev1.Route) (transientErr reconcileError) {
+func (r *DrupalSiteRequestReconciler) ensureRoute(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, route *routev1.Route) (transientErr reconcileError) {
 	deleteRecreate := func() error {
 		err := r.Delete(ctx, route)
 		if err != nil {
@@ -577,7 +612,7 @@ func (r *DrupalSiteRequestReconciler) ensureRoute(ctx context.Context, d *webser
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest) (
+func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (
 	reconcile.Result, error) {
 	if err := r.Update(ctx, app); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
@@ -587,7 +622,7 @@ func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Contex
 }
 
 // updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest) (
+func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (
 	reconcile.Result, error) {
 	// app.Status.Conditions = status.Conditions{}
 	// (app.Status.Conditions)
@@ -605,7 +640,7 @@ func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 }
 
 // asOwner returns an OwnerReference set as the memcached CR
-func asOwner(d *webservicescernchv1alpha1.DrupalSiteRequest) metav1.OwnerReference {
+func asOwner(d *webservicesv1a1.DrupalSiteRequest) metav1.OwnerReference {
 	trueVar := true
 	return metav1.OwnerReference{
 		APIVersion: d.APIVersion,
@@ -617,7 +652,7 @@ func asOwner(d *webservicescernchv1alpha1.DrupalSiteRequest) metav1.OwnerReferen
 }
 
 // checkAllResourcesCreated checks if all the child resources are created and updates the Status of the CR accordingly
-func (r *DrupalSiteRequestReconciler) checkAllResourcesCreated(ctx context.Context, log logr.Logger, d *webservicescernchv1alpha1.DrupalSiteRequest) (created bool) {
+func (r *DrupalSiteRequestReconciler) checkAllResourcesCreated(ctx context.Context, log logr.Logger, d *webservicesv1a1.DrupalSiteRequest) (created bool) {
 
 	pvc := persistentVolumeClaimForDrupalSiteRequest(d)
 	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)

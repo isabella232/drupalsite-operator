@@ -110,53 +110,19 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		setErrorCondition(drupalSiteRequest, err)
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
-	if update := ensureStatusInit(drupalSiteRequest); update {
-		log.Info("Initializing DrupalSiteRequest Status")
-		// return reconcile.Result{}, nil
-		drupalSiteRequest.Status.Phase = "Creating"
+	if !drupalSiteRequest.ConditionTrue("Installed") {
+
+		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
+		log.Info("Installing DrupalSiteRequest")
+		if transientErr := r.ensureInstalled(drupalSiteRequest); transientErr != nil {
+			return handleTransientErr(transientErr, "%v while installing the website")
+		}
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
-	if transientErr := r.ensurePersistentVolumeClaim(ctx, drupalSiteRequest, persistentVolumeClaimForDrupalSiteRequest(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to persistent volume claim")
-		return reconcile.Result{}, err
-	}
 
-	if transientErr := r.ensureDeploymentConfig(ctx, drupalSiteRequest, deploymentConfigForDrupalSiteRequestMySQL(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure MySQL deployment")
-		// appErr := newApplicationError(err, ErrClientK8s)
-		// log.Error(err, fmt.Sprintf("%v failed to create MySQL deployment", appErr.Unwrap()))
-		// r.ensureErrorMsg(log, &application.Status, appErr)
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureDeploymentConfig(ctx, drupalSiteRequest, deploymentConfigForDrupalSiteRequestNginx(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure Nginx deployment")
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureDeploymentConfig(ctx, drupalSiteRequest, deploymentConfigForDrupalSiteRequestPHP(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure PHP deployment")
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureService(ctx, drupalSiteRequest, serviceForDrupalSiteRequestMySQL(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure MySQL service")
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureService(ctx, drupalSiteRequest, serviceForDrupalSiteRequestNginx(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure Nginx service")
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureService(ctx, drupalSiteRequest, serviceForDrupalSiteRequestPHP(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure PHP service")
-		return reconcile.Result{}, err
-	}
-
-	if transientErr := r.ensureRoute(ctx, drupalSiteRequest, routeForDrupalSiteRequest(drupalSiteRequest)); transientErr != nil {
-		handleTransientErr(transientErr, "%v trying to ensure route")
-		return reconcile.Result{}, err
+	// maintain
+	if transientErr := r.ensureDependentResources(drupalSiteRequest); transientErr != nil {
+		return handleTransientErr(transientErr, "%v")
 	}
 
 	if created := r.checkAllResourcesCreated(ctx, log, drupalSiteRequest); created {
