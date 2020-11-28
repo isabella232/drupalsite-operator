@@ -42,7 +42,7 @@ func (e *applicationError) Error() string {
 	if e.innerException == nil {
 		return e.errorCondition.Error()
 	}
-	return e.innerException.Error()
+	return fmt.Errorf("%s: %v", e.errorCondition.Error(), e.innerException).Error()
 }
 
 // Temporary shows if the error condition is temporary or permanent
