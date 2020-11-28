@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"github.com/operator-framework/operator-lib/status"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -77,7 +78,7 @@ func init() {
 	SchemeBuilder.Register(&DrupalSiteRequest{}, &DrupalSiteRequestList{})
 }
 
-// DisplayNameConvention implements the naming convention {ApplicationName -> DisplayName}
-// func (a DrupalSiteRequest) DisplayNameConvention(clusterInstanceName string) string {
-// 	return "Web frameworks site " + a.Spec.ApplicationName + " (" + clusterInstanceName + ")"
-// }
+func (drp DrupalSiteRequest) ConditionTrue(condition status.ConditionType) (update bool) {
+	init := drp.Status.Conditions.GetCondition(condition)
+	return init != nil && init.Status == v1.ConditionTrue
+}

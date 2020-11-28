@@ -89,23 +89,13 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	}
 
 	handleTransientErr := func(transientErr reconcileError, logstrFmt string) (reconcile.Result, error) {
+		setNotReady(drupalSiteRequest, transientErr)
+		r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 		if transientErr.Temporary() {
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
-			// r.ensureErrorMsg(log, &application.Status, transientErr)
-			// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
-			condition := status.Condition{
-				Type:    "Ready",
-				Status:  "False",
-				Reason:  "Transient Err",
-				Message: fmt.Sprintf(logstrFmt, transientErr.Unwrap()),
-				// Message: fmt.Sprintf("Condition %s is %s"),
-			}
-			drupalSiteRequest.Status.Conditions.SetCondition(condition)
-			r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 			return reconcile.Result{}, transientErr
 		}
-
-		log.Error(transientErr, "Permanent error marked as transient!")
+		log.Error(transientErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		return reconcile.Result{}, nil
 	}
 
@@ -117,15 +107,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	}
 	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", err.Unwrap()))
-		// r.ensureErrorMsg(log, &application.Status, appErr)
-		// return reconcile.Result{}, err
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Spec Error",
-			Message: "Failed to validate DrupalSiteRequest spec",
-		}
-		drupalSiteRequest.Status.Conditions.SetCondition(condition)
+		setErrorCondition(drupalSiteRequest, err)
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if update := ensureStatusInit(drupalSiteRequest); update {
@@ -225,4 +207,27 @@ func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Conte
 	}
 	app.SetFinalizers(remainingFinalizers)
 	return r.updateCRorFailReconcile(ctx, log, app)
+}
+
+func setReady(drp *webservicescernchv1alpha1.DrupalSiteRequest) {
+	drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Ready",
+		Status: "True",
+	})
+}
+func setNotReady(drp *webservicescernchv1alpha1.DrupalSiteRequest, transientErr reconcileError) {
+	drp.Status.Conditions.SetCondition(status.Condition{
+		Type:    "Ready",
+		Status:  "False",
+		Reason:  status.ConditionReason(transientErr.Unwrap().Error()),
+		Message: transientErr.Error(),
+	})
+}
+func setErrorCondition(drp *webservicescernchv1alpha1.DrupalSiteRequest, err reconcileError) {
+	drp.Status.Conditions.SetCondition(status.Condition{
+		Type:    "Error",
+		Status:  "True",
+		Reason:  status.ConditionReason(err.Unwrap().Error()),
+		Message: err.Error(),
+	})
 }
