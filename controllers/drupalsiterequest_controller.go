@@ -125,12 +125,8 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		return handleTransientErr(transientErr, "%v")
 	}
 
-	if created := r.checkAllResourcesCreated(ctx, log, drupalSiteRequest); created {
-		log.Info("Checking if all resources are created")
-		// return reconcile.Result{}, nil
-		drupalSiteRequest.Status.Phase = "Created"
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
-	}
+	setReady(drupalSiteRequest)
+
 	return ctrl.Result{}, nil
 }
 

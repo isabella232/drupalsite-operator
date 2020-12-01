@@ -33,6 +33,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
@@ -44,8 +45,8 @@ const (
 	finalizerStr = "controller.drupalsiterequest.webservices.cern.ch"
 )
 
-func validateSpec(appSpec webservicesv1a1.DrupalSiteRequestSpec) reconcileError {
-	_, err := govalidator.ValidateStruct(appSpec)
+func validateSpec(drpSpec webservicesv1a1.DrupalSiteRequestSpec) reconcileError {
+	_, err := govalidator.ValidateStruct(drpSpec)
 	if err != nil {
 		return newApplicationError(err, ErrInvalidSpec)
 	}
@@ -63,9 +64,9 @@ func contains(a []string, x string) bool {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func ensureSpecFinalizer(app *webservicesv1a1.DrupalSiteRequest) (update bool) {
-	if !contains(app.GetFinalizers(), finalizerStr) {
-		app.SetFinalizers(append(app.GetFinalizers(), finalizerStr))
+func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSiteRequest) (update bool) {
+	if !contains(drp.GetFinalizers(), finalizerStr) {
+		drp.SetFinalizers(append(drp.GetFinalizers(), finalizerStr))
 		update = true
 	}
 	return
@@ -89,28 +90,28 @@ func (r *DrupalSiteRequestReconciler) ensureInstalled(drp *webservicesv1a1.Drupa
 
 func (r *DrupalSiteRequestReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
 	ctx := context.TODO()
-	if transientErr := r.ensurePersistentVolumeClaim(ctx, drp, persistentVolumeClaimForDrupalSiteRequest(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "pvc"); transientErr != nil {
 		return transientErr.Wrap("%v: for PVC")
 	}
-	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestMySQL(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "dc_mysql"); transientErr != nil {
 		return transientErr.Wrap("%v: for Mysql DC")
 	}
-	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestNginx(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "dc_nginx"); transientErr != nil {
 		return transientErr.Wrap("%v: for Nginx DC")
 	}
-	if transientErr := r.ensureDeploymentConfig(ctx, drp, deploymentConfigForDrupalSiteRequestPHP(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "dc_php"); transientErr != nil {
 		return transientErr.Wrap("%v: for PHP DC")
 	}
-	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestMySQL(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "svc_mysql"); transientErr != nil {
 		return transientErr.Wrap("%v: for Mysql SVC")
 	}
-	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestNginx(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx"); transientErr != nil {
 		return transientErr.Wrap("%v: for Nginx SVC")
 	}
-	if transientErr := r.ensureService(ctx, drp, serviceForDrupalSiteRequestPHP(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "svc_php"); transientErr != nil {
 		return transientErr.Wrap("%v: for PHP SVC")
 	}
-	if transientErr := r.ensureRoute(ctx, drp, routeForDrupalSiteRequest(drp)); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "route"); transientErr != nil {
 		return transientErr.Wrap("%v: for Route")
 	}
 	return nil
@@ -489,26 +490,25 @@ func routeForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *routev1.Ro
 	return route
 }
 
-func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, dep *appsv1.DeploymentConfig) (transientErr reconcileError) {
-	// dep := deploymentConfigForDrupalSiteRequestMySQL(d)
-	// dep *appsv1.DeploymentConfig
+// createResource creates a given resource passed as an argument
+func createResource(ctx context.Context, res runtime.Object, name string, namespace string, r *DrupalSiteRequestReconciler) (transientErr reconcileError) {
 	deleteRecreate := func() error {
-		err := r.Delete(ctx, dep)
+		err := r.Delete(ctx, res)
 		if err != nil {
 			return err
 		}
-		return r.Create(ctx, dep)
+		return r.Create(ctx, res)
 	}
-	err := r.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, dep)
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, res)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
-		err := r.Create(ctx, dep)
+		log.Info("Creating Resource", "Resource.Namespace", namespace, "Resource.Name", name)
+		err := r.Create(ctx, res)
 		if err != nil {
 			switch {
 			case apierrors.IsAlreadyExists(err):
 				err = deleteRecreate()
 				if err != nil {
-					log.Error(err, "Failed to create new DeploymentConfig", "DeploymentConfig.Namespace", dep.Namespace, "DeploymentConfig.Name", dep.Name)
+					log.Error(err, "Failed to create new Resource", "Resource.Namespace", namespace, "Resource.Name", name)
 					return newApplicationError(err, ErrClientK8s)
 				}
 			default:
@@ -516,105 +516,44 @@ func (r *DrupalSiteRequestReconciler) ensureDeploymentConfig(ctx context.Context
 			}
 		}
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	return nil
 }
 
-func (r *DrupalSiteRequestReconciler) ensureService(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, svc *corev1.Service) (transientErr reconcileError) {
-	deleteRecreate := func() error {
-		err := r.Delete(ctx, svc)
-		if err != nil {
-			return err
-		}
-		return r.Create(ctx, svc)
+// ensureResourceX ensure the requested resource is created
+func (r *DrupalSiteRequestReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, resType string) (transientErr reconcileError) {
+	switch resType {
+	case "dc_mysql":
+		res := deploymentConfigForDrupalSiteRequestMySQL(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "dc_php":
+		res := deploymentConfigForDrupalSiteRequestPHP(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "dc_nginx":
+		res := deploymentConfigForDrupalSiteRequestNginx(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "svc_mysql":
+		res := serviceForDrupalSiteRequestMySQL(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "svc_php":
+		res := serviceForDrupalSiteRequestPHP(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "svc_nginx":
+		res := serviceForDrupalSiteRequestNginx(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "pvc":
+		res := persistentVolumeClaimForDrupalSiteRequest(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
+	case "route":
+		res := routeForDrupalSiteRequest(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r)
 	}
-	err := r.Get(ctx, types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace}, svc)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-		err := r.Create(ctx, svc)
-		if err != nil {
-			switch {
-			case apierrors.IsAlreadyExists(err):
-				err = deleteRecreate()
-				if err != nil {
-					log.Error(err, "Failed to create new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
-			default:
-				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-	}
-	// Set DrupalSiteRequest instance as the owner and controller
-	// ctrl.SetControllerReference(d, svc, r.Scheme)
-	return nil
-}
-
-func (r *DrupalSiteRequestReconciler) ensurePersistentVolumeClaim(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, pvc *corev1.PersistentVolumeClaim) (transientErr reconcileError) {
-	deleteRecreate := func() error {
-		err := r.Delete(ctx, pvc)
-		if err != nil {
-			return err
-		}
-		return r.Create(ctx, pvc)
-	}
-	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
-		err := r.Create(ctx, pvc)
-		if err != nil {
-			switch {
-			case apierrors.IsAlreadyExists(err):
-				err = deleteRecreate()
-				if err != nil {
-					log.Error(err, "Failed to create new PVC", "PVC.Namespace", pvc.Namespace, "PVC.Name", pvc.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
-			default:
-				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-	}
-	// Set DrupalSiteRequest instance as the owner and controller
-	// ctrl.SetControllerReference(d, pvc, r.Scheme)
-	return nil
-}
-
-func (r *DrupalSiteRequestReconciler) ensureRoute(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, route *routev1.Route) (transientErr reconcileError) {
-	deleteRecreate := func() error {
-		err := r.Delete(ctx, route)
-		if err != nil {
-			return err
-		}
-		return r.Create(ctx, route)
-	}
-	err := r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
-		err := r.Create(ctx, route)
-		if err != nil {
-			switch {
-			case apierrors.IsAlreadyExists(err):
-				err = deleteRecreate()
-				if err != nil {
-					log.Error(err, "Failed to create new Route", "Route.Namespace", route.Namespace, "Route.Name", route.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
-			default:
-				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-	}
-	// Set DrupalSiteRequest instance as the owner and controller
-	// ctrl.SetControllerReference(d, route, r.Scheme)
 	return nil
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (
+func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSiteRequest) (
 	reconcile.Result, error) {
-	if err := r.Update(ctx, app); err != nil {
+	if err := r.Update(ctx, drp); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
 		return reconcile.Result{}, err
 	}
@@ -622,12 +561,9 @@ func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Contex
 }
 
 // updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (
+func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSiteRequest) (
 	reconcile.Result, error) {
-	// app.Status.Conditions = status.Conditions{}
-	// (app.Status.Conditions)
-	// app.Status.Phase = p
-	if err := r.Status().Update(ctx, app); err != nil {
+	if err := r.Status().Update(ctx, drp); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
 		return reconcile.Result{}, err
 	}
@@ -649,137 +585,4 @@ func asOwner(d *webservicesv1a1.DrupalSiteRequest) metav1.OwnerReference {
 		UID:        d.UID,
 		Controller: &trueVar,
 	}
-}
-
-// checkAllResourcesCreated checks if all the child resources are created and updates the Status of the CR accordingly
-func (r *DrupalSiteRequestReconciler) checkAllResourcesCreated(ctx context.Context, log logr.Logger, d *webservicesv1a1.DrupalSiteRequest) (created bool) {
-
-	pvc := persistentVolumeClaimForDrupalSiteRequest(d)
-	err := r.Get(ctx, types.NamespacedName{Name: pvc.Name, Namespace: pvc.Namespace}, pvc)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "PVC not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	dep1 := deploymentConfigForDrupalSiteRequestMySQL(d)
-	err = r.Get(ctx, types.NamespacedName{Name: dep1.Name, Namespace: dep1.Namespace}, dep1)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "PHP deploymentconfig not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	dep2 := deploymentConfigForDrupalSiteRequestNginx(d)
-	err = r.Get(ctx, types.NamespacedName{Name: dep2.Name, Namespace: dep2.Namespace}, dep2)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "Nginx deploymentconfig not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	dep3 := deploymentConfigForDrupalSiteRequestPHP(d)
-	err = r.Get(ctx, types.NamespacedName{Name: dep3.Name, Namespace: dep3.Namespace}, dep3)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "PHP deployment config not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	svc1 := serviceForDrupalSiteRequestPHP(d)
-	err = r.Get(ctx, types.NamespacedName{Name: svc1.Name, Namespace: svc1.Namespace}, svc1)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "PHP Service not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	svc2 := serviceForDrupalSiteRequestNginx(d)
-	err = r.Get(ctx, types.NamespacedName{Name: svc2.Name, Namespace: svc2.Namespace}, svc2)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "Nginx Service not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	svc3 := serviceForDrupalSiteRequestMySQL(d)
-	err = r.Get(ctx, types.NamespacedName{Name: svc3.Name, Namespace: svc3.Namespace}, svc3)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "MySQL service not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-
-	route := routeForDrupalSiteRequest(d)
-	err = r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route)
-	if err != nil && errors.IsNotFound(err) {
-		condition := status.Condition{
-			Type:    "Ready",
-			Status:  "False",
-			Reason:  "Resource doesn't exist",
-			Message: "Route not found",
-			// Message: fmt.Sprintf("Condition %s is %s"),
-		}
-		d.Status.Conditions.SetCondition(condition)
-		r.updateCRStatusorFailReconcile(ctx, log, d)
-		return false
-	}
-	condition := status.Condition{
-		Type:    "Ready",
-		Status:  "True",
-		Message: "All resources created",
-		// Message: fmt.Sprintf("Condition %s is %s"),
-	}
-	d.Status.Conditions.SetCondition(condition)
-	r.updateCRStatusorFailReconcile(ctx, log, d)
-	return true
 }
