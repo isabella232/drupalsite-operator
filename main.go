@@ -26,7 +26,13 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	"gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
+
 	// +kubebuilder:scaffold:imports
+	appsv1 "github.com/openshift/api/apps/v1"
+	routev1 "github.com/openshift/api/route/v1"
 )
 
 var (
@@ -37,7 +43,11 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(webservicescernchv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+
+	utilruntime.Must(routev1.AddToScheme(scheme))
 }
 
 func main() {
@@ -63,6 +73,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.DrupalSiteRequestReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteRequest"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DrupalSiteRequest")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

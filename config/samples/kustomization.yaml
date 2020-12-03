@@ -1,0 +1,4 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- webservices.cern.ch_v1alpha1_drupalsiterequest.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
