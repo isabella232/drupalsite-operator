@@ -10,7 +10,10 @@ var (
 	// Generic temporary error
 	ErrTemporary   = errors.New("TemporaryError")
 	ErrInvalidSpec = errors.New("InvalidSpec")
-	ErrClientK8s   = errors.New("k8sAPIClientError")
+	// ErrFunctionDomain can be returned by a function that was passed invalid arguments, such as the default case of a switch.
+	// Consider constraining the arg type.
+	ErrFunctionDomain = errors.New("FunctionDomainError")
+	ErrClientK8s      = errors.New("k8sAPIClientError")
 )
 
 type reconcileError interface {
@@ -50,6 +53,8 @@ func (e *applicationError) Temporary() bool {
 	// NOTE: List all permanent errors
 	switch e.errorCondition {
 	case ErrInvalidSpec:
+		return false
+	case ErrFunctionDomain:
 		return false
 	default:
 		return true

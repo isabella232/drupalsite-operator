@@ -102,7 +102,6 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
 	if update := ensureSpecFinalizer(drupalSiteRequest); update {
 		log.Info("Initializing DrupalSiteRequest Spec")
-		// return reconcile.Result{}, nil
 		return r.updateCRorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
@@ -125,7 +124,9 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 		return handleTransientErr(transientErr, "%v")
 	}
 
-	setReady(drupalSiteRequest)
+	if update := setReady(drupalSiteRequest); update {
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -171,22 +172,22 @@ func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Conte
 	return r.updateCRorFailReconcile(ctx, log, app)
 }
 
-func setReady(drp *webservicescernchv1alpha1.DrupalSiteRequest) {
-	drp.Status.Conditions.SetCondition(status.Condition{
+func setReady(drp *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Ready",
 		Status: "True",
 	})
 }
-func setNotReady(drp *webservicescernchv1alpha1.DrupalSiteRequest, transientErr reconcileError) {
-	drp.Status.Conditions.SetCondition(status.Condition{
+func setNotReady(drp *webservicescernchv1alpha1.DrupalSiteRequest, transientErr reconcileError) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Ready",
 		Status:  "False",
 		Reason:  status.ConditionReason(transientErr.Unwrap().Error()),
 		Message: transientErr.Error(),
 	})
 }
-func setErrorCondition(drp *webservicescernchv1alpha1.DrupalSiteRequest, err reconcileError) {
-	drp.Status.Conditions.SetCondition(status.Condition{
+func setErrorCondition(drp *webservicescernchv1alpha1.DrupalSiteRequest, err reconcileError) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Error",
 		Status:  "True",
 		Reason:  status.ConditionReason(err.Unwrap().Error()),

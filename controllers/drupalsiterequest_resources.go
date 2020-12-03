@@ -546,8 +546,9 @@ func (r *DrupalSiteRequestReconciler) ensureResourceX(ctx context.Context, d *we
 	case "route":
 		res := routeForDrupalSiteRequest(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
+	default:
+		return newApplicationError(nil, ErrFunctionDomain)
 	}
-	return nil
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
