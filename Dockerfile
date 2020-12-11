@@ -2,6 +2,10 @@
 FROM golang:1.13 as builder
 
 WORKDIR /workspace
+
+# 'config' directory for the controller to read the config file from
+RUN mkdir config
+
 # Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum

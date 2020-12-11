@@ -170,6 +170,44 @@ objects:
             persistentVolumeClaim:
               claimName: drupal-pv-claim-${APP_NAME}
 
+- kind: Job
+  apiVersion: batch/v1
+  metadata:
+    name: drupal-site-install-job-${APP_NAME}
+  spec:
+    template:
+      metadata:
+        creationTimestamp: null
+      spec:
+        restartPolicy: Never
+        volumes:
+          - name: drupal-directory-${APP_NAME}
+            persistentVolumeClaim:
+              claimName: drupal-pv-claim-${APP_NAME}
+        containers:
+          - name: drush
+            env:  
+              - name: DRUPAL_SHARED_VOLUME
+                value: /drupal-data
+              - name: DB_HOST
+                value: drupal-mysql-${APP_NAME}
+              - name: DB_PORT
+                value: '3306'
+              - name: DB_NAME
+                value: drupal
+              - name: DB_USER
+                value: root
+              - name: DB_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mysql-pass-${APP_NAME}
+                    key: password
+            imagePullPolicy: Always
+            volumeMounts:
+              - name: drupal-directory-${APP_NAME}
+                mountPath: /drupal-data
+            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/drush:drupal-${DRUPAL_VERSION}
+            
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata:

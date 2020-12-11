@@ -56,6 +56,8 @@ RUN rm -rf ${DRUPAL_APP_DIR}/web/sites/default/files
 # Fix-permissions
 RUN /fix-permissions ${DRUPAL_APP_DIR}
 
+# Explicity create the site configuration dir as configured in settings-d8.php#L17 file
+RUN mkdir -p config/sync
 # Add init-container for every container that contains drupal code
 # ADD init-app.sh /
 # RUN chmod +x /init-app.sh

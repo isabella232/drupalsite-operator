@@ -24,7 +24,8 @@ import (
 	appsv1 "github.com/openshift/api/apps/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
-	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,7 +67,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	log.Info("Reconciling request")
 
 	// Fetch the DrupalSiteRequest instance
-	drupalSiteRequest := &webservicescernchv1alpha1.DrupalSiteRequest{}
+	drupalSiteRequest := &webservicesv1a1.DrupalSiteRequest{}
 	err := r.Get(ctx, req.NamespacedName, drupalSiteRequest)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -113,7 +114,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
 		log.Info("Installing DrupalSiteRequest")
-		if transientErr := r.ensureInstalled(drupalSiteRequest); transientErr != nil {
+		if transientErr := r.ensureInstalled(ctx, drupalSiteRequest); transientErr != nil {
 			return handleTransientErr(transientErr, "%v while installing the website")
 		}
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
@@ -121,7 +122,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 	// maintain
 	if transientErr := r.ensureDependentResources(drupalSiteRequest); transientErr != nil {
-		return handleTransientErr(transientErr, "%v")
+		return handleTransientErr(transientErr, "%v while ensuring the dependent resources")
 	}
 
 	if update := setReady(drupalSiteRequest); update {
@@ -134,11 +135,12 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&webservicescernchv1alpha1.DrupalSiteRequest{}).
+		For(&webservicesv1a1.DrupalSiteRequest{}).
 		Owns(&appsv1.DeploymentConfig{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&routev1.Route{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
@@ -153,7 +155,7 @@ func (r *DrupalSiteRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Transient Error Reconcile Error
 
 // cleanupDrupalSiteRequest checks and removes if a finalizer exists on the resource
-func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Context, log logr.Logger, app *webservicescernchv1alpha1.DrupalSiteRequest) (ctrl.Result, error) {
+func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (ctrl.Result, error) {
 	// finalizer: dependentResources
 	// 1. check if such resources exist
 	//   - delete them
@@ -172,13 +174,13 @@ func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Conte
 	return r.updateCRorFailReconcile(ctx, log, app)
 }
 
-func setReady(drp *webservicescernchv1alpha1.DrupalSiteRequest) (update bool) {
+func setReady(drp *webservicesv1a1.DrupalSiteRequest) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Ready",
 		Status: "True",
 	})
 }
-func setNotReady(drp *webservicescernchv1alpha1.DrupalSiteRequest, transientErr reconcileError) (update bool) {
+func setNotReady(drp *webservicesv1a1.DrupalSiteRequest, transientErr reconcileError) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Ready",
 		Status:  "False",
@@ -186,7 +188,7 @@ func setNotReady(drp *webservicescernchv1alpha1.DrupalSiteRequest, transientErr 
 		Message: transientErr.Error(),
 	})
 }
-func setErrorCondition(drp *webservicescernchv1alpha1.DrupalSiteRequest, err reconcileError) (update bool) {
+func setErrorCondition(drp *webservicesv1a1.DrupalSiteRequest, err reconcileError) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Error",
 		Status:  "True",
