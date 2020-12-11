@@ -2,6 +2,7 @@ stages:
 - build-base
 - build-site-builder
 - build
+- build-drush
 - integration
 
 # Prepare Kaniko configuration file for all jobs
@@ -35,7 +36,7 @@ default:
     name: gitlab-registry.cern.ch/ci-tools/docker-image-builder
     entrypoint: [""]
 
-# Build images
+# Build PHP base image
 Build php-base (latest):
   stage: build-base
   except:
@@ -49,7 +50,7 @@ Build php-base (latest):
     IMAGE_NAME: 'php-base'
     OPTIONS: '--build-arg PHP_VERSION=$CI_PHP_VERSION'
 
-# Build images
+# Build Site builder images
 Build site-builder-drupal-8 (latest):
   stage: build-site-builder
   except:
@@ -76,6 +77,7 @@ Build site-builder-drupal-9 (latest):
     IMAGE_NAME: 'site-builder'
     OPTIONS: '--build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION --build-arg DRUPAL_VERSION=$CI_DRUPAL_9_VERSION --build-arg COMPOSER_VERSION=$CI_COMPOSER_VERSION --build-arg SETTINGS_FILE_NAME=$CI_SETTINGS_FILE_NAME_DRUPAL_9'
 
+# Build Nginx images
 Build nginx-drupal-8 (latest):
   stage: build
   except:
@@ -102,6 +104,7 @@ Build nginx-drupal-9 (latest):
     IMAGE_NAME: 'nginx'
     OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_9_VERSION --build-arg NGINX_VERSION=$CI_NGINX_VERSION'
 
+# Build PHP images
 Build php-fpm-drupal-8 (latest):
   stage: build
   except:
@@ -126,6 +129,33 @@ Build php-fpm-drupal-9 (latest):
   variables:
     DOCKERFILE_FOLDER: 'images/php-fpm'
     IMAGE_NAME: 'php-fpm'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_9_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+
+# Build Drush images
+Build drush-drupal-8 (latest):
+  stage: build-drush
+  except:
+    - tags
+  only:      
+    changes:
+      - images/drush/*
+  <<: *build_drupal_version_8
+  variables:
+    DOCKERFILE_FOLDER: 'images/drush'
+    IMAGE_NAME: 'drush'
+    OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_8_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
+
+Build drush-drupal-9 (latest):
+  stage: build-drush
+  except:
+    - tags
+  only:      
+    changes:
+      - images/drush/*
+  <<: *build_drupal_version_9
+  variables:
+    DOCKERFILE_FOLDER: 'images/drush'
+    IMAGE_NAME: 'drush'
     OPTIONS: '--build-arg SITE_BUILDER_VERSION=drupal-$CI_DRUPAL_9_VERSION --build-arg PHP_BASE_VERSION=$CI_PHP_BASE_VERSION'
 
 
