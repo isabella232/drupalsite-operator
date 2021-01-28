@@ -114,8 +114,13 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
 		log.Info("Installing DrupalSiteRequest")
-		if transientErr := r.ensureInstalled(ctx, drupalSiteRequest); transientErr != nil {
+		reconcile, transientErr := r.ensureInstalled(ctx, drupalSiteRequest)
+		if transientErr != nil {
 			return handleTransientErr(transientErr, "%v while installing the website")
+		}
+		if reconcile.Requeue {
+			r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+			return reconcile, nil
 		}
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
