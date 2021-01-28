@@ -20,7 +20,11 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
+	"math/rand"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -39,12 +43,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
 	// finalizerStr string that is going to added to every DrupalSiteRequest created
-	finalizerStr = "controller.drupalsiterequest.webservices.cern.ch"
+	finalizerStr   = "controller.drupalsiterequest.webservices.cern.ch"
+	MAX_BACKOFF_MS = 10000
 )
 
 //validateSpec validates the spec against the DrupalSiteRequestSpec definition
@@ -75,34 +81,52 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSiteRequest) (update bool) {
 	return
 }
 
+// exponentialBackoffMillisec is the waiting time in milliseconds until retry for a given number of failed attempts,
+// up to `MAX_BACKOFF_MS`ms. Adds 50ms jitter.
+func exponentialBackoffMillisec(attempts int) (waitMs time.Duration) {
+	attemptsDurationMs := math.Pow(2, float64(attempts)) * 10
+	return time.Duration(math.Min(attemptsDurationMs, MAX_BACKOFF_MS)+50*rand.Float64()) * time.Millisecond
+}
+
 // ensureInstalled implements the site install workflow and updates the Status conditions accordingly
-func (r *DrupalSiteRequestReconciler) ensureInstalled(ctx context.Context, drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
+func (r *DrupalSiteRequestReconciler) ensureInstalled(ctx context.Context, drp *webservicesv1a1.DrupalSiteRequest) (reconcile ctrl.Result, transientErr reconcileError) {
 	if transientErr := r.ensurePreInstallResources(drp); transientErr != nil {
 		drp.Status.Conditions.SetCondition(status.Condition{
 			Type:   "Installed",
 			Status: "False",
 		})
-		return transientErr
+		return ctrl.Result{}, transientErr
 	}
 	if jobComplete := r.isDrushJobCompleted(ctx, drp); !jobComplete {
+		attempts := 0
+		if drp.Status.Conditions.GetCondition(status.ConditionType("Installed")) != nil {
+			var err error
+			attempts, err = strconv.Atoi(string(drp.Status.Conditions.GetCondition(status.ConditionType("Installed")).Reason))
+			if err != nil {
+				return ctrl.Result{}, newApplicationError(fmt.Errorf("Error parsing condition[\"Installed\"] as int: %v", err), ErrTemporary)
+			}
+		}
 		drp.Status.Conditions.SetCondition(status.Condition{
 			Type:   "Installed",
 			Status: "False",
+			Reason: status.ConditionReason(strconv.Itoa(attempts + 1)),
 		})
-		return newApplicationError(nil, ErrTemporary)
+		return ctrl.Result{
+			Requeue: true, RequeueAfter: exponentialBackoffMillisec(attempts),
+		}, nil
 	}
 	if transientErr := r.ensureDependentResources(drp); transientErr != nil {
 		drp.Status.Conditions.SetCondition(status.Condition{
 			Type:   "Installed",
 			Status: "False",
 		})
-		return transientErr.Wrap("%v while ensuring the dependent resources")
+		return ctrl.Result{}, transientErr.Wrap("%v while ensuring the dependent resources")
 	}
 	drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Installed",
 		Status: "True",
 	})
-	return nil
+	return ctrl.Result{}, nil
 }
 
 /*
