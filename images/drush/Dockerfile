@@ -32,6 +32,6 @@ RUN ln -s ${DRUPAL_SHARED_VOLUME}/themes ${DRUPAL_APP_DIR}/web/sites/default/the
 
 ENV DRUSH_VERSION 10.3.6
 
-RUN composer require drush/drush ${DRUSH_VERSION}; composer install;
+RUN COMPOSER_MEMORY_LIMIT=-1 composer require drush/drush ${DRUSH_VERSION}; composer install;
 
 ENV PATH=$PATH:${DRUPAL_APP_DIR}/vendor/bin
