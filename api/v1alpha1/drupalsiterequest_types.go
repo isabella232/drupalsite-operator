@@ -25,12 +25,12 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// DrupalSiteRequestSpec defines the desired state of DrupalSiteRequest
-type DrupalSiteRequestSpec struct {
+// DrupalSiteSpec defines the desired state of DrupalSite
+type DrupalSiteSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of DrupalSiteRequest. Edit DrupalSiteRequest_types.go to remove/update
+	// Foo is an example field of DrupalSite. Edit DrupalSite_types.go to remove/update
 
 	// Publish defines if the site has to be published or not
 	// +kubebuilder:validation:Required
@@ -42,8 +42,8 @@ type DrupalSiteRequestSpec struct {
 	DrupalVersion string `json:"drupalVersion"` // Convert to enum
 }
 
-// DrupalSiteRequestStatus defines the observed state of DrupalSiteRequest
-type DrupalSiteRequestStatus struct {
+// DrupalSiteStatus defines the observed state of DrupalSite
+type DrupalSiteStatus struct {
 	// Phase aggregates the information from all the conditions and reports on the lifecycle phase of the resource
 	// Enum: {Creating,Created,Deleted}
 	Phase string `json:"phase,omitempty"`
@@ -56,29 +56,29 @@ type DrupalSiteRequestStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// DrupalSiteRequest is the Schema for the drupalsiterequests API
-type DrupalSiteRequest struct {
+// DrupalSite is the Schema for the drupalsiterequests API
+type DrupalSite struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DrupalSiteRequestSpec   `json:"spec,omitempty"`
-	Status DrupalSiteRequestStatus `json:"status,omitempty"`
+	Spec   DrupalSiteSpec   `json:"spec,omitempty"`
+	Status DrupalSiteStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// DrupalSiteRequestList contains a list of DrupalSiteRequest
-type DrupalSiteRequestList struct {
+// DrupalSiteList contains a list of DrupalSite
+type DrupalSiteList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []DrupalSiteRequest `json:"items"`
+	Items           []DrupalSite `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&DrupalSiteRequest{}, &DrupalSiteRequestList{})
+	SchemeBuilder.Register(&DrupalSite{}, &DrupalSiteList{})
 }
 
-func (drp DrupalSiteRequest) ConditionTrue(condition status.ConditionType) (update bool) {
+func (drp DrupalSite) ConditionTrue(condition status.ConditionType) (update bool) {
 	init := drp.Status.Conditions.GetCondition(condition)
 	return init != nil && init.Status == v1.ConditionTrue
 }

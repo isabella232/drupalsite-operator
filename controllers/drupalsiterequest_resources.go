@@ -48,13 +48,13 @@ import (
 )
 
 const (
-	// finalizerStr string that is going to added to every DrupalSiteRequest created
+	// finalizerStr string that is going to added to every DrupalSite created
 	finalizerStr   = "controller.drupalsiterequest.webservices.cern.ch"
 	MAX_BACKOFF_MS = 10000
 )
 
-//validateSpec validates the spec against the DrupalSiteRequestSpec definition
-func validateSpec(drpSpec webservicesv1a1.DrupalSiteRequestSpec) reconcileError {
+//validateSpec validates the spec against the DrupalSiteSpec definition
+func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 	_, err := govalidator.ValidateStruct(drpSpec)
 	if err != nil {
 		return newApplicationError(err, ErrInvalidSpec)
@@ -73,7 +73,7 @@ func contains(a []string, x string) bool {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSiteRequest) (update bool) {
+func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite) (update bool) {
 	if !contains(drp.GetFinalizers(), finalizerStr) {
 		drp.SetFinalizers(append(drp.GetFinalizers(), finalizerStr))
 		update = true
@@ -89,7 +89,7 @@ func exponentialBackoffMillisec(attempts int) (waitMs time.Duration) {
 }
 
 // ensureInstalled implements the site install workflow and updates the Status conditions accordingly
-func (r *DrupalSiteRequestReconciler) ensureInstalled(ctx context.Context, drp *webservicesv1a1.DrupalSiteRequest) (reconcile ctrl.Result, transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureInstalled(ctx context.Context, drp *webservicesv1a1.DrupalSite) (reconcile ctrl.Result, transientErr reconcileError) {
 	if transientErr := r.ensurePreInstallResources(drp); transientErr != nil {
 		drp.Status.Conditions.SetCondition(status.Condition{
 			Type:   "Installed",
@@ -133,7 +133,7 @@ func (r *DrupalSiteRequestReconciler) ensureInstalled(ctx context.Context, drp *
 ensurePreInstallResources ensures presence of the primary set of resources namely MySQL DeploymentConfig,
 MySQL Service, PersistentVolumeClaim and Site install Kubernetes Job
 */
-func (r *DrupalSiteRequestReconciler) ensurePreInstallResources(drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensurePreInstallResources(drp *webservicesv1a1.DrupalSite) (transientErr reconcileError) {
 	ctx := context.TODO()
 	if transientErr := r.ensureResourceX(ctx, drp, "pvc"); transientErr != nil {
 		return transientErr.Wrap("%v: for PVC")
@@ -154,7 +154,7 @@ func (r *DrupalSiteRequestReconciler) ensurePreInstallResources(drp *webservices
 ensureDependentResources ensures the presence of the requested dependent resources namely PHP DeploymentConfig,
 PHP Service, PHP ConfigMap, Nginx DeploymentConfig, Nginx Service, Route
 */
-func (r *DrupalSiteRequestReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSiteRequest) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSite) (transientErr reconcileError) {
 	ctx := context.TODO()
 
 	if transientErr := r.ensureResourceX(ctx, drp, "dc_php"); transientErr != nil {
@@ -184,8 +184,8 @@ func labelsForDrupalSiterequest(name string) map[string]string {
 	return map[string]string{"CRD": "drupalSiteRequest", "drupalSiteRequest_cr": name}
 }
 
-// deploymentConfigForDrupalSiteRequestMySQL returns a DeploymentConfig object for MySQL
-func deploymentConfigForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+// deploymentConfigForDrupalSiteMySQL returns a DeploymentConfig object for MySQL
+func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "mysql"
 	objectName := "drupal-mysql-" + d.Name
@@ -242,15 +242,15 @@ func deploymentConfigForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequ
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
-// deploymentConfigForDrupalSiteRequestNginx returns a DeploymentConfig for Nginx
-func deploymentConfigForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+// deploymentConfigForDrupalSiteNginx returns a DeploymentConfig for Nginx
+func deploymentConfigForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "nginx"
 
@@ -308,15 +308,15 @@ func deploymentConfigForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequ
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
-// deploymentConfigForDrupalSiteRequestPHP returns a DeploymentConfig object for PHP
-func deploymentConfigForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteRequest) *appsv1.DeploymentConfig {
+// deploymentConfigForDrupalSitePHP returns a DeploymentConfig object for PHP
+func deploymentConfigForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "php"
 
@@ -392,15 +392,15 @@ func deploymentConfigForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteReques
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(dep, asOwner(d))
 	return dep
 }
 
-// persistentVolumeClaimForDrupalSiteRequest returns a PVC object
-func persistentVolumeClaimForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *corev1.PersistentVolumeClaim {
+// persistentVolumeClaimForDrupalSite returns a PVC object
+func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
 	// ls := labelsForDrupalSiterequest(d.Name)
 
 	pvc := &corev1.PersistentVolumeClaim{
@@ -421,15 +421,15 @@ func persistentVolumeClaimForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequ
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, pvc, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(pvc, asOwner(d))
 	return pvc
 }
 
-// serviceForDrupalSiteRequestPHP returns a service object for PHP
-func serviceForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
+// serviceForDrupalSitePHP returns a service object for PHP
+func serviceForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "php"
 
@@ -448,15 +448,15 @@ func serviceForDrupalSiteRequestPHP(d *webservicesv1a1.DrupalSiteRequest) *corev
 			}},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
-// serviceForDrupalSiteRequestNginx returns a service object for Nginx
-func serviceForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
+// serviceForDrupalSiteNginx returns a service object for Nginx
+func serviceForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "nginx"
 
@@ -475,15 +475,15 @@ func serviceForDrupalSiteRequestNginx(d *webservicesv1a1.DrupalSiteRequest) *cor
 			}},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
-// serviceForDrupalSiteRequestMySQL returns a service object for MySQL
-func serviceForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequest) *corev1.Service {
+// serviceForDrupalSiteMySQL returns a service object for MySQL
+func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "mysql"
 
@@ -502,15 +502,15 @@ func serviceForDrupalSiteRequestMySQL(d *webservicesv1a1.DrupalSiteRequest) *cor
 			}},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(svc, asOwner(d))
 	return svc
 }
 
-// routeForDrupalSiteRequest returns a route object
-func routeForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *routev1.Route {
+// routeForDrupalSite returns a route object
+func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 	// ls := labelsForDrupalSiterequest(d.Name)
 
 	route := &routev1.Route{
@@ -530,15 +530,15 @@ func routeForDrupalSiteRequest(d *webservicesv1a1.DrupalSiteRequest) *routev1.Ro
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, svc, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(route, asOwner(d))
 	return route
 }
 
-// jobForDrupalSiteRequestDrush returns a job object thats runs drush
-func jobForDrupalSiteRequestDrush(d *webservicesv1a1.DrupalSiteRequest) *batchv1.Job {
+// jobForDrupalSiteDrush returns a job object thats runs drush
+func jobForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *batchv1.Job {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["job"] = "drush"
 
@@ -607,7 +607,7 @@ func jobForDrupalSiteRequestDrush(d *webservicesv1a1.DrupalSiteRequest) *batchv1
 			},
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(job, asOwner(d))
@@ -615,7 +615,7 @@ func jobForDrupalSiteRequestDrush(d *webservicesv1a1.DrupalSiteRequest) *batchv1
 }
 
 // configMapForPHPFPM returns a job object thats runs drush
-func configMapForPHPFPM(d *webservicesv1a1.DrupalSiteRequest) *corev1.ConfigMap {
+func configMapForPHPFPM(d *webservicesv1a1.DrupalSite) *corev1.ConfigMap {
 	ls := labelsForDrupalSiterequest(d.Name)
 	ls["app"] = "php"
 
@@ -634,7 +634,7 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSiteRequest) *corev1.ConfigMap 
 			"www.conf": string(content),
 		},
 	}
-	// Set DrupalSiteRequest instance as the owner and controller
+	// Set DrupalSite instance as the owner and controller
 	// ctrl.SetControllerReference(d, dep, r.Scheme)
 	// Add owner reference
 	addOwnerRefToObject(cm, asOwner(d))
@@ -642,7 +642,7 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSiteRequest) *corev1.ConfigMap 
 }
 
 // createResource creates a given resource passed as an argument
-func createResource(ctx context.Context, res runtime.Object, name string, namespace string, r *DrupalSiteRequestReconciler) (transientErr reconcileError) {
+func createResource(ctx context.Context, res runtime.Object, name string, namespace string, r *DrupalSiteReconciler) (transientErr reconcileError) {
 	deleteRecreate := func() error {
 		err := r.Delete(ctx, res)
 		if err != nil {
@@ -683,34 +683,34 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- fpm_cm: ConfigMap for PHP-FPM
 	- route: Route for the drupalsite
 */
-func (r *DrupalSiteRequestReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest, resType string) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string) (transientErr reconcileError) {
 	switch resType {
 	case "dc_mysql":
-		res := deploymentConfigForDrupalSiteRequestMySQL(d)
+		res := deploymentConfigForDrupalSiteMySQL(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "dc_php":
-		res := deploymentConfigForDrupalSiteRequestPHP(d)
+		res := deploymentConfigForDrupalSitePHP(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "dc_nginx":
-		res := deploymentConfigForDrupalSiteRequestNginx(d)
+		res := deploymentConfigForDrupalSiteNginx(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "svc_mysql":
-		res := serviceForDrupalSiteRequestMySQL(d)
+		res := serviceForDrupalSiteMySQL(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "svc_php":
-		res := serviceForDrupalSiteRequestPHP(d)
+		res := serviceForDrupalSitePHP(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "svc_nginx":
-		res := serviceForDrupalSiteRequestNginx(d)
+		res := serviceForDrupalSiteNginx(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "pvc":
-		res := persistentVolumeClaimForDrupalSiteRequest(d)
+		res := persistentVolumeClaimForDrupalSite(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "route":
-		res := routeForDrupalSiteRequest(d)
+		res := routeForDrupalSite(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "site_install_job":
-		res := jobForDrupalSiteRequestDrush(d)
+		res := jobForDrupalSiteDrush(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r)
 	case "fpm_cm":
 		res := configMapForPHPFPM(d)
@@ -724,7 +724,7 @@ func (r *DrupalSiteRequestReconciler) ensureResourceX(ctx context.Context, d *we
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSiteRequest) (
+func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Update(ctx, drp); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
@@ -734,7 +734,7 @@ func (r *DrupalSiteRequestReconciler) updateCRorFailReconcile(ctx context.Contex
 }
 
 // updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteRequestReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSiteRequest) (
+func (r *DrupalSiteReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Status().Update(ctx, drp); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
@@ -749,7 +749,7 @@ func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 }
 
 // asOwner returns an OwnerReference set as the memcached CR
-func asOwner(d *webservicesv1a1.DrupalSiteRequest) metav1.OwnerReference {
+func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 	trueVar := true
 	return metav1.OwnerReference{
 		APIVersion: d.APIVersion,
@@ -761,9 +761,9 @@ func asOwner(d *webservicesv1a1.DrupalSiteRequest) metav1.OwnerReference {
 }
 
 // isDrushJobCompleted checks if the drush job is successfully completed
-func (r *DrupalSiteRequestReconciler) isDrushJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSiteRequest) bool {
+func (r *DrupalSiteReconciler) isDrushJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
-	jobObject := jobForDrupalSiteRequestDrush(d)
+	jobObject := jobForDrupalSiteDrush(d)
 	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
 	if err == nil {
 		if found.Status.Succeeded != 0 {
@@ -773,7 +773,7 @@ func (r *DrupalSiteRequestReconciler) isDrushJobCompleted(ctx context.Context, d
 	return false
 }
 
-// siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteRequestDrush
+// siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
 func siteInstallJobForDrupalSite() []string {
 	return []string{"sh", "-c", "drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com"}
 }

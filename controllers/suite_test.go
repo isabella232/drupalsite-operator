@@ -77,9 +77,9 @@ var _ = BeforeSuite(func(done Done) {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&DrupalSiteRequestReconciler{
+	err = (&DrupalSiteReconciler{
 		Client: k8sManager.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteRequest"),
+		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 

@@ -73,12 +73,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.DrupalSiteRequestReconciler{
+	if err = (&controllers.DrupalSiteReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteRequest"),
+		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "DrupalSiteRequest")
+		setupLog.Error(err, "unable to create controller", "controller", "DrupalSite")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
