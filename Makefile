@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 # Current Operator version
 VERSION ?= 0.0.1
+PKG_MAN_OPTS ?= $(PKG_FROM_VERSION) $(PKG_CHANNELS) $(PKG_IS_DEFAULT_CHANNEL)
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
