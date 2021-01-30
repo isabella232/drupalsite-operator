@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,51 +34,41 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// DrupalSiteRequestReconciler reconciles a DrupalSiteRequest object
-type DrupalSiteRequestReconciler struct {
+// DrupalSiteReconciler reconciles a DrupalSite object
+type DrupalSiteReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-/*
-The Reconcile(req ctrl.Request) (ctrl.Result, error) steps
-1. read the resource
-1. handle deletion
-1. ensure finalizer
-1. [validate spec]
-1. ensure children resources
-  - Check if resources are created. Check error and resolve. Check resource spec also for detailed error and report it
-*/
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 
-// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile runs the main reocncile loop
-func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.TODO()
+func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
 
 	log.Info("Reconciling request")
 
-	// Fetch the DrupalSiteRequest instance
-	drupalSiteRequest := &webservicesv1a1.DrupalSiteRequest{}
+	// Fetch the DrupalSite instance
+	drupalSiteRequest := &webservicesv1a1.DrupalSite{}
 	err := r.Get(ctx, req.NamespacedName, drupalSiteRequest)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("DrupalSiteRequest resource not found. Ignoring since object must be deleted")
+			log.Info("DrupalSite resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		log.Error(err, "Failed to get DrupalSiteRequest")
+		log.Error(err, "Failed to get DrupalSite")
 		return ctrl.Result{}, err
 	}
 
@@ -86,7 +76,7 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 	if drupalSiteRequest.GetDeletionTimestamp() != nil {
 		// drupalSiteRequest.Status.Phase = "Deleted"
 		// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
-		return r.cleanupDrupalSiteRequest(ctx, log, drupalSiteRequest)
+		return r.cleanupDrupalSite(ctx, log, drupalSiteRequest)
 	}
 
 	handleTransientErr := func(transientErr reconcileError, logstrFmt string) (reconcile.Result, error) {
@@ -102,18 +92,18 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
 	if update := ensureSpecFinalizer(drupalSiteRequest); update {
-		log.Info("Initializing DrupalSiteRequest Spec")
+		log.Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSiteRequest spec", err.Unwrap()))
+		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSite spec", err.Unwrap()))
 		setErrorCondition(drupalSiteRequest, err)
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
 	}
 	if !drupalSiteRequest.ConditionTrue("Installed") {
 
 		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
-		log.Info("Installing DrupalSiteRequest")
+		log.Info("Installing DrupalSite")
 		reconcile, transientErr := r.ensureInstalled(ctx, drupalSiteRequest)
 		if transientErr != nil {
 			return handleTransientErr(transientErr, "%v while installing the website")
@@ -138,9 +128,9 @@ func (r *DrupalSiteRequestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, 
 }
 
 // SetupWithManager adds a manager which watches the resources
-func (r *DrupalSiteRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&webservicesv1a1.DrupalSiteRequest{}).
+		For(&webservicesv1a1.DrupalSite{}).
 		Owns(&appsv1.DeploymentConfig{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{}).
@@ -159,15 +149,15 @@ func (r *DrupalSiteRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Status - creation complete
 // Transient Error Reconcile Error
 
-// cleanupDrupalSiteRequest checks and removes if a finalizer exists on the resource
-func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSiteRequest) (ctrl.Result, error) {
+// cleanupDrupalSite checks and removes if a finalizer exists on the resource
+func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	// finalizer: dependentResources
 	// 1. check if such resources exist
 	//   - delete them
 	//   - reconcile
 	// 1. if not, delete the finalizer key manually and let Kubernetes delete the resource cleanly
 	// TODO
-	log.Info("Deleting DrupalSiteRequest")
+	log.Info("Deleting DrupalSite")
 	remainingFinalizers := app.GetFinalizers()
 	for i, finalizer := range remainingFinalizers {
 		if finalizer == finalizerStr {
@@ -179,13 +169,13 @@ func (r *DrupalSiteRequestReconciler) cleanupDrupalSiteRequest(ctx context.Conte
 	return r.updateCRorFailReconcile(ctx, log, app)
 }
 
-func setReady(drp *webservicesv1a1.DrupalSiteRequest) (update bool) {
+func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Ready",
 		Status: "True",
 	})
 }
-func setNotReady(drp *webservicesv1a1.DrupalSiteRequest, transientErr reconcileError) (update bool) {
+func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Ready",
 		Status:  "False",
@@ -193,7 +183,7 @@ func setNotReady(drp *webservicesv1a1.DrupalSiteRequest, transientErr reconcileE
 		Message: transientErr.Error(),
 	})
 }
-func setErrorCondition(drp *webservicesv1a1.DrupalSiteRequest, err reconcileError) (update bool) {
+func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:    "Error",
 		Status:  "True",

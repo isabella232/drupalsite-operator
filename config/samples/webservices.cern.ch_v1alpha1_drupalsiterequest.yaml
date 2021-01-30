@@ -1,8 +1,0 @@
-apiVersion: webservices.cern.ch/v1alpha1
-kind: DrupalSiteRequest
-metadata:
-  name: drupalsiterequest-sample
-spec:
-  # Add fields here
-  publish: false
-  drupalVersion: "9.0.7"

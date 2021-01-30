@@ -29,7 +29,7 @@ import (
 	webservicescernchv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 )
 
-var _ = Describe("DrupalSiteRequest controller", func() {
+var _ = Describe("DrupalSite controller", func() {
 
 	// Define utility constants for object names and testing timeouts/durations and intervals.
 	const (
@@ -49,16 +49,16 @@ var _ = Describe("DrupalSiteRequest controller", func() {
 				Name:      Name,
 				Namespace: Namespace,
 			}
-			drupalSiteRequestObject := &webservicescernchv1alpha1.DrupalSiteRequest{
+			drupalSiteRequestObject := &webservicescernchv1alpha1.DrupalSite{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "webservices.cern.ch/v1alpha1",
-					Kind:       "DrupalSiteRequest",
+					Kind:       "DrupalSite",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      key.Name,
 					Namespace: Namespace,
 				},
-				Spec: webservicescernchv1alpha1.DrupalSiteRequestSpec{
+				Spec: webservicescernchv1alpha1.DrupalSiteSpec{
 					Publish:       false,
 					DrupalVersion: "8.9.7",
 				},
@@ -68,21 +68,21 @@ var _ = Describe("DrupalSiteRequest controller", func() {
 
 			// By("Expecting created")
 			// Eventually(func() error {
-			// 	d := &webservicescernchv1alpha1.DrupalSiteRequest{}
+			// 	d := &webservicescernchv1alpha1.DrupalSite{}
 			// 	return k8sClient.Get(ctx, key, d)
 			// }, timeout, interval).Should(Succeed())
 
 			// Delete
 			// By("Expecting to delete successfully")
 			// Eventually(func() error {
-			// 	d := &webservicescernchv1alpha1.DrupalSiteRequest{}
+			// 	d := &webservicescernchv1alpha1.DrupalSite{}
 			// 	k8sClient.Get(ctx, key, d)
 			// 	return k8sClient.Delete(context.Background(), d)
 			// }, timeout, interval).Should(Succeed())
 
 			// By("Expecting to delete finish")
 			// Eventually(func() error {
-			// 	d := &webservicescernchv1alpha1.DrupalSiteRequest{}
+			// 	d := &webservicescernchv1alpha1.DrupalSite{}
 			// 	return k8sClient.Get(ctx, key, d)
 			// }, timeout, interval).ShouldNot(Succeed())
 		})
