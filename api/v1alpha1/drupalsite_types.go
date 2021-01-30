@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,16 +22,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of DrupalSite. Edit DrupalSite_types.go to remove/update
-
 	// Publish defines if the site has to be published or not
 	// +kubebuilder:validation:Required
 	Publish bool `json:"publish"`
@@ -56,7 +48,7 @@ type DrupalSiteStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// DrupalSite is the Schema for the drupalsiterequests API
+// DrupalSite is the Schema for the drupalsites API
 type DrupalSite struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

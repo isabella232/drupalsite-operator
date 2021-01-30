@@ -38,6 +38,32 @@ rules:
   - get
   - list
 - apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsites
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsites/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsites/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - route.openshift.io
   resources:
   - routes
@@ -49,23 +75,3 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - webservices.cern.ch
-  resources:
-  - drupalsiterequests
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - webservices.cern.ch
-  resources:
-  - drupalsiterequests/status
-  verbs:
-  - get
-  - patch
-  - update

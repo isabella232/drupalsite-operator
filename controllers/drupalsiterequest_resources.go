@@ -39,11 +39,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -642,7 +642,7 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSite) *corev1.ConfigMap {
 }
 
 // createResource creates a given resource passed as an argument
-func createResource(ctx context.Context, res runtime.Object, name string, namespace string, r *DrupalSiteReconciler) (transientErr reconcileError) {
+func createResource(ctx context.Context, res client.Object, name string, namespace string, r *DrupalSiteReconciler) (transientErr reconcileError) {
 	deleteRecreate := func() error {
 		err := r.Delete(ctx, res)
 		if err != nil {

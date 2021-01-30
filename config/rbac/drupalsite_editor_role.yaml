@@ -1,13 +1,13 @@
-# permissions for end users to edit drupalsiterequests.
+# permissions for end users to edit drupalsites.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: drupalsiterequest-editor-role
+  name: drupalsite-editor-role
 rules:
 - apiGroups:
-  - webservices.cern.ch
+  - drupal.webservices.cern.ch
   resources:
-  - drupalsiterequests
+  - drupalsites
   verbs:
   - create
   - delete
@@ -17,8 +17,8 @@ rules:
   - update
   - watch
 - apiGroups:
-  - webservices.cern.ch
+  - drupal.webservices.cern.ch
   resources:
-  - drupalsiterequests/status
+  - drupalsites/status
   verbs:
   - get

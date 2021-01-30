@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,26 +41,16 @@ type DrupalSiteReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-/*
-The Reconcile(req ctrl.Request) (ctrl.Result, error) steps
-1. read the resource
-1. handle deletion
-1. ensure finalizer
-1. [validate spec]
-1. ensure children resources
-  - Check if resources are created. Check error and resolve. Check resource spec also for detailed error and report it
-*/
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 
-// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=webservices.cern.ch,resources=drupalsiterequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile runs the main reocncile loop
-func (r *DrupalSiteReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.TODO()
+func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
 
