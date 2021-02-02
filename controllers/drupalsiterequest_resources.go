@@ -49,8 +49,9 @@ import (
 
 const (
 	// finalizerStr string that is going to added to every DrupalSite created
-	finalizerStr   = "controller.drupalsiterequest.webservices.cern.ch"
-	MAX_BACKOFF_MS = 10000
+	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
+	MAX_BACKOFF_MS        = 10000
+	productionEnvironment = "production"
 )
 
 //validateSpec validates the spec against the DrupalSiteSpec definition
@@ -178,15 +179,15 @@ func (r *DrupalSiteReconciler) ensureDependentResources(drp *webservicesv1a1.Dru
 	return nil
 }
 
-// labelsForDrupalSiterequest returns the labels for selecting the resources
-// belonging to the given drupalSiteRequest CR name.
-func labelsForDrupalSiterequest(name string) map[string]string {
-	return map[string]string{"CRD": "drupalSiteRequest", "drupalSiteRequest_cr": name}
+// labelsForDrupalSite returns the labels for selecting the resources
+// belonging to the given drupalSite CR name.
+func labelsForDrupalSite(name string) map[string]string {
+	return map[string]string{"CRD": "drupalSite", "drupalSite_cr": name}
 }
 
 // deploymentConfigForDrupalSiteMySQL returns a DeploymentConfig object for MySQL
 func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
 	objectName := "drupal-mysql-" + d.Name
 
@@ -251,7 +252,7 @@ func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.D
 
 // deploymentConfigForDrupalSiteNginx returns a DeploymentConfig for Nginx
 func deploymentConfigForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
 
 	dep := &appsv1.DeploymentConfig{
@@ -317,7 +318,7 @@ func deploymentConfigForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *appsv1.D
 
 // deploymentConfigForDrupalSitePHP returns a DeploymentConfig object for PHP
 func deploymentConfigForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
 
 	dep := &appsv1.DeploymentConfig{
@@ -401,7 +402,7 @@ func deploymentConfigForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *appsv1.Dep
 
 // persistentVolumeClaimForDrupalSite returns a PVC object
 func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
-	// ls := labelsForDrupalSiterequest(d.Name)
+	// ls := labelsForDrupalSite(d.Name)
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -430,7 +431,7 @@ func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.P
 
 // serviceForDrupalSitePHP returns a service object for PHP
 func serviceForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *corev1.Service {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
 
 	svc := &corev1.Service{
@@ -457,7 +458,7 @@ func serviceForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *corev1.Service {
 
 // serviceForDrupalSiteNginx returns a service object for Nginx
 func serviceForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *corev1.Service {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
 
 	svc := &corev1.Service{
@@ -484,7 +485,7 @@ func serviceForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *corev1.Service {
 
 // serviceForDrupalSiteMySQL returns a service object for MySQL
 func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
 
 	svc := &corev1.Service{
@@ -511,15 +512,20 @@ func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
 
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
-	// ls := labelsForDrupalSiterequest(d.Name)
-
+	// ls := labelsForDrupalSite(d.Name)
+	var env string
+	if d.Spec.Environment.Name == productionEnvironment {
+		env = ""
+	} else {
+		env = d.Spec.Environment.Name + "."
+	}
 	route := &routev1.Route{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-mysql" + d.Name,
+			Name:      "drupal" + d.Name,
 			Namespace: d.Namespace,
 		},
 		Spec: routev1.RouteSpec{
-			Host: d.Name + "." + os.Getenv("CLUSTER_NAME") + ".cern.ch",
+			Host: env + d.Name + "." + os.Getenv("CLUSTER_NAME") + ".cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   "drupal-nginx",
@@ -539,7 +545,7 @@ func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
 func jobForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *batchv1.Job {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["job"] = "drush"
 
 	job := &batchv1.Job{
@@ -616,7 +622,7 @@ func jobForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *batchv1.Job {
 
 // configMapForPHPFPM returns a job object thats runs drush
 func configMapForPHPFPM(d *webservicesv1a1.DrupalSite) *corev1.ConfigMap {
-	ls := labelsForDrupalSiterequest(d.Name)
+	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
 
 	content, err := ioutil.ReadFile("config/www.conf")
