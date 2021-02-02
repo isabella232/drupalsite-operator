@@ -5,3 +5,5 @@ metadata:
 spec:
   publish: false
   drupalVersion: "9.0.7"
+  environment:
+    name: "dev"

@@ -41,15 +41,15 @@ var _ = Describe("DrupalSite controller", func() {
 		interval = time.Millisecond * 250
 	)
 
-	Context("Creating drupalSiteRequest object", func() {
+	Context("Creating drupalSite object", func() {
 		It("Should be created successfully", func() {
-			// By("By creating a new drupalSiteRequest")
+			// By("By creating a new drupalSite")
 			ctx := context.Background()
 			key := types.NamespacedName{
 				Name:      Name,
 				Namespace: Namespace,
 			}
-			drupalSiteRequestObject := &webservicescernchv1alpha1.DrupalSite{
+			drupalSiteObject := &webservicescernchv1alpha1.DrupalSite{
 				TypeMeta: metav1.TypeMeta{
 					APIVersion: "webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSite",
@@ -63,8 +63,8 @@ var _ = Describe("DrupalSite controller", func() {
 					DrupalVersion: "8.9.7",
 				},
 			}
-			fmt.Println(drupalSiteRequestObject)
-			Expect(k8sClient.Create(ctx, drupalSiteRequestObject)).Should(Succeed())
+			fmt.Println(drupalSiteObject)
+			Expect(k8sClient.Create(ctx, drupalSiteObject)).Should(Succeed())
 
 			// By("Expecting created")
 			// Eventually(func() error {

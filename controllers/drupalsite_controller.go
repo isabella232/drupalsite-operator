@@ -57,8 +57,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log.Info("Reconciling request")
 
 	// Fetch the DrupalSite instance
-	drupalSiteRequest := &webservicesv1a1.DrupalSite{}
-	err := r.Get(ctx, req.NamespacedName, drupalSiteRequest)
+	drupalSite := &webservicesv1a1.DrupalSite{}
+	err := r.Get(ctx, req.NamespacedName, drupalSite)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -73,15 +73,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	//Handle deletion
-	if drupalSiteRequest.GetDeletionTimestamp() != nil {
-		// drupalSiteRequest.Status.Phase = "Deleted"
-		// r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
-		return r.cleanupDrupalSite(ctx, log, drupalSiteRequest)
+	if drupalSite.GetDeletionTimestamp() != nil {
+		// drupalSite.Status.Phase = "Deleted"
+		// r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		return r.cleanupDrupalSite(ctx, log, drupalSite)
 	}
 
 	handleTransientErr := func(transientErr reconcileError, logstrFmt string) (reconcile.Result, error) {
-		setNotReady(drupalSiteRequest, transientErr)
-		r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+		setNotReady(drupalSite, transientErr)
+		r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		if transientErr.Temporary() {
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
 			return reconcile.Result{}, transientErr
@@ -91,37 +91,37 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
-	if update := ensureSpecFinalizer(drupalSiteRequest); update {
+	if update := ensureSpecFinalizer(drupalSite); update {
 		log.Info("Initializing DrupalSite Spec")
-		return r.updateCRorFailReconcile(ctx, log, drupalSiteRequest)
+		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
-	if err := validateSpec(drupalSiteRequest.Spec); err != nil {
+	if err := validateSpec(drupalSite.Spec); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSite spec", err.Unwrap()))
-		setErrorCondition(drupalSiteRequest, err)
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+		setErrorCondition(drupalSite, err)
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 	}
-	if !drupalSiteRequest.ConditionTrue("Installed") {
+	if !drupalSite.ConditionTrue("Installed") {
 
 		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
 		log.Info("Installing DrupalSite")
-		reconcile, transientErr := r.ensureInstalled(ctx, drupalSiteRequest)
+		reconcile, transientErr := r.ensureInstalled(ctx, drupalSite)
 		if transientErr != nil {
 			return handleTransientErr(transientErr, "%v while installing the website")
 		}
 		if reconcile.Requeue {
-			r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+			r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 			return reconcile, nil
 		}
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 	}
 
 	// maintain
-	if transientErr := r.ensureDependentResources(drupalSiteRequest); transientErr != nil {
+	if transientErr := r.ensureDependentResources(drupalSite); transientErr != nil {
 		return handleTransientErr(transientErr, "%v while ensuring the dependent resources")
 	}
 
-	if update := setReady(drupalSiteRequest); update {
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSiteRequest)
+	if update := setReady(drupalSite); update {
+		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 	}
 
 	return ctrl.Result{}, nil

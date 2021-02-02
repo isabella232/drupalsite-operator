@@ -28,10 +28,38 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Publish bool `json:"publish"`
 
-	// DrupalVerion defines the version of the Drupal to install
+	// DrupalVersion defines the version of the Drupal to install
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	DrupalVersion string `json:"drupalVersion"` // Convert to enum
+
+	// Environment defines the drupal site environments
+	Environment EnvironmentSpec `json:"environment"`
+}
+
+// EnvironmentSpec defines the environment field in DrupalSite
+type EnvironmentSpec struct {
+	// Name specifies the environment name for the DrupalSite. The name will be used for resource lables and route name
+	// +kubebuilder:validation:Pattern=[a-z0-9]([-a-z0-9]*[a-z0-9])?
+	Name string `json:"name"`
+	// ExtraConfigRepo passes on the git url with advanced configuration to the DrupalSite S2I functionality
+	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
+	ExtraConfigRepo string `json:"extraConfigRepo,omitempty"`
+	// ImageOverride overrides the image urls in the DrupalSite deployment for the fields that are set
+	ImageOverride ImageOverrideSpec `json:"imageOverride,omitempty"`
+}
+
+// ImageSpec defines the image field in EnvironmentSpec
+type ImageOverrideSpec struct {
+	// Sitebuilder overrides the Sitebuilder image url in the DrupalSite deployment
+	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
+	Sitebuilder string `json:"sitebuilder,omitempty"`
+	// Nginx overrides the Nginx image url in the DrupalSite deployment
+	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
+	Nginx string `json:"nginx,omitempty"`
+	// PhpFPM overrides the PHP-FPM image url in the DrupalSite deployment
+	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
+	PhpFPM string `json:"phpFpm,omitempty"`
 }
 
 // DrupalSiteStatus defines the observed state of DrupalSite
@@ -40,7 +68,7 @@ type DrupalSiteStatus struct {
 	// Enum: {Creating,Created,Deleted}
 	Phase string `json:"phase,omitempty"`
 
-	// TODO conditions
+	// Conditions specifies different conditions based on the DrupalSite status
 	// +kubebuilder:validation:type=array
 	Conditions status.Conditions `json:"conditions,omitempty"`
 }
