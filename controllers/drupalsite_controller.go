@@ -100,28 +100,40 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 	}
-	if !drupalSite.ConditionTrue("Installed") {
 
-		// NOTE: we can put the installation workflow here, because some parts of it will be different than `ensureDependentResources`
-		log.Info("Installing DrupalSite")
-		reconcile, transientErr := r.ensureInstalled(ctx, drupalSite)
-		if transientErr != nil {
-			return handleTransientErr(transientErr, "%v while installing the website")
-		}
-		if reconcile.Requeue {
-			r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-			return reconcile, nil
-		}
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+	// Ensure installed - Installed status
+	// Create route
+
+	// Ensure all primary resources
+	if transientErr := r.ensurePreInstallResources(drupalSite); transientErr != nil {
+		setNotReady(drupalSite, transientErr)
+		return handleTransientErr(transientErr, "%v while creating the resources")
 	}
 
-	// maintain
-	if transientErr := r.ensureDependentResources(drupalSite); transientErr != nil {
-		return handleTransientErr(transientErr, "%v while ensuring the dependent resources")
+	// Check if the drupal site is ready to serve requests
+	if siteReady := r.isDrupalSiteReady(ctx, drupalSite); siteReady {
+		if update := setReady(drupalSite); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
 	}
 
-	if update := setReady(drupalSite); update {
-		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+	// Check if the site is installed and mark the condition
+	if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
+		if update := setInstalled(drupalSite); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+	} else {
+		if update := setNotInstalled(drupalSite); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
+	// If the installed status and ready status is true, create the route
+	if drupalSite.ConditionTrue("Installed") && drupalSite.ConditionTrue("Ready") {
+		if transientErr := r.ensureDependentResources(drupalSite); transientErr != nil {
+			return handleTransientErr(transientErr, "%v while creating route")
+		}
+		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 
 	return ctrl.Result{}, nil
@@ -181,6 +193,18 @@ func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (
 		Status:  "False",
 		Reason:  status.ConditionReason(transientErr.Unwrap().Error()),
 		Message: transientErr.Error(),
+	})
+}
+func setInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Installed",
+		Status: "True",
+	})
+}
+func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Installed",
+		Status: "False",
 	})
 }
 func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {

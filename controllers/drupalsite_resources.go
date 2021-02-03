@@ -23,14 +23,12 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
 	appsv1 "github.com/openshift/api/apps/v1"
 	routev1 "github.com/openshift/api/route/v1"
-	"github.com/operator-framework/operator-lib/status"
 	"github.com/prometheus/common/log"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -42,7 +40,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -89,47 +86,6 @@ func exponentialBackoffMillisec(attempts int) (waitMs time.Duration) {
 	return time.Duration(math.Min(attemptsDurationMs, MAX_BACKOFF_MS)+50*rand.Float64()) * time.Millisecond
 }
 
-// ensureInstalled implements the site install workflow and updates the Status conditions accordingly
-func (r *DrupalSiteReconciler) ensureInstalled(ctx context.Context, drp *webservicesv1a1.DrupalSite) (reconcile ctrl.Result, transientErr reconcileError) {
-	if transientErr := r.ensurePreInstallResources(drp); transientErr != nil {
-		drp.Status.Conditions.SetCondition(status.Condition{
-			Type:   "Installed",
-			Status: "False",
-		})
-		return ctrl.Result{}, transientErr
-	}
-	if jobComplete := r.isDrushJobCompleted(ctx, drp); !jobComplete {
-		attempts := 0
-		if drp.Status.Conditions.GetCondition(status.ConditionType("Installed")) != nil {
-			var err error
-			attempts, err = strconv.Atoi(string(drp.Status.Conditions.GetCondition(status.ConditionType("Installed")).Reason))
-			if err != nil {
-				return ctrl.Result{}, newApplicationError(fmt.Errorf("Error parsing condition[\"Installed\"] as int: %v", err), ErrTemporary)
-			}
-		}
-		drp.Status.Conditions.SetCondition(status.Condition{
-			Type:   "Installed",
-			Status: "False",
-			Reason: status.ConditionReason(strconv.Itoa(attempts + 1)),
-		})
-		return ctrl.Result{
-			Requeue: true, RequeueAfter: exponentialBackoffMillisec(attempts),
-		}, nil
-	}
-	if transientErr := r.ensureDependentResources(drp); transientErr != nil {
-		drp.Status.Conditions.SetCondition(status.Condition{
-			Type:   "Installed",
-			Status: "False",
-		})
-		return ctrl.Result{}, transientErr.Wrap("%v while ensuring the dependent resources")
-	}
-	drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Installed",
-		Status: "True",
-	})
-	return ctrl.Result{}, nil
-}
-
 /*
 ensurePreInstallResources ensures presence of the primary set of resources namely MySQL DeploymentConfig,
 MySQL Service, PersistentVolumeClaim and Site install Kubernetes Job
@@ -148,16 +104,6 @@ func (r *DrupalSiteReconciler) ensurePreInstallResources(drp *webservicesv1a1.Dr
 	if transientErr := r.ensureResourceX(ctx, drp, "site_install_job"); transientErr != nil {
 		return transientErr.Wrap("%v: for Drush site-install Job")
 	}
-	return nil
-}
-
-/*
-ensureDependentResources ensures the presence of the requested dependent resources namely PHP DeploymentConfig,
-PHP Service, PHP ConfigMap, Nginx DeploymentConfig, Nginx Service, Route
-*/
-func (r *DrupalSiteReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSite) (transientErr reconcileError) {
-	ctx := context.TODO()
-
 	if transientErr := r.ensureResourceX(ctx, drp, "dc_php"); transientErr != nil {
 		return transientErr.Wrap("%v: for PHP DC")
 	}
@@ -173,6 +119,15 @@ func (r *DrupalSiteReconciler) ensureDependentResources(drp *webservicesv1a1.Dru
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx"); transientErr != nil {
 		return transientErr.Wrap("%v: for Nginx SVC")
 	}
+	return nil
+}
+
+/*
+ensureDependentResources ensures the presence of the requested dependent resources namely PHP DeploymentConfig,
+PHP Service, PHP ConfigMap, Nginx DeploymentConfig, Nginx Service, Route
+*/
+func (r *DrupalSiteReconciler) ensureDependentResources(drp *webservicesv1a1.DrupalSite) (transientErr reconcileError) {
+	ctx := context.TODO()
 	if transientErr := r.ensureResourceX(ctx, drp, "route"); transientErr != nil {
 		return transientErr.Wrap("%v: for Route")
 	}
@@ -766,13 +721,27 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 	}
 }
 
-// isDrushJobCompleted checks if the drush job is successfully completed
-func (r *DrupalSiteReconciler) isDrushJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+// isInstallJobCompleted checks if the drush job is successfully completed
+func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
 	jobObject := jobForDrupalSiteDrush(d)
 	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
 	if err == nil {
 		if found.Status.Succeeded != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
+func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	deploymentConfigNginx := deploymentConfigForDrupalSiteNginx(d)
+	deploymentConfigPHP := deploymentConfigForDrupalSitePHP(d)
+	err1 := r.Get(ctx, types.NamespacedName{Name: deploymentConfigNginx.Name, Namespace: deploymentConfigNginx.Namespace}, deploymentConfigNginx)
+	err2 := r.Get(ctx, types.NamespacedName{Name: deploymentConfigPHP.Name, Namespace: deploymentConfigPHP.Namespace}, deploymentConfigPHP)
+	if err1 == nil || err2 == nil {
+		if deploymentConfigNginx.Status.ReadyReplicas != 0 && deploymentConfigPHP.Status.ReadyReplicas != 0 {
 			return true
 		}
 	}
