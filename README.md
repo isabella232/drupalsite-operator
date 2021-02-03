@@ -1,6 +1,7 @@
 # drupalSite-operator
 
 Kubernetes operator that controls the main API of the Drupal service: the DrupalSite CRD.
+
 ## Drupal service architecture
 
 The Drupal service is designed around the concept of the DrupalSite.
