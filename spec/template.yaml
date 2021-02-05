@@ -15,6 +15,247 @@ objects:
     password: cm9vdA==
   type: Opaque
 
+# Drupal builder Image openshift generated
+- kind: ImageStream
+  apiVersion: v1  
+  metadata:
+    generation: 1
+    labels:
+      app: drupal
+    name: drupal-site-builder-base
+  spec:
+    lookupPolicy:
+     local: true
+
+# Drupal site-builder Image openshift generated
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    generation: 1
+    labels:
+      app: drupal
+    name: drupal-site-builder-s2i
+  spec:
+    lookupPolicy:
+     local: true
+
+ 
+# Drupal php Image openshift generated
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    generation: 1
+    labels:
+      app: php
+    name: drupal-php
+  spec:
+    lookupPolicy:
+     local: true
+
+# Drupal nginx Image openshift generated
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    generation: 1
+    labels:
+      app: nginx
+    name: drupal-nginx
+  spec:
+    lookupPolicy:
+     local: true
+
+# Site Builder Base
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    labels:
+      app: site-builder
+    name: drupal-site-builder-base
+  spec:
+    completionDeadlineSeconds: 1200
+    successfulBuildsHistoryLimit: 2
+    failedBuildsHistoryLimit: 2    
+    output:
+      to:
+        kind: ImageStreamTag
+        name: drupal-site-builder-base:drupal-9.0.7
+    postCommit: {}
+    resources:
+      limits:
+        cpu: '1'
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 640Mi
+    runPolicy: Serial
+    source:
+      git: 
+        uri: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+        ref: "s2i"
+    strategy:
+      dockerStrategy:
+        dockerfilePath: Dockerfile        
+        buildArgs:
+          - name: "PHP_BASE_VERSION"
+            value: "7.3.23-fpm-alpine3.12"
+        env:
+          - name: "DRUPAL_VERSION"
+            value: "drupal-9.0.7"
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+
+# Site Builder
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    labels:
+      app: drupal
+    name: drupal-site-builder-s2i
+  spec:
+    completionDeadlineSeconds: 1200
+    successfulBuildsHistoryLimit: 2
+    failedBuildsHistoryLimit: 2    
+    output:
+      to:
+        kind: ImageStreamTag
+        name: drupal-site-builder-s2i:latest
+    postCommit: {}
+    resources:
+      limits:
+        cpu: '1'
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    runPolicy: Serial
+    source:
+      git:
+        ref: master
+        uri: https://gitlab.cern.ch/rvineetr/test-ravineet-d9-containers-buildconfig.git
+      type: Git
+    strategy:
+      type: Source
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: drupal-site-builder-base:drupal-9.0.7
+        forcePull: true
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+
+# PHP Builder
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    labels:
+      app: php
+    name: drupal-php
+  spec:
+    completionDeadlineSeconds: 1200
+    successfulBuildsHistoryLimit: 2
+    failedBuildsHistoryLimit: 2    
+    output:
+      to:
+        kind: ImageStreamTag
+        name: drupal-php:latest
+    postCommit: {}
+    resources:
+      limits:
+        cpu: '1'
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 640Mi
+    runPolicy: Serial
+    source:
+      git: 
+        uri: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+        ref: "s2i"
+      contextDir: "images/php-fpm"
+      images:
+      - from:
+          kind: "ImageStreamTag"
+          name: "drupal-site-builder-s2i:latest"
+        paths:
+        - destinationDir: "./images/php-fpm/drupal-files/"
+          sourcePath: "/app/"
+    strategy:
+      dockerStrategy:
+        # dockerfilePath: images/php-fpm/Dockerfile        
+        buildArgs:
+          - name: "PHP_BASE_VERSION"
+            value: "latest"
+        env:
+          - name: "DRUPAL_SOURCE_DIR"
+            value: "drupal-files"
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+    - type: ImageChange
+      imageChange:
+        from:
+          kind: "ImageStreamTag"
+          name: "drupal-site-builder-s2i:latest"
+
+# Nginx Builder
+- kind: BuildConfig
+  apiVersion: v1
+  metadata:
+    labels:
+      app: nginx
+    name: drupal-nginx
+  spec:
+    completionDeadlineSeconds: 1200
+    successfulBuildsHistoryLimit: 2
+    failedBuildsHistoryLimit: 2    
+    output:
+      to:
+        kind: ImageStreamTag
+        name: drupal-nginx:latest
+    postCommit: {}
+    resources:
+      limits:
+        cpu: '1'
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 640Mi
+    runPolicy: Serial
+    source:
+      git: 
+        uri: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+        ref: "s2i"
+      contextDir: "images/nginx"
+      images:
+      - from:
+          kind: "ImageStreamTag"
+          name: "drupal-site-builder-s2i:latest"
+        paths:
+        - destinationDir: "./images/nginx/drupal-files/"
+          sourcePath: "/app/"
+    strategy:
+      dockerStrategy:
+        buildArgs:
+          - name: "SITE_BUILDER_VERSION"
+            value: "latest"
+          - name: "NGINX_VERSION"
+            value: "1.17.4"
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+    - type: ImageChange
+      imageChange:
+        from:
+          kind: "ImageStreamTag"
+          name: "drupal-site-builder-s2i:latest"
+
+
 - kind: DeploymentConfig
   apiVersion: apps.openshift.io/v1
   metadata:
@@ -59,7 +300,15 @@ objects:
     name: drupal-nginx-${APP_NAME}
   spec:
     triggers:
-      - type: ConfigChange
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+        - nginx
+        from:
+          kind: ImageStreamTag
+          name: drupal-nginx:latest
     replicas: 1
     selector:
       app: drupal-nginx-${APP_NAME}
@@ -105,7 +354,7 @@ objects:
             volumeMounts:
               - name: drupal-directory-${APP_NAME}
                 mountPath: /drupal-data
-            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/nginx:drupal-${DRUPAL_VERSION}
+            image: drupal-nginx:latest
         volumes:
           - name: drupal-directory-${APP_NAME}
             persistentVolumeClaim:
@@ -117,7 +366,15 @@ objects:
     name: drupal-php-${APP_NAME}
   spec:
     triggers:
-      - type: ConfigChange
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+        - php
+        from:
+          kind: ImageStreamTag
+          name: drupal-php:latest
     replicas: 1
     selector:
       app: drupal-php-${APP_NAME}
@@ -164,49 +421,49 @@ objects:
               - name: drupal-directory-${APP_NAME}
                 mountPath: /drupal-data
             image: >-
-              gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-fpm:drupal-${DRUPAL_VERSION}
+              drupal-php:latest
         volumes:
           - name: drupal-directory-${APP_NAME}
             persistentVolumeClaim:
               claimName: drupal-pv-claim-${APP_NAME}
 
-- kind: Job
-  apiVersion: batch/v1
-  metadata:
-    name: drupal-site-install-job-${APP_NAME}
-  spec:
-    template:
-      metadata:
-        creationTimestamp: null
-      spec:
-        restartPolicy: Never
-        volumes:
-          - name: drupal-directory-${APP_NAME}
-            persistentVolumeClaim:
-              claimName: drupal-pv-claim-${APP_NAME}
-        containers:
-          - name: drush
-            env:  
-              - name: DRUPAL_SHARED_VOLUME
-                value: /drupal-data
-              - name: DB_HOST
-                value: drupal-mysql-${APP_NAME}
-              - name: DB_PORT
-                value: '3306'
-              - name: DB_NAME
-                value: drupal
-              - name: DB_USER
-                value: root
-              - name: DB_PASSWORD
-                valueFrom:
-                  secretKeyRef:
-                    name: mysql-pass-${APP_NAME}
-                    key: password
-            imagePullPolicy: Always
-            volumeMounts:
-              - name: drupal-directory-${APP_NAME}
-                mountPath: /drupal-data
-            image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/drush:drupal-${DRUPAL_VERSION}
+# - kind: Job
+#   apiVersion: batch/v1
+#   metadata:
+#     name: drupal-site-install-job-${APP_NAME}
+#   spec:
+#     template:
+#       metadata:
+#         creationTimestamp: null
+#       spec:
+#         restartPolicy: Never
+#         volumes:
+#           - name: drupal-directory-${APP_NAME}
+#             persistentVolumeClaim:
+#               claimName: drupal-pv-claim-${APP_NAME}
+#         containers:
+#           - name: drush
+#             env:  
+#               - name: DRUPAL_SHARED_VOLUME
+#                 value: /drupal-data
+#               - name: DB_HOST
+#                 value: drupal-mysql-${APP_NAME}
+#               - name: DB_PORT
+#                 value: '3306'
+#               - name: DB_NAME
+#                 value: drupal
+#               - name: DB_USER
+#                 value: root
+#               - name: DB_PASSWORD
+#                 valueFrom:
+#                   secretKeyRef:
+#                     name: mysql-pass-${APP_NAME}
+#                     key: password
+#             imagePullPolicy: Always
+#             volumeMounts:
+#               - name: drupal-directory-${APP_NAME}
+#                 mountPath: /drupal-data
+#             image: gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/drush:drupal-${DRUPAL_VERSION}
             
 - apiVersion: v1
   kind: PersistentVolumeClaim
@@ -276,9 +533,9 @@ parameters:
 - description: Drupal application name
   from: '[A-Z0-9]{8}'
   name: APP_NAME
-- description: Drupal version
-  from: '[0-9]{1}'
-  name: DRUPAL_VERSION
+# - description: Drupal version
+#   from: '[0-9]{1}'
+#   name: DRUPAL_VERSION
 - description: Cluster name
   from: '[0-9]{1}'
   name: CLUSTER_NAME

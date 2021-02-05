@@ -22,6 +22,8 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "github.com/openshift/api/apps/v1"
+	buildv1 "github.com/openshift/api/build/v1"
+	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
@@ -105,7 +107,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Create route
 
 	// Ensure all primary resources
-	if transientErr := r.ensurePreInstallResources(drupalSite); transientErr != nil {
+	if transientErr := r.ensureResources(drupalSite, log); transientErr != nil {
 		setNotReady(drupalSite, transientErr)
 		return handleTransientErr(transientErr, "%v while creating the resources")
 	}
@@ -130,7 +132,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// If the installed status and ready status is true, create the route
 	if drupalSite.ConditionTrue("Installed") && drupalSite.ConditionTrue("Ready") {
-		if transientErr := r.ensureDependentResources(drupalSite); transientErr != nil {
+		if transientErr := r.ensureIngressResources(drupalSite, log); transientErr != nil {
 			return handleTransientErr(transientErr, "%v while creating route")
 		}
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
@@ -143,6 +145,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
+		Owns(&buildv1.BuildConfig{}).
+		Owns(&imagev1.ImageStream{}).
 		Owns(&appsv1.DeploymentConfig{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.PersistentVolumeClaim{}).

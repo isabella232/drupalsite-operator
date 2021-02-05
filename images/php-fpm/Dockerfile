@@ -1,7 +1,5 @@
-ARG SITE_BUILDER_VERSION
 ARG PHP_BASE_VERSION
 
-FROM gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/site-builder:${SITE_BUILDER_VERSION} as builder
 FROM gitlab-registry.cern.ch/drupal/paas/drupalsite-operator/php-base:${PHP_BASE_VERSION}
 
 LABEL io.k8s.description="Drupal managed infra php-fpm" \
@@ -15,14 +13,14 @@ ENV DRUPAL_APP_DIR /app
 # ENV DRUPAL_CODE_DIR /code
 ENV DRUPAL_SHARED_VOLUME /drupal-data
 
-COPY --from=builder ${DRUPAL_APP_DIR} ${DRUPAL_APP_DIR}
-COPY --from=builder /fix-permissions /fix-permissions
+COPY ./drupal-files/app ${DRUPAL_APP_DIR}
+# COPY --from=builder /fix-permissions /fix-permissions
 # COPY --from=builder /init-app.sh /init-app.sh
 
 WORKDIR ${DRUPAL_APP_DIR}
 # Fix permissions on target folder to copy there drupal code.
-RUN /fix-permissions ${DRUPAL_APP_DIR}
-
+# RUN /fix-permissions ${DRUPAL_APP_DIR}
+RUN ls
 # Add extra configurations
 # At this point, composer has created the required settings.php through post-update-cmd: DrupalProject\composer\ScriptHandler::createRequiredFiles
 # Overwrite settings.php with ours.

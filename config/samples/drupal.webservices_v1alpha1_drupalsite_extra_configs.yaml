@@ -1,0 +1,10 @@
+apiVersion: drupal.webservices.cern.ch/v1alpha1
+kind: DrupalSite
+metadata:
+  name: drupalsite-advanced
+spec:
+  publish: false
+  drupalVersion: "9.0.7"
+  environment:
+    name: "dev"
+    extraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d9-containers-buildconfig.git"
