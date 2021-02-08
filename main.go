@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -74,6 +75,8 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	initEnv()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -111,4 +114,28 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func initEnv() {
+	// <git_url>@<git_ref>
+	// Drupal runtime repo containing the dockerfiles and other config data
+	// to build the runtime images. After '@' a git ref can be specified (default: "master").
+	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@s2i"
+	runtimeRepo := strings.Split(getenvOrDie("RUNTIME_REPO"), "@")
+	controllers.ImageRecipesRepo = runtimeRepo[0]
+	if len(runtimeRepo) > 1 {
+		controllers.ImageRecipesRepoRef = runtimeRepo[1]
+	} else {
+		controllers.ImageRecipesRepoRef = "master"
+	}
+	controllers.ClusterName = getenvOrDie("CLUSTER_NAME")
+}
+
+func getenvOrDie(name string) string {
+	e := os.Getenv(name)
+	if e == "" {
+		setupLog.Info(name + ": missing environment variable (unset or empty string)")
+		os.Exit(1)
+	}
+	return e
 }
