@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -955,7 +954,7 @@ func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 			Namespace: d.Namespace,
 		},
 		Spec: routev1.RouteSpec{
-			Host: env + d.Name + "." + os.Getenv("CLUSTER_NAME") + ".cern.ch",
+			Host: env + d.Name + "." + ClusterName + ".cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   "drupal-nginx",
