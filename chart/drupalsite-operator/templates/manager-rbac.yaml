@@ -9,25 +9,26 @@ rules:
   resources:
   - deploymentconfigs
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+  - '*'
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - '*'
+- apiGroups:
+  - build.openshift.io
+  resources:
+  - buildconfig
+  verbs:
+  - '*'
 - apiGroups:
   - ""
   resources:
   - persistentvolumeclaims
+  - services
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+  - '*'
 - apiGroups:
   - ""
   resources:
@@ -56,17 +57,17 @@ rules:
   - patch
   - update
 - apiGroups:
+  - image.openshift.io
+  resources:
+  - imagestream
+  verbs:
+  - '*'
+- apiGroups:
   - route.openshift.io
   resources:
   - routes
   verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
+  - '*'
 ---
 apiVersion: v1
 kind: ServiceAccount
