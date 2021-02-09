@@ -1,0 +1,55 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: drupalsite-operator-controller-manager
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: drupalsite-operator
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      containers:
+      - args:
+        - --leader-elect
+        command:
+        - /manager
+        image: {{ .Values.image | quote }}
+        imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
+        env:
+        - name: RUNTIME_REPO
+          value: {{ .Values.drupalsiteOperator.drupalRuntimeRepo }}
+        - name: CLUSTER_NAME
+          value: {{ .Values.clusterName }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+				{{- if .Values.resources }}
+				resources: {{- toYaml .Values.resources | nindent 12 }}
+				{{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+      securityContext:
+        runAsUser: 65532
+      terminationGracePeriodSeconds: 10

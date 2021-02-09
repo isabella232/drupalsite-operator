@@ -44,8 +44,9 @@ spec:
                 description: Environment defines the drupal site environments
                 properties:
                   extraConfigRepo:
-                    description: ExtraConfigRepo passes on the git url with advanced
-                      configuration to the DrupalSite S2I functionality
+                    description: 'ExtraConfigRepo passes on the git url with advanced
+                      configuration to the DrupalSite S2I functionality TODO: support
+                      branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
                   imageOverride:

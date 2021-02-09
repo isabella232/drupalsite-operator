@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -49,12 +48,15 @@ const (
 )
 
 var (
-	// imageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
+	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
 	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
-	imageRecipesRepo string = os.Getenv("RUNTIME_REPO")
-	// imageRecipesRepoRef refers to the branch of the drupal runtime repo which contains the dockerfiles and other config data to build the images
+	ImageRecipesRepo string
+	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
+	// and other config data to build the images
 	// Example: "s2i"
-	imageRecipesRepoRef string = os.Getenv("RUNTIME_REPO_REF")
+	ImageRecipesRepoRef string
+	// ClusterName is used in the Route's Host field
+	ClusterName string
 )
 
 //validateSpec validates the spec against the DrupalSiteSpec definition
@@ -355,8 +357,8 @@ func buildConfigForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *buildv1.BuildCo
 				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 				Source: buildv1.BuildSource{
 					Git: &buildv1.GitBuildSource{
-						Ref: imageRecipesRepoRef,
-						URI: imageRecipesRepo,
+						Ref: ImageRecipesRepoRef,
+						URI: ImageRecipesRepo,
 					},
 					ContextDir: "images/php-fpm",
 					Images: []buildv1.ImageSource{
@@ -435,8 +437,8 @@ func buildConfigForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *buildv1.Build
 				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 				Source: buildv1.BuildSource{
 					Git: &buildv1.GitBuildSource{
-						Ref: imageRecipesRepoRef,
-						URI: imageRecipesRepo,
+						Ref: ImageRecipesRepoRef,
+						URI: ImageRecipesRepo,
 					},
 					ContextDir: "images/nginx",
 					Images: []buildv1.ImageSource{
@@ -514,8 +516,8 @@ func buildConfigForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *buildv1.Build
 				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 				Source: buildv1.BuildSource{
 					Git: &buildv1.GitBuildSource{
-						Ref: imageRecipesRepoRef,
-						URI: imageRecipesRepo,
+						Ref: ImageRecipesRepoRef,
+						URI: ImageRecipesRepo,
 					},
 					ContextDir: "images/drush",
 					Images: []buildv1.ImageSource{
@@ -952,7 +954,7 @@ func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 			Namespace: d.Namespace,
 		},
 		Spec: routev1.RouteSpec{
-			Host: env + d.Name + "." + os.Getenv("CLUSTER_NAME") + ".cern.ch",
+			Host: env + d.Name + "." + ClusterName + ".cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   "drupal-nginx",

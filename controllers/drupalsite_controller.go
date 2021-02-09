@@ -47,10 +47,27 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 
-// +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=*
+// +kubebuilder:rbac:groups=build.openshift.io,resources=buildconfig,verbs=*
+// +kubebuilder:rbac:groups=image.openshift.io,resources=imagestream,verbs=*
+// +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=*
+// +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims;services,verbs=*
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=*
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
-// +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
+
+// SetupWithManager adds a manager which watches the resources
+func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&webservicesv1a1.DrupalSite{}).
+		Owns(&appsv1.DeploymentConfig{}).
+		Owns(&buildv1.BuildConfig{}).
+		Owns(&imagev1.ImageStream{}).
+		Owns(&routev1.Route{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
+		Owns(&corev1.Service{}).
+		Owns(&batchv1.Job{}).
+		Complete(r)
+}
 
 func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
@@ -139,20 +156,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// SetupWithManager adds a manager which watches the resources
-func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&webservicesv1a1.DrupalSite{}).
-		Owns(&buildv1.BuildConfig{}).
-		Owns(&imagev1.ImageStream{}).
-		Owns(&appsv1.DeploymentConfig{}).
-		Owns(&corev1.Service{}).
-		Owns(&corev1.PersistentVolumeClaim{}).
-		Owns(&routev1.Route{}).
-		Owns(&batchv1.Job{}).
-		Complete(r)
 }
 
 // Add watches for other resources controller.Watch check API Use filters with labels to pick up the resource
