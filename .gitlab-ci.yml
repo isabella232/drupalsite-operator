@@ -1,0 +1,17 @@
+include:
+  - project: 'paas-tools/infrastructure-ci'
+    file: 'docker-images-ci-templates/DockerImages.gitlab-ci.yml'
+
+stages:
+  - build
+  - go_test
+
+variables:
+  CLUSTER_NAME: drupalsite-operator-ci
+  RUNTIME_REPO: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+
+GoTest:
+  stage: go_test
+  image: golang:1.15
+  script:
+    - go test -v -mod=vendor ./...
