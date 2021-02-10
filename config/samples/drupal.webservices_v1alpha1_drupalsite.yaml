@@ -4,6 +4,6 @@ metadata:
   name: drupalsite-sample
 spec:
   publish: false
-  drupalVersion: "9.0.7"
+  drupalVersion: "8.9.13"
   environment:
     name: "dev"

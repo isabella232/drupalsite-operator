@@ -4,7 +4,7 @@ metadata:
   name: drupalsite-advanced
 spec:
   publish: false
-  drupalVersion: "9.0.7"
+  drupalVersion: "8.9.13"
   environment:
     name: "dev"
-    extraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d9-containers-buildconfig.git"
+    extraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
