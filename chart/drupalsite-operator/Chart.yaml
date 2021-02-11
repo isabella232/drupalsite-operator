@@ -3,7 +3,7 @@ name: drupalsite-operator
 description: >-
   Kubernetes operator that controls the main API of the Drupal service: the DrupalSite CRD.
 version: 0.1.0
-icon: https://www.scottbrady91.com/img/logos/openid-icon.png
+icon: https://www.drupal.org/files/druplicon-small.png
 keywords:
 - drupal
 - drupalsite
