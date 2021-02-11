@@ -102,8 +102,11 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		update = true
 	}
 	update, specErr := assignRouterShard(drp)
-	if specErr != nil {
+	switch {
+	case specErr != nil:
 		log.Info(specErr.Error())
+	case update:
+		log.Info(fmt.Sprintf("Assigned router shard %v to a drupal site", drp.Spec.AssignedRouterShard))
 	}
 	return
 }
@@ -116,7 +119,6 @@ func assignRouterShard(drp *webservicesv1a1.DrupalSite) (update bool, err reconc
 		return false, newApplicationError(errors.New("specify a valid list of available router shards with the --assignable-router-shard flag"), ErrInvalidSpec)
 	}
 	drp.Spec.AssignedRouterShard = randomStrElement(RouterShards)
-	log.Info(fmt.Sprintf("Assigned router shard %v to a drupal site", drp.Spec.AssignedRouterShard))
 	return true, nil
 }
 
