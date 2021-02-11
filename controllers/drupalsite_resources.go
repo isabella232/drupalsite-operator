@@ -128,7 +128,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_mysql", log); transientErr != nil {
 		return transientErr.Wrap("%v: for Mysql SVC")
 	}
-
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_mysql", log); transientErr != nil {
+		return transientErr.Wrap("%v: for MySQL CM")
+	}
 	// 3. Serving layer
 
 	if transientErr := r.ensureResourceX(ctx, drp, "fpm_cm", log); transientErr != nil {
@@ -479,15 +481,33 @@ func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.D
 								},
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "mysql-persistent-storage",
-							MountPath: "/var/lib/mysql",
-						}},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "mysql-persistent-storage",
+								MountPath: "/var/lib/mysql",
+							},
+							{
+								Name:      "config-volume",
+								MountPath: "/etc/mysql/conf.d/mysql-config.cnf",
+								SubPath:   "mysql-config.cnf",
+							}},
 					}},
-					Volumes: []corev1.Volume{{
-						Name:         "mysql-persistent-storage",
-						VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-					}},
+					Volumes: []corev1.Volume{
+						{
+							Name:         "mysql-persistent-storage",
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+						},
+						{
+							Name: "config-volume",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "mysql-cm-" + d.Name,
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -582,13 +602,14 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 									SubPath:   "www.conf",
 								}},
 						}},
-					Volumes: []corev1.Volume{{
-						Name: "drupal-directory-" + d.Name,
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: "drupal-pv-claim-" + d.Name,
-							},
-						}},
+					Volumes: []corev1.Volume{
+						{
+							Name: "drupal-directory-" + d.Name,
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "drupal-pv-claim-" + d.Name,
+								},
+							}},
 						{
 							Name: "config-volume",
 							VolumeSource: corev1.VolumeSource{
@@ -736,7 +757,7 @@ func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 			Host: env + d.Name + "." + ClusterName + ".cern.ch",
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
-				Name:   "drupal-nginx",
+				Name:   serviceForDrupalSite(d).Name,
 				Weight: pointer.Int32Ptr(100),
 			},
 			Port: &routev1.RoutePort{
@@ -829,7 +850,7 @@ func jobForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *batchv1.Job {
 	return job
 }
 
-// configMapForPHPFPM returns a job object thats runs drush
+// configMapForPHPFPM returns a configMaps object to configure PHP
 func configMapForPHPFPM(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
@@ -847,6 +868,33 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.
 		},
 		Data: map[string]string{
 			"www.conf": string(content),
+		},
+	}
+	// Set DrupalSite instance as the owner and controller
+	// ctrl.SetControllerReference(d, dep, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(cm, asOwner(d))
+	return cm
+}
+
+// configMapForMySQL returns a configmap object to configure MySQL
+func configMapForMySQL(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "mysql"
+
+	content, err := ioutil.ReadFile("config/mysql-config.cnf")
+	if err != nil {
+		log.Error(err, fmt.Sprintf("read failed"))
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mysql-cm-" + d.Name,
+			Namespace: d.Namespace,
+		},
+		Data: map[string]string{
+			"mysql-config.cnf": string(content),
 		},
 	}
 	// Set DrupalSite instance as the owner and controller
@@ -889,6 +937,7 @@ func createResource(ctx context.Context, res client.Object, name string, namespa
 ensureResourceX ensure the requested resource is created, with the following valid values
 	- dc_mysql: DeploymentConfig for MySQL
 	- svc_mysql: Service for MySQL
+	- cm_mysql: Configmap for MySQL
 	- pvc: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush site-install
 	- is_base: ImageStream for sitebuilder-base
@@ -946,6 +995,12 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		return createResource(ctx, res, res.Name, res.Namespace, r, log)
 	case "fpm_cm":
 		res := configMapForPHPFPM(d, log)
+		if res == nil {
+			return newApplicationError(nil, ErrFunctionDomain)
+		}
+		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+	case "cm_mysql":
+		res := configMapForMySQL(d, log)
 		if res == nil {
 			return newApplicationError(nil, ErrFunctionDomain)
 		}
