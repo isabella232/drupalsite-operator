@@ -761,17 +761,17 @@ func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
 
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
-	// ls := labelsForDrupalSite(d.Name)
-	var env string
-	if d.Spec.Environment.Name == productionEnvironment {
-		env = ""
-	} else {
+	labels := labelsForDrupalSite(d.Name)
+	labels[routerShardLabel] = d.Spec.AssignedRouterShard
+	env := ""
+	if d.Spec.Environment.Name != productionEnvironment {
 		env = d.Spec.Environment.Name + "."
 	}
 	route := &routev1.Route{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "drupal" + d.Name,
 			Namespace: d.Namespace,
+			Labels:    labels,
 		},
 		Spec: routev1.RouteSpec{
 			Host: env + d.Name + "." + ClusterName + ".cern.ch",
