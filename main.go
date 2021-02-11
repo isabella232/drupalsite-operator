@@ -71,11 +71,10 @@ func main() {
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
+	initEnv()
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	initEnv()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -129,6 +128,7 @@ func initEnv() {
 		controllers.ImageRecipesRepoRef = "master"
 	}
 	controllers.ClusterName = getenvOrDie("CLUSTER_NAME")
+	flag.Var(&controllers.RouterShards, "assignable-router-shard", "List of available router shards")
 }
 
 func getenvOrDie(name string) string {

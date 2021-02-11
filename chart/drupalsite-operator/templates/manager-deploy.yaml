@@ -23,6 +23,9 @@ spec:
       containers:
       - args:
         - --leader-elect
+        {{- range .Values.assignableRouterShards }}
+        - --assignable-router-shard={{ . }}
+        {{- end }}
         command:
         - /manager
         image: {{ .Values.image | quote }}

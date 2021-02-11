@@ -93,8 +93,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	//Handle deletion
 	if drupalSite.GetDeletionTimestamp() != nil {
-		// drupalSite.Status.Phase = "Deleted"
-		// r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		return r.cleanupDrupalSite(ctx, log, drupalSite)
 	}
 
@@ -110,7 +108,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
-	if update := ensureSpecFinalizer(drupalSite); update {
+	if update := ensureSpecFinalizer(drupalSite, log); update {
 		log.Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}

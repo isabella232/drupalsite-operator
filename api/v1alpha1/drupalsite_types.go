@@ -36,6 +36,13 @@ type DrupalSiteSpec struct {
 	// Environment defines the drupal site environments
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
+
+	// We must set MaxLength to 63 characters as this value is stored in Kubernetes labels and there is limited
+	// length as mentioned in
+	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+	// +kubebuilder:validation:MaxLength=63
+	// +optional
+	AssignedRouterShard string `json:"assignedRouterShard,omitempty"`
 }
 
 // Environment defines the environment field in DrupalSite
@@ -47,8 +54,10 @@ type Environment struct {
 	// ExtraConfigRepo passes on the git url with advanced configuration to the DrupalSite S2I functionality
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
+	// +optional
 	ExtraConfigRepo string `json:"extraConfigRepo,omitempty"`
 	// ImageOverride overrides the image urls in the DrupalSite deployment for the fields that are set
+	// +optional
 	ImageOverride `json:"imageOverride,omitempty"`
 }
 
@@ -58,19 +67,16 @@ type Environment struct {
 type ImageOverride struct {
 	// Sitebuilder overrides the Sitebuilder image url in the DrupalSite deployment
 	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
+	// +optional
 	Sitebuilder string `json:"siteBuilder,omitempty"`
-
 	// Note: Overrides for the nginx and php images might be added if needed
 }
 
 // DrupalSiteStatus defines the observed state of DrupalSite
 type DrupalSiteStatus struct {
-	// Phase aggregates the information from all the conditions and reports on the lifecycle phase of the resource
-	// Enum: {Creating,Created,Deleted}
-	Phase string `json:"phase,omitempty"`
-
 	// Conditions specifies different conditions based on the DrupalSite status
 	// +kubebuilder:validation:type=array
+	// +optional
 	Conditions status.Conditions `json:"conditions,omitempty"`
 }
 
