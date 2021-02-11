@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"strings"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -57,7 +58,20 @@ var (
 	ImageRecipesRepoRef string
 	// ClusterName is used in the Route's Host field
 	ClusterName string
+	// RouterShards is the list of all router shards available in the cluster - passed as a flag to the operator
+	RouterShards strFlagList
 )
+
+type strFlagList []string
+
+func (i *strFlagList) String() string {
+	return strings.Join(*i, ",")
+}
+
+func (i *strFlagList) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
 
 //validateSpec validates the spec against the DrupalSiteSpec definition
 func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
