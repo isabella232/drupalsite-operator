@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -97,8 +98,9 @@ func contains(a []string, x string) bool {
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
 func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
-	if !contains(drp.GetFinalizers(), finalizerStr) {
-		drp.SetFinalizers(append(drp.GetFinalizers(), finalizerStr))
+	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
+		log.Info("Adding finalizer")
+		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
 	}
 	update, specErr := assignRouterShard(drp)

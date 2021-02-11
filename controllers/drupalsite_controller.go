@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -93,7 +94,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	//Handle deletion
 	if drupalSite.GetDeletionTimestamp() != nil {
-		return r.cleanupDrupalSite(ctx, log, drupalSite)
+		if controllerutil.ContainsFinalizer(drupalSite, finalizerStr) {
+			return r.cleanupDrupalSite(ctx, log, drupalSite)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	handleTransientErr := func(transientErr reconcileError, logstrFmt string) (reconcile.Result, error) {
@@ -156,18 +160,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-// Add watches for other resources controller.Watch check API Use filters with labels to pick up the resource
-// Structure
-// Fetch the CR
-// Add clean up and delete https://gitlab.cern.ch:8443/paas-tools/operators/authz-operator/blob/24717af14e0792a416168eaea99dd4bbd9b83b9b/pkg/controller/applicationregistration/applicationregistration_controller.go#L117-118
-// Actions on initialization
-// Actions on maintaining https://gitlab.cern.ch:8443/paas-tools/operators/authz-operator/blob/24717af14e0792a416168eaea99dd4bbd9b83b9b/pkg/controller/applicationregistration/applicationregistration_controller.go#L152
-
-// Status - creation complete
-// Transient Error Reconcile Error
-
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
-func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, app *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
+func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	// finalizer: dependentResources
 	// 1. check if such resources exist
 	//   - delete them
@@ -175,15 +169,8 @@ func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.L
 	// 1. if not, delete the finalizer key manually and let Kubernetes delete the resource cleanly
 	// TODO
 	log.Info("Deleting DrupalSite")
-	remainingFinalizers := app.GetFinalizers()
-	for i, finalizer := range remainingFinalizers {
-		if finalizer == finalizerStr {
-			remainingFinalizers = append(remainingFinalizers[:i], remainingFinalizers[i+1:]...)
-			break
-		}
-	}
-	app.SetFinalizers(remainingFinalizers)
-	return r.updateCRorFailReconcile(ctx, log, app)
+	controllerutil.RemoveFinalizer(drp, finalizerStr)
+	return r.updateCRorFailReconcile(ctx, log, drp)
 }
 
 func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
