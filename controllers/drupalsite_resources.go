@@ -174,8 +174,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	}
 	// 3. Serving layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "fpm_cm", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
 		return transientErr.Wrap("%v: for PHP-FPM CM")
+	}
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
+		return transientErr.Wrap("%v: for Nginx CM")
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "dc_drupal", log); transientErr != nil {
 		return transientErr.Wrap("%v: for Drupal DC")
@@ -603,10 +606,21 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 								},
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "drupal-directory-" + d.Name,
-							MountPath: "/drupal-data",
-						}},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "drupal-directory-" + d.Name,
+								MountPath: "/drupal-data",
+							},
+							{
+								Name:      "nginx-config-volume",
+								MountPath: "/etc/nginx/conf.d/default.conf",
+								SubPath:   "default.conf",
+							},
+							{
+								Name:      "empty-dir",
+								MountPath: "/var/run/",
+							},
+						},
 					},
 						{
 							Image:           imageStreamForDrupalSitePHP(d).Name + ":" + d.Spec.DrupalVersion,
@@ -638,10 +652,15 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 									MountPath: "/drupal-data",
 								},
 								{
-									Name:      "config-volume",
-									MountPath: "/usr/local/etc/php-fpm.d/www.conf",
-									SubPath:   "www.conf",
-								}},
+									Name:      "php-config-volume",
+									MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
+									SubPath:   "zz-docker.conf",
+								},
+								{
+									Name:      "empty-dir",
+									MountPath: "/var/run/",
+								},
+							},
 						}},
 					Volumes: []corev1.Volume{
 						{
@@ -652,7 +671,7 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 								},
 							}},
 						{
-							Name: "config-volume",
+							Name: "php-config-volume",
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
@@ -660,6 +679,20 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 									},
 								},
 							},
+						},
+						{
+							Name: "nginx-config-volume",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: "nginx-cm-" + d.Name,
+									},
+								},
+							},
+						},
+						{
+							Name:         "empty-dir",
+							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 						},
 					},
 				},
@@ -790,7 +823,7 @@ func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 	}
 	route := &routev1.Route{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal" + d.Name,
+			Name:      "drupal-" + d.Name,
 			Namespace: d.Namespace,
 			Labels:    labels,
 		},
@@ -908,7 +941,34 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.
 			Namespace: d.Namespace,
 		},
 		Data: map[string]string{
-			"www.conf": string(content),
+			"zz-docker.conf": string(content),
+		},
+	}
+	// Set DrupalSite instance as the owner and controller
+	// ctrl.SetControllerReference(d, dep, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(cm, asOwner(d))
+	return cm
+}
+
+// configMapForNginx returns a job object thats runs drush
+func configMapForNginx(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "nginx"
+
+	content, err := ioutil.ReadFile("config/default.conf")
+	if err != nil {
+		log.Error(err, fmt.Sprintf("read failed"))
+		return nil
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-cm-" + d.Name,
+			Namespace: d.Namespace,
+		},
+		Data: map[string]string{
+			"default.conf": string(content),
 		},
 	}
 	// Set DrupalSite instance as the owner and controller
@@ -990,7 +1050,8 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- bc_nginx: BuildConfig for Nginx
 	- dc_drupal: DeploymentConfig for Nginx & PHP-FPM
 	- svc_nginx: Service for Nginx
-	- fpm_cm: ConfigMap for PHP-FPM
+	- cm_php: ConfigMap for PHP-FPM
+	- cm_nginx: ConfigMap for Nginx
 	- route: Route for the drupalsite
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
@@ -1034,7 +1095,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "site_install_job":
 		res := jobForDrupalSiteDrush(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r, log)
-	case "fpm_cm":
+	case "cm_php":
 		res := configMapForPHPFPM(d, log)
 		if res == nil {
 			return newApplicationError(nil, ErrFunctionDomain)
@@ -1045,6 +1106,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if res == nil {
 			return newApplicationError(nil, ErrFunctionDomain)
 		}
+		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+	case "cm_nginx":
+		res := configMapForNginx(d, log)
 		return createResource(ctx, res, res.Name, res.Namespace, r, log)
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
