@@ -18,9 +18,12 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -31,7 +34,6 @@ import (
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +48,7 @@ const (
 	// finalizerStr string that is going to added to every DrupalSite created
 	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
 	productionEnvironment = "production"
+	routerShardLabel      = "drupal.cern.ch/router-shard"
 )
 
 var (
@@ -93,12 +96,34 @@ func contains(a []string, x string) bool {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite) (update bool) {
+func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
 	if !contains(drp.GetFinalizers(), finalizerStr) {
 		drp.SetFinalizers(append(drp.GetFinalizers(), finalizerStr))
 		update = true
 	}
+	update, specErr := assignRouterShard(drp)
+	if specErr != nil {
+		log.Info(specErr.Error())
+	}
 	return
+}
+
+func assignRouterShard(drp *webservicesv1a1.DrupalSite) (update bool, err reconcileError) {
+	if drp.Spec.AssignedRouterShard != "" {
+		return false, nil
+	}
+	if len(RouterShards) == 0 {
+		return false, newApplicationError(errors.New("specify a valid list of available router shards with the --assignable-router-shard flag"), ErrInvalidSpec)
+	}
+	drp.Spec.AssignedRouterShard = randomStrElement(RouterShards)
+	log.Info(fmt.Sprintf("Assigned router shard %v to a drupal site", drp.Spec.AssignedRouterShard))
+	return true, nil
+}
+
+// randomStrElement returns a random element from the array. Panic if len(list) == 0
+func randomStrElement(list []string) string {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	return list[r.Intn(len(list))]
 }
 
 /*
@@ -880,7 +905,7 @@ func createResource(ctx context.Context, res client.Object, name string, namespa
 		return r.Create(ctx, res)
 	}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, res)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		log.Info("Creating Resource", "Resource.Namespace", namespace, "Resource.Name", name)
 		err := r.Create(ctx, res)
 		if err != nil {
