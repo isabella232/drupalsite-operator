@@ -49,6 +49,10 @@ spec:
               environment:
                 description: Environment defines the drupal site environments
                 properties:
+                  dbodClass:
+                    description: DBODClass requests a specific kind of DBOD resources
+                      for the website. If omitted, it is derived from QoSClass.
+                    type: string
                   extraConfigRepo:
                     description: 'ExtraConfigRepo passes on the git url with advanced
                       configuration to the DrupalSite S2I functionality TODO: support
@@ -69,6 +73,10 @@ spec:
                     description: Name specifies the environment name for the DrupalSite.
                       The name will be used for resource lables and route name
                     pattern: '[a-z0-9]([-a-z0-9]*[a-z0-9])?'
+                    type: string
+                  qosClass:
+                    description: QoSClass specifies the website's performance and
+                      availability requirements
                     type: string
                 required:
                 - name

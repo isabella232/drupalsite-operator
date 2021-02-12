@@ -22,6 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	QoSStandard  QoSClass  = "standard"
+	DBODStandard DBODClass = "standard"
+	DBODSSD      DBODClass = "ssd"
+)
+
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
 	// Publish defines if the site has to be published or not
@@ -59,7 +65,19 @@ type Environment struct {
 	// ImageOverride overrides the image urls in the DrupalSite deployment for the fields that are set
 	// +optional
 	ImageOverride `json:"imageOverride,omitempty"`
+	// QoSClass specifies the website's performance and availability requirements
+	// +optional
+	QoSClass `json:"qosClass,omitempty"`
+	// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
+	// +optional
+	DBODClass `json:"dbodClass,omitempty"`
 }
+
+// QoSClass specifies the website's performance and availability requirements
+type QoSClass string
+
+// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
+type DBODClass string
 
 // ImageOverride lets the website admin bypass the operator's buildconfigs and inject custom images.
 // Envisioned primarily for the sitebuilder, this could allow an advanced developer to deploy their own
