@@ -48,9 +48,9 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-				{{- if .Values.resources }}
-				resources: {{- toYaml .Values.resources | nindent 12 }}
-				{{- end }}
+        {{- if .Values.resources }}
+        resources: {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
       securityContext:
