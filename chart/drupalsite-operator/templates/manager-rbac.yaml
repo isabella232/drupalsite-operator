@@ -85,3 +85,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: drupalsite-operator
+  namespace: {{ .Release.Namespace }}
