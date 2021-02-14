@@ -23,7 +23,7 @@ spec:
       containers:
       - args:
         - --leader-elect
-        {{- range .Values.assignableRouterShards }}
+        {{- range .Values.drupalsiteOperator.assignableRouterShards }}
         - --assignable-router-shard={{ . }}
         {{- end }}
         command:
