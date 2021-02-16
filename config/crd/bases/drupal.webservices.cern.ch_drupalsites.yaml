@@ -77,6 +77,10 @@ spec:
                   qosClass:
                     description: QoSClass specifies the website's performance and
                       availability requirements
+                    enum:
+                    - critical
+                    - eco
+                    - standard
                     type: string
                 required:
                 - name

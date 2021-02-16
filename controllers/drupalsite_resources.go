@@ -931,9 +931,11 @@ func configMapForPHPFPM(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
 
-	content, err := ioutil.ReadFile("config/www.conf")
+	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/php-fpm.conf"
+
+	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("read failed"))
+		log.Error(err, fmt.Sprintf("reading PHP-FPM configuration failed"))
 		return nil
 	}
 
@@ -958,9 +960,11 @@ func configMapForNginx(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.C
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
 
-	content, err := ioutil.ReadFile("config/default.conf")
+	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx-default.conf"
+
+	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("read failed"))
+		log.Error(err, fmt.Sprintf("reading Nginx configuration failed"))
 		return nil
 	}
 
@@ -985,9 +989,11 @@ func configMapForMySQL(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.C
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
 
-	content, err := ioutil.ReadFile("config/mysql-config.cnf")
+	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/mysql-config.cnf"
+
+	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("read failed"))
+		log.Error(err, fmt.Sprintf("reading MySQL configuration failed"))
 		return nil
 	}
 

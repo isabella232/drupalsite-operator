@@ -19,7 +19,7 @@ rules:
 - apiGroups:
   - build.openshift.io
   resources:
-  - buildconfig
+  - buildconfigs
   verbs:
   - '*'
 - apiGroups:
@@ -27,6 +27,7 @@ rules:
   resources:
   - persistentvolumeclaims
   - services
+  - configmaps
   verbs:
   - '*'
 - apiGroups:
@@ -59,7 +60,7 @@ rules:
 - apiGroups:
   - image.openshift.io
   resources:
-  - imagestream
+  - imagestreams
   verbs:
   - '*'
 - apiGroups:

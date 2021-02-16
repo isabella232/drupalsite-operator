@@ -66,7 +66,8 @@ type Environment struct {
 	// +optional
 	ImageOverride `json:"imageOverride,omitempty"`
 	// QoSClass specifies the website's performance and availability requirements
-	// +optional
+	// +kubebuilder:validation:Enum:=critical;eco;standard
+	// +kubebuilder:validation:Required
 	QoSClass `json:"qosClass,omitempty"`
 	// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
 	// +optional
