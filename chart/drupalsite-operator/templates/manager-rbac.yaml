@@ -67,6 +67,8 @@ rules:
   - route.openshift.io
   resources:
   - routes
+  - routes/custom-host
+  - routes/finalizers
   verbs:
   - '*'
 ---
