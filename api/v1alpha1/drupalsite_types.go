@@ -68,7 +68,7 @@ type Environment struct {
 	// QoSClass specifies the website's performance and availability requirements
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:validation:Required
-	QoSClass `json:"qosClass,omitempty"`
+	QoSClass `json:"qosClass"`
 	// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
 	// +optional
 	DBODClass `json:"dbodClass,omitempty"`

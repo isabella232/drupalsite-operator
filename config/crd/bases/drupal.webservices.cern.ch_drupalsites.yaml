@@ -84,6 +84,7 @@ spec:
                     type: string
                 required:
                 - name
+                - qosClass
                 type: object
               publish:
                 description: Publish defines if the site has to be published or not
