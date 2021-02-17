@@ -749,7 +749,7 @@ func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.P
 			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("5Gi"),
+					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("10Gi"),
 				},
 			},
 		},
