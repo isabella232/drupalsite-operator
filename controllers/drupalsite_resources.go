@@ -818,7 +818,8 @@ func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 	labels := labelsForDrupalSite(d.Name)
-	labels[routerShardLabel] = d.Spec.AssignedRouterShard
+  // NOTE: we temporarily remove route labels due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/42
+	//labels[routerShardLabel] = d.Spec.AssignedRouterShard
 	env := ""
 	if d.Spec.Environment.Name != productionEnvironment {
 		env = d.Spec.Environment.Name + "."
