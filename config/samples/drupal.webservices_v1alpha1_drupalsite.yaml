@@ -7,3 +7,4 @@ spec:
   drupalVersion: "8.9.13"
   environment:
     name: "dev"
+    qosClass: "standard"
