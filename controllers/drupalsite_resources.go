@@ -162,8 +162,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 2. Data layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "pvc", log); transientErr != nil {
-		return transientErr.Wrap("%v: for PVC")
+	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
+		return transientErr.Wrap("%v: for Drupal PVC")
+	}
+	if transientErr := r.ensureResourceX(ctx, drp, "pvc_mysql", log); transientErr != nil {
+		return transientErr.Wrap("%v: for MySQL PVC")
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "dc_mysql", log); transientErr != nil {
 		return transientErr.Wrap("%v: for Mysql DC")
@@ -174,6 +177,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_mysql", log); transientErr != nil {
 		return transientErr.Wrap("%v: for MySQL CM")
 	}
+
 	// 3. Serving layer
 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
@@ -540,8 +544,12 @@ func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.D
 					}},
 					Volumes: []corev1.Volume{
 						{
-							Name:         "mysql-persistent-storage",
-							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+							Name: "mysql-persistent-storage",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "mysql-pv-claim-" + d.Name,
+								},
+							},
 						},
 						{
 							Name: "config-volume",
@@ -732,6 +740,35 @@ func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.Deploy
 	return dep
 }
 
+// persistentVolumeClaimForMySQL returns a PVC object
+func persistentVolumeClaimForMySQL(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
+	// ls := labelsForDrupalSite(d.Name)
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mysql-pv-claim-" + d.Name,
+			Namespace: d.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			// Selector: &metav1.LabelSelector{
+			// 	MatchLabels: ls,
+			// },
+			StorageClassName: pointer.StringPtr("cephfs-no-backup"),
+			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("5Gi"),
+				},
+			},
+		},
+	}
+	// Set DrupalSite instance as the owner and controller
+	// ctrl.SetControllerReference(d, pvc, r.Scheme)
+	// Add owner reference
+	addOwnerRefToObject(pvc, asOwner(d))
+	return pvc
+}
+
 // persistentVolumeClaimForDrupalSite returns a PVC object
 func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
 	// ls := labelsForDrupalSite(d.Name)
@@ -818,7 +855,7 @@ func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
 	labels := labelsForDrupalSite(d.Name)
-  // NOTE: we temporarily remove route labels due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/42
+	// NOTE: we temporarily remove route labels due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/42
 	//labels[routerShardLabel] = d.Spec.AssignedRouterShard
 	env := ""
 	if d.Spec.Environment.Name != productionEnvironment {
@@ -1048,7 +1085,8 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- dc_mysql: DeploymentConfig for MySQL
 	- svc_mysql: Service for MySQL
 	- cm_mysql: Configmap for MySQL
-	- pvc: PersistentVolume for the drupalsite
+	- pvc_mysql: PersistentVolume for the MySQL
+	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush site-install
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
@@ -1095,7 +1133,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "svc_nginx":
 		res := serviceForDrupalSite(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r, log)
-	case "pvc":
+	case "pvc_mysql":
+		res := persistentVolumeClaimForMySQL(d)
+		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+	case "pvc_drupal":
 		res := persistentVolumeClaimForDrupalSite(d)
 		return createResource(ctx, res, res.Name, res.Namespace, r, log)
 	case "route":
