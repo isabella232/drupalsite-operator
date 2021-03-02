@@ -39,6 +39,12 @@ rules:
   - get
   - list
 - apiGroups:
+  - dbod.cern
+  resources:
+  - dbodregistrations
+  verbs:
+  - '*'
+- apiGroups:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites

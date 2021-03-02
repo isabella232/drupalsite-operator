@@ -31,6 +31,7 @@ import (
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
+	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -60,6 +61,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims;services,verbs=*
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=*
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
+// +kubebuilder:rbac:groups=dbod.cern,resources=dbodregistrations,verbs=*
 
 func (r *DrupalSiteReconciler) initEnv() {
 	log := r.Log
@@ -97,6 +99,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&corev1.Service{}).
 		Owns(&batchv1.Job{}).
+		Owns(&dbodv1a1.DBODRegistration{}).
 		Complete(r)
 }
 
@@ -160,6 +163,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		transientErr := concat(transientErrs)
 		setNotReady(drupalSite, transientErr)
 		return handleTransientErr(transientErr, "%v while creating the resources")
+	}
+
+	// Check if DBOD has been provisioned
+	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
+		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// Check if the drupal site is ready to serve requests

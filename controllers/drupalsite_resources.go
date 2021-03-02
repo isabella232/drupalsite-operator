@@ -28,6 +28,8 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+
+	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -137,17 +139,8 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal PVC"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "pvc_mysql", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for MySQL PVC"))
-	}
-	if transientErr := r.ensureResourceX(ctx, drp, "deploy_mysql", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Mysql DC"))
-	}
-	if transientErr := r.ensureResourceX(ctx, drp, "svc_mysql", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Mysql SVC"))
-	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_mysql", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for MySQL CM"))
+	if transientErr := r.ensureResourceX(ctx, drp, "dbod_cr", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for DBOD resource"))
 	}
 
 	// 3. Serving layer
@@ -477,13 +470,11 @@ func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webser
 	return nil
 }
 
-// deploymentForDrupalSiteMySQL returns a Deployment object for MySQL
-func deploymentForDrupalSiteMySQL(currentobject *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+// dbodForDrupalSite returns a DBOD resource for the the Drupal Site
+func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
-			"mysql-configmap-version": "1",
-		}
+		currentobject.Status = dbodv1a1.DBODRegistrationStatus{}
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -493,80 +484,23 @@ func deploymentForDrupalSiteMySQL(currentobject *appsv1.Deployment, d *webservic
 		return nil
 	}
 	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "mysql"
+	ls["app"] = "dbod"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
-	currentobject.Spec.Selector = &metav1.LabelSelector{
-		MatchLabels: ls,
-	}
-	currentobject.Spec.Template.ObjectMeta.Labels = ls
-
-	currentobject.Spec.Template.Spec = corev1.PodSpec{
-		Containers: []corev1.Container{{
-			Image:           "mysql:5.7",
-			Name:            "mysql",
-			ImagePullPolicy: "IfNotPresent",
-			Ports: []corev1.ContainerPort{{
-				ContainerPort: 3306,
-				Name:          "mysql",
-				Protocol:      "TCP",
-			}},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "MYSQL_DATABASE",
-					Value: "drupal",
-				},
-				{
-					Name: "MYSQL_ROOT_PASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							Key: "DB_PASSWORD",
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "drupal-mysql-secret",
-							},
-						},
-					},
-				},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "mysql-persistent-storage",
-					MountPath: "/var/lib/mysql",
-				},
-				{
-					Name:      "config-volume",
-					MountPath: "/etc/mysql/conf.d/mysql-config.cnf",
-					SubPath:   "mysql-config.cnf",
-				}},
-		}},
-		Volumes: []corev1.Volume{
-			{
-				Name: "mysql-persistent-storage",
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "mysql-pv-claim-" + d.Name,
-					},
-				},
-			},
-			{
-				Name: "config-volume",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "mysql-cm-" + d.Name,
-						},
-					},
-				},
-			},
+	currentobject.Spec = dbodv1a1.DBODRegistrationSpec{
+		DbodClass: "test-dbodclass",
+		DbName:    "testdbodclass",
+		DbUser:    "testUser3",
+		RegistrationLabels: map[string]string{
+			"drupalSite": d.Name,
 		},
 	}
 	return nil
 }
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentForDrupalSite(currentobject *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Annotations = map[string]string{
@@ -615,7 +549,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, d *webservicesv1a
 				{
 					SecretRef: &corev1.SecretEnvSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "drupal-mysql-secret",
+							Name: dbodSecret,
 						},
 					},
 				},
@@ -655,7 +589,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, d *webservicesv1a
 					{
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "drupal-mysql-secret",
+								Name: dbodSecret,
 							},
 						},
 					},
@@ -709,38 +643,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, d *webservicesv1a
 				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 			},
 		},
-	}
-	return nil
-}
-
-// persistentVolumeClaimForMySQL returns a PVC object
-func persistentVolumeClaimForMySQL(currentobject *corev1.PersistentVolumeClaim, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec = corev1.PersistentVolumeClaimSpec{
-			// Selector: &metav1.LabelSelector{
-			// 	MatchLabels: ls,
-			// },
-			StorageClassName: pointer.StringPtr("cephfs-no-backup"),
-			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("5Gi"),
-				},
-			},
-		}
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "mysql"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
 	}
 	return nil
 }
@@ -804,33 +706,6 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 	return nil
 }
 
-// serviceForDrupalSiteMySQL returns a service object for MySQL
-func serviceForDrupalSiteMySQL(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "mysql"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec.Selector = ls
-	currentobject.Spec.Ports = []corev1.ServicePort{{
-		TargetPort: intstr.FromInt(3306),
-		Name:       "mysql",
-		Port:       3306,
-		Protocol:   "TCP",
-	}}
-	return nil
-}
-
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -869,7 +744,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 }
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
-func jobForDrupalSiteDrush(currentobject *batchv1.Job, d *webservicesv1a1.DrupalSite) error {
+func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -910,7 +785,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, d *webservicesv1a1.Drupal
 					{
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "drupal-mysql-secret",
+								Name: dbodSecret,
 							},
 						},
 					},
@@ -1038,60 +913,8 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	return nil
 }
 
-// updateConfigMapForMySQL ensures a configmap object to configure MySQL if not present. Else configmap object is updated and a new rollout is triggered
-func updateConfigMapForMySQL(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "mysql"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-
-	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/mysql-config.cnf"
-
-	content, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		return newApplicationError(fmt.Errorf("reading MySQL configuration failed: %w", err), ErrFilesystemIO)
-	}
-
-	currentConfig := currentobject.Data["mysql-config.cnf"]
-	currentobject.Data = map[string]string{
-		"mysql-config.cnf": string(content),
-	}
-
-	if !currentobject.CreationTimestamp.IsZero() {
-		if currentConfig != string(content) {
-			// Roll out a new deployment
-			deploy := &appsv1.Deployment{}
-			err = c.Get(ctx, types.NamespacedName{Name: "drupal-" + d.Name, Namespace: d.Namespace}, deploy)
-			if err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the MySQL configMap (deployment not found): %w", err), ErrClientK8s)
-			}
-			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["mysql-configmap-version"])
-			deploy.Spec.Template.ObjectMeta.Annotations["mysql-configmap-version"] = strconv.Itoa(currentVersion + 1)
-			if err := c.Update(ctx, deploy); err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the MySQL configMap: %w", err), ErrClientK8s)
-			}
-		}
-	}
-	return nil
-}
-
 /*
 ensureResourceX ensure the requested resource is created, with the following valid values
-	- deploy_mysql: Deployment for MySQL
-	- svc_mysql: Service for MySQL
-	- cm_mysql: Configmap for MySQL
-	- pvc_mysql: PersistentVolume for the MySQL
 	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush site-install
 	- is_base: ImageStream for sitebuilder-base
@@ -1106,6 +929,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
 	- route: Route for the drupalsite
+	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -1175,37 +999,21 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "deploy_mysql":
-		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-mysql-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-			return deploymentForDrupalSiteMySQL(deploy, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
 	case "deploy_drupal":
-		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-			return deploymentForDrupalSite(deploy, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "svc_mysql":
-		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "drupal-mysql", Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
-			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
-			return serviceForDrupalSiteMySQL(svc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
-			return newApplicationError(err, ErrClientK8s)
+		if r.isDBODProvisioned(ctx, d) {
+			if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+				deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+					log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+					return deploymentForDrupalSite(deploy, dbodSecret, d)
+				})
+				if err != nil {
+					log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			}
+		} else {
+			return newApplicationError(fmt.Errorf("DBOD not provisioned"), ErrDBOD)
 		}
 		return nil
 	case "svc_nginx":
@@ -1216,17 +1024,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "pvc_mysql":
-		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "mysql-pv-claim-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
-			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
-			return persistentVolumeClaimForMySQL(pvc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -1253,14 +1050,20 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "site_install_job":
-		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-			log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-			return jobForDrupalSiteDrush(job, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-			return newApplicationError(err, ErrClientK8s)
+		if r.isDBODProvisioned(ctx, d) {
+			if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+				job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
+				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+					log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+					return jobForDrupalSiteDrush(job, dbodSecret, d)
+				})
+				if err != nil {
+					log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
+			}
+		} else {
+			return newApplicationError(fmt.Errorf("DBOD not provisioned"), ErrDBOD)
 		}
 		return nil
 	case "cm_php":
@@ -1268,17 +1071,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "cm_mysql":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "mysql-cm-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return updateConfigMapForMySQL(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -1293,6 +1085,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "dbod_cr":
+		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
+			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
+			return dbodForDrupalSite(dbod, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -1362,6 +1165,28 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 		}
 	}
 	return false
+}
+
+// isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
+func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
+	if err1 == nil {
+		if len(dbodCR.Status.DbCredentialsSecret) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
+func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
+	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
+	if err1 == nil {
+		return dbodCR.Status.DbCredentialsSecret
+	}
+	return ""
 }
 
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
