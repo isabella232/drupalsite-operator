@@ -7,9 +7,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - apps.openshift.io
+  - app
   resources:
-  - deploymentconfigs
+  - deployments
   verbs:
   - '*'
 - apiGroups:

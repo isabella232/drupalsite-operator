@@ -22,24 +22,25 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
-	appsv1 "github.com/openshift/api/apps/v1"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -50,6 +51,7 @@ const (
 	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
 	productionEnvironment = "production"
 	routerShardLabel      = "drupal.cern.ch/router-shard"
+	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 )
 
 var (
@@ -213,7 +215,7 @@ func (r *DrupalSiteReconciler) ensureIngressResources(drp *webservicesv1a1.Drupa
 // labelsForDrupalSite returns the labels for selecting the resources
 // belonging to the given drupalSite CR name.
 func labelsForDrupalSite(name string) map[string]string {
-	return map[string]string{"CRD": "drupalSite", "drupalSite_cr": name}
+	return map[string]string{"drupalSite": name}
 }
 
 // TODO: Translate the `drupalVersion` -> {`PHP_BASE_VERSION`, `NGINX_VERSION`, `COMPOSER_VERSION`}
@@ -229,7 +231,7 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite) corev1.ObjectReferen
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: imageStreamForDrupalSiteBuilderS2I(d).Name + ":" + d.Spec.DrupalVersion,
+			Name: "drupal-site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
 		}
 	}
 	return corev1.ObjectReference{
@@ -247,7 +249,7 @@ func triggersForBuildConfigs(d *webservicesv1a1.DrupalSite) buildv1.BuildTrigger
 			ImageChange: &buildv1.ImageChangeTrigger{
 				From: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: imageStreamForDrupalSiteBuilderS2I(d).Name + ":" + d.Spec.DrupalVersion,
+					Name: "drupal-site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		}
@@ -258,498 +260,494 @@ func triggersForBuildConfigs(d *webservicesv1a1.DrupalSite) buildv1.BuildTrigger
 }
 
 // imageStreamForDrupalSiteBuilderS2I returns a ImageStream object for Drupal SiteBuilder S2I
-func imageStreamForDrupalSiteBuilderS2I(d *webservicesv1a1.DrupalSite) *imagev1.ImageStream {
+func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "site-builder"
-	is := createImageStream("drupal-site-builder-s2i-"+d.Name, d.Namespace, ls)
-	addOwnerRefToObject(is, asOwner(d))
-	return is
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec.LookupPolicy.Local = true
+	return nil
 }
 
 // imageStreamForDrupalSitePHP returns a ImageStream object for Drupal PHP
-func imageStreamForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *imagev1.ImageStream {
+func imageStreamForDrupalSitePHP(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
-	is := createImageStream("drupal-php-"+d.Name, d.Namespace, ls)
-	addOwnerRefToObject(is, asOwner(d))
-	return is
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec.LookupPolicy.Local = true
+	return nil
 }
 
 // imageStreamForDrupalSiteNginx returns a ImageStream object for Drupal Nginx
-func imageStreamForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *imagev1.ImageStream {
+func imageStreamForDrupalSiteNginx(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
-	is := createImageStream("drupal-nginx-"+d.Name, d.Namespace, ls)
-	addOwnerRefToObject(is, asOwner(d))
-	return is
-}
-
-func createImageStream(name, namespace string, labels map[string]string) *imagev1.ImageStream {
-	return &imagev1.ImageStream{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    labels,
-		},
-		Spec: imagev1.ImageStreamSpec{
-			LookupPolicy: imagev1.ImageLookupPolicy{
-				Local: true,
-			},
-		},
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
+	currentobject.Spec.LookupPolicy.Local = true
+	return nil
 }
 
 // buildConfigForDrupalSiteBuilderS2I returns a BuildConfig object for Drupal SiteBuilder S2I
-func buildConfigForDrupalSiteBuilderS2I(d *webservicesv1a1.DrupalSite) *buildv1.BuildConfig {
+func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "site-builder"
-	objectName := "drupal-site-builder-s2i-" + d.Name
-
-	bc := &buildv1.BuildConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-			Labels:    ls,
-		},
-		Spec: buildv1.BuildConfigSpec{
-			CommonSpec: buildv1.CommonSpec{
-				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-				Source: buildv1.BuildSource{
-					Git: &buildv1.GitBuildSource{
-						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
-						Ref: "master",
-						URI: d.Spec.Environment.ExtraConfigRepo,
-					},
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = buildv1.BuildConfigSpec{
+		CommonSpec: buildv1.CommonSpec{
+			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
+			Source: buildv1.BuildSource{
+				Git: &buildv1.GitBuildSource{
+					// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+					Ref: "master",
+					URI: d.Spec.Environment.ExtraConfigRepo,
 				},
-				Strategy: buildv1.BuildStrategy{
-					SourceStrategy: &buildv1.SourceBuildStrategy{
-						From: corev1.ObjectReference{
-							Kind: "DockerImage",
-							Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + d.Spec.DrupalVersion,
-						},
-					},
-				},
-				Output: buildv1.BuildOutput{
-					To: &corev1.ObjectReference{
-						Kind: "ImageStreamTag",
-						Name: objectName + ":" + d.Spec.DrupalVersion,
+			},
+			Strategy: buildv1.BuildStrategy{
+				SourceStrategy: &buildv1.SourceBuildStrategy{
+					From: corev1.ObjectReference{
+						Kind: "DockerImage",
+						Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + d.Spec.DrupalVersion,
 					},
 				},
 			},
-			Triggers: []buildv1.BuildTriggerPolicy{
-				{
-					Type: buildv1.ConfigChangeBuildTriggerType,
+			Output: buildv1.BuildOutput{
+				To: &corev1.ObjectReference{
+					Kind: "ImageStreamTag",
+					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
 				},
+			},
+		},
+		Triggers: []buildv1.BuildTriggerPolicy{
+			{
+				Type: buildv1.ConfigChangeBuildTriggerType,
 			},
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(bc, asOwner(d))
-	return bc
+	return nil
 }
 
 // buildConfigForDrupalSitePHP returns a BuildConfig object for Drupal PHP
-func buildConfigForDrupalSitePHP(d *webservicesv1a1.DrupalSite) *buildv1.BuildConfig {
+func buildConfigForDrupalSitePHP(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
-	objectName := "drupal-php-" + d.Name
-
-	bc := &buildv1.BuildConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-			Labels:    ls,
-		},
-		Spec: buildv1.BuildConfigSpec{
-			CommonSpec: buildv1.CommonSpec{
-				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-				Source: buildv1.BuildSource{
-					Git: &buildv1.GitBuildSource{
-						Ref: ImageRecipesRepoRef,
-						URI: ImageRecipesRepo,
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = buildv1.BuildConfigSpec{
+		CommonSpec: buildv1.CommonSpec{
+			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
+			Source: buildv1.BuildSource{
+				Git: &buildv1.GitBuildSource{
+					Ref: ImageRecipesRepoRef,
+					URI: ImageRecipesRepo,
+				},
+				ContextDir: "images/php-fpm",
+				Images: []buildv1.ImageSource{
+					{
+						From: baseImageReferenceToUse(d),
+						Paths: []buildv1.ImageSourcePath{
+							{
+								SourcePath:     "/app/.",
+								DestinationDir: "./images/php-fpm/drupal-files/",
+							},
+						},
 					},
-					ContextDir: "images/php-fpm",
-					Images: []buildv1.ImageSource{
+				},
+			},
+			Strategy: buildv1.BuildStrategy{
+				DockerStrategy: &buildv1.DockerBuildStrategy{
+					BuildArgs: []corev1.EnvVar{
 						{
-							From: baseImageReferenceToUse(d),
-							Paths: []buildv1.ImageSourcePath{
-								{
-									SourcePath:     "/app/.",
-									DestinationDir: "./images/php-fpm/drupal-files/",
-								},
-							},
+							Name:  "DRUPAL_VERSION",
+							Value: d.Spec.DrupalVersion,
 						},
 					},
-				},
-				Strategy: buildv1.BuildStrategy{
-					DockerStrategy: &buildv1.DockerBuildStrategy{
-						BuildArgs: []corev1.EnvVar{
-							{
-								Name:  "DRUPAL_VERSION",
-								Value: d.Spec.DrupalVersion,
-							},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "SITE_BUILDER_DIR",
+							Value: "drupal-files",
 						},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "SITE_BUILDER_DIR",
-								Value: "drupal-files",
-							},
-						},
-					},
-				},
-				Output: buildv1.BuildOutput{
-					To: &corev1.ObjectReference{
-						Kind: "ImageStreamTag",
-						Name: objectName + ":" + d.Spec.DrupalVersion,
 					},
 				},
 			},
-			Triggers: []buildv1.BuildTriggerPolicy{
-				triggersForBuildConfigs(d),
+			Output: buildv1.BuildOutput{
+				To: &corev1.ObjectReference{
+					Kind: "ImageStreamTag",
+					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
+				},
 			},
+		},
+		Triggers: []buildv1.BuildTriggerPolicy{
+			triggersForBuildConfigs(d),
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(bc, asOwner(d))
-	return bc
+	return nil
 }
 
 // buildConfigForDrupalSiteNginx returns a BuildConfig object for Drupal Nginx
-func buildConfigForDrupalSiteNginx(d *webservicesv1a1.DrupalSite) *buildv1.BuildConfig {
+func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
-	objectName := "drupal-nginx-" + d.Name
-
-	bc := &buildv1.BuildConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-			Labels:    ls,
-		},
-		Spec: buildv1.BuildConfigSpec{
-			CommonSpec: buildv1.CommonSpec{
-				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-				Source: buildv1.BuildSource{
-					Git: &buildv1.GitBuildSource{
-						Ref: ImageRecipesRepoRef,
-						URI: ImageRecipesRepo,
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = buildv1.BuildConfigSpec{
+		CommonSpec: buildv1.CommonSpec{
+			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
+			Source: buildv1.BuildSource{
+				Git: &buildv1.GitBuildSource{
+					Ref: ImageRecipesRepoRef,
+					URI: ImageRecipesRepo,
+				},
+				ContextDir: "images/nginx",
+				Images: []buildv1.ImageSource{
+					{
+						From: baseImageReferenceToUse(d),
+						Paths: []buildv1.ImageSourcePath{
+							{
+								SourcePath:     "/app/.",
+								DestinationDir: "./images/nginx/drupal-files/",
+							},
+						},
 					},
-					ContextDir: "images/nginx",
-					Images: []buildv1.ImageSource{
+				},
+			},
+			Strategy: buildv1.BuildStrategy{
+				DockerStrategy: &buildv1.DockerBuildStrategy{
+					BuildArgs: []corev1.EnvVar{
 						{
-							From: baseImageReferenceToUse(d),
-							Paths: []buildv1.ImageSourcePath{
-								{
-									SourcePath:     "/app/.",
-									DestinationDir: "./images/nginx/drupal-files/",
-								},
-							},
+							Name:  "DRUPAL_VERSION",
+							Value: d.Spec.DrupalVersion,
 						},
 					},
-				},
-				Strategy: buildv1.BuildStrategy{
-					DockerStrategy: &buildv1.DockerBuildStrategy{
-						BuildArgs: []corev1.EnvVar{
-							{
-								Name:  "DRUPAL_VERSION",
-								Value: d.Spec.DrupalVersion,
-							},
+					Env: []corev1.EnvVar{
+						{
+							Name:  "SITE_BUILDER_DIR",
+							Value: "drupal-files",
 						},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "SITE_BUILDER_DIR",
-								Value: "drupal-files",
-							},
-						},
-					},
-				},
-				Output: buildv1.BuildOutput{
-					To: &corev1.ObjectReference{
-						Kind: "ImageStreamTag",
-						Name: objectName + ":" + d.Spec.DrupalVersion,
 					},
 				},
 			},
-			Triggers: []buildv1.BuildTriggerPolicy{
-				triggersForBuildConfigs(d),
+			Output: buildv1.BuildOutput{
+				To: &corev1.ObjectReference{
+					Kind: "ImageStreamTag",
+					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
+				},
 			},
+		},
+		Triggers: []buildv1.BuildTriggerPolicy{
+			triggersForBuildConfigs(d),
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(bc, asOwner(d))
-	return bc
+	return nil
 }
 
-// deploymentConfigForDrupalSiteMySQL returns a DeploymentConfig object for MySQL
-func deploymentConfigForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
+// deploymentForDrupalSiteMySQL returns a Deployment object for MySQL
+func deploymentForDrupalSiteMySQL(currentobject *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
+			"mysql-configmap-version": "1",
+		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
-	objectName := "drupal-mysql-" + d.Name
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
+	currentobject.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: ls,
+	}
+	currentobject.Spec.Template.ObjectMeta.Labels = ls
 
-	dep := &appsv1.DeploymentConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-		},
-		Spec: appsv1.DeploymentConfigSpec{
-			Replicas: 1,
-			Selector: ls,
-			Template: &corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+	currentobject.Spec.Template.Spec = corev1.PodSpec{
+		Containers: []corev1.Container{{
+			Image:           "mysql:5.7",
+			Name:            "mysql",
+			ImagePullPolicy: "IfNotPresent",
+			Ports: []corev1.ContainerPort{{
+				ContainerPort: 3306,
+				Name:          "mysql",
+				Protocol:      "TCP",
+			}},
+			Env: []corev1.EnvVar{
+				{
+					Name:  "MYSQL_DATABASE",
+					Value: "drupal",
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Image:           "mysql:5.7",
-						Name:            "mysql",
-						ImagePullPolicy: "IfNotPresent",
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 3306,
-							Name:          "mysql",
-							Protocol:      "TCP",
-						}},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "MYSQL_DATABASE",
-								Value: "drupal",
-							},
-							{
-								Name: "MYSQL_ROOT_PASSWORD",
-								ValueFrom: &corev1.EnvVarSource{
-									SecretKeyRef: &corev1.SecretKeySelector{
-										Key: "DB_PASSWORD",
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "drupal-mysql-secret",
-										},
-									},
-								},
+				{
+					Name: "MYSQL_ROOT_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							Key: "DB_PASSWORD",
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "drupal-mysql-secret",
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "mysql-persistent-storage",
-								MountPath: "/var/lib/mysql",
-							},
-							{
-								Name:      "config-volume",
-								MountPath: "/etc/mysql/conf.d/mysql-config.cnf",
-								SubPath:   "mysql-config.cnf",
-							}},
-					}},
-					Volumes: []corev1.Volume{
-						{
-							Name: "mysql-persistent-storage",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "mysql-pv-claim-" + d.Name,
-								},
-							},
-						},
-						{
-							Name: "config-volume",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "mysql-cm-" + d.Name,
-									},
-								},
-							},
+					},
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "mysql-persistent-storage",
+					MountPath: "/var/lib/mysql",
+				},
+				{
+					Name:      "config-volume",
+					MountPath: "/etc/mysql/conf.d/mysql-config.cnf",
+					SubPath:   "mysql-config.cnf",
+				}},
+		}},
+		Volumes: []corev1.Volume{
+			{
+				Name: "mysql-persistent-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "mysql-pv-claim-" + d.Name,
+					},
+				},
+			},
+			{
+				Name: "config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "mysql-cm-" + d.Name,
 						},
 					},
 				},
 			},
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(dep, asOwner(d))
-	return dep
+	return nil
 }
 
-// deploymentConfigForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentConfigForDrupalSite(d *webservicesv1a1.DrupalSite) *appsv1.DeploymentConfig {
+// deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Annotations = map[string]string{
+			"image.openshift.io/triggers": "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"drupal-nginx-" + d.Name + ":" + d.Spec.DrupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\"nginx\")].image\",\"pause\":\"false\"}, {\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\"php-fpm\")].image\",\"pause\":\"false\"}]",
+		}
+		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
+			"php-configmap-version":   "1",
+			"nginx-configmap-version": "1",
+		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
-	objectName := "drupal-deployment-" + d.Name
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
+	currentobject.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: ls,
+	}
+	currentobject.Spec.Template.ObjectMeta.Labels = ls
 
-	dep := &appsv1.DeploymentConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-		},
-		Spec: appsv1.DeploymentConfigSpec{
-			Replicas: 1,
-			Selector: ls,
-			Template: &corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+	currentobject.Spec.Template.Spec = corev1.PodSpec{
+		Containers: []corev1.Container{{
+			Image:           "drupal-nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
+			Name:            "nginx",
+			ImagePullPolicy: "IfNotPresent",
+			Ports: []corev1.ContainerPort{{
+				ContainerPort: 8080,
+				Name:          "nginx",
+				Protocol:      "TCP",
+			}},
+			Env: []corev1.EnvVar{
+				{
+					Name:  "DRUPAL_SHARED_VOLUME",
+					Value: "/drupal-data",
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Image:           imageStreamForDrupalSiteNginx(d).Name + ":" + d.Spec.DrupalVersion,
-						Name:            "nginx",
-						ImagePullPolicy: "IfNotPresent",
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: 8080,
-							Name:          "nginx",
-							Protocol:      "TCP",
-						}},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "DRUPAL_SHARED_VOLUME",
-								Value: "/drupal-data",
-							},
-						},
-						EnvFrom: []corev1.EnvFromSource{
-							{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "drupal-mysql-secret",
-									},
-								},
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "drupal-directory-" + d.Name,
-								MountPath: "/drupal-data",
-							},
-							{
-								Name:      "nginx-config-volume",
-								MountPath: "/etc/nginx/conf.d/default.conf",
-								SubPath:   "default.conf",
-							},
-							{
-								Name:      "empty-dir",
-								MountPath: "/var/run/",
-							},
-						},
-					},
-						{
-							Image:           imageStreamForDrupalSitePHP(d).Name + ":" + d.Spec.DrupalVersion,
-							Name:            "php-fpm",
-							ImagePullPolicy: "IfNotPresent",
-							Ports: []corev1.ContainerPort{{
-								ContainerPort: 9000,
-								Name:          "php-fpm",
-								Protocol:      "TCP",
-							}},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "DRUPAL_SHARED_VOLUME",
-									Value: "/drupal-data",
-								},
-							},
-							EnvFrom: []corev1.EnvFromSource{
-								{
-									SecretRef: &corev1.SecretEnvSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "drupal-mysql-secret",
-										},
-									},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "drupal-directory-" + d.Name,
-									MountPath: "/drupal-data",
-								},
-								{
-									Name:      "php-config-volume",
-									MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
-									SubPath:   "zz-docker.conf",
-								},
-								{
-									Name:      "empty-dir",
-									MountPath: "/var/run/",
-								},
-							},
-						}},
-					Volumes: []corev1.Volume{
-						{
-							Name: "drupal-directory-" + d.Name,
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "drupal-pv-claim-" + d.Name,
-								},
-							}},
-						{
-							Name: "php-config-volume",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "php-fpm-cm-" + d.Name,
-									},
-								},
-							},
-						},
-						{
-							Name: "nginx-config-volume",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "nginx-cm-" + d.Name,
-									},
-								},
-							},
-						},
-						{
-							Name:         "empty-dir",
-							VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			},
+			EnvFrom: []corev1.EnvFromSource{
+				{
+					SecretRef: &corev1.SecretEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "drupal-mysql-secret",
 						},
 					},
 				},
 			},
-			Triggers: appsv1.DeploymentTriggerPolicies{
-				appsv1.DeploymentTriggerPolicy{
-					Type: appsv1.DeploymentTriggerOnImageChange,
-					ImageChangeParams: &appsv1.DeploymentTriggerImageChangeParams{
-						Automatic:      true,
-						ContainerNames: []string{"nginx"},
-						From: corev1.ObjectReference{
-							Kind: "ImageStreamTag",
-							Name: imageStreamForDrupalSiteNginx(d).Name + ":" + d.Spec.DrupalVersion,
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "drupal-directory-" + d.Name,
+					MountPath: "/drupal-data",
+				},
+				{
+					Name:      "nginx-config-volume",
+					MountPath: "/etc/nginx/conf.d/default.conf",
+					SubPath:   "default.conf",
+				},
+				{
+					Name:      "empty-dir",
+					MountPath: "/var/run/",
+				},
+			},
+		},
+			{
+				Image:           "drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				Name:            "php-fpm",
+				ImagePullPolicy: "IfNotPresent",
+				Ports: []corev1.ContainerPort{{
+					ContainerPort: 9000,
+					Name:          "php-fpm",
+					Protocol:      "TCP",
+				}},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
+				},
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "drupal-mysql-secret",
+							},
 						},
 					},
 				},
-				appsv1.DeploymentTriggerPolicy{
-					Type: appsv1.DeploymentTriggerOnImageChange,
-					ImageChangeParams: &appsv1.DeploymentTriggerImageChangeParams{
-						Automatic:      true,
-						ContainerNames: []string{"php-fpm"},
-						From: corev1.ObjectReference{
-							Kind: "ImageStreamTag",
-							Name: imageStreamForDrupalSitePHP(d).Name + ":" + d.Spec.DrupalVersion,
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "php-config-volume",
+						MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
+						SubPath:   "zz-docker.conf",
+					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
+				},
+			}},
+		Volumes: []corev1.Volume{
+			{
+				Name: "drupal-directory-" + d.Name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "drupal-pv-claim-" + d.Name,
+					},
+				}},
+			{
+				Name: "php-config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "php-fpm-cm-" + d.Name,
 						},
 					},
 				},
+			},
+			{
+				Name: "nginx-config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "nginx-cm-" + d.Name,
+						},
+					},
+				},
+			},
+			{
+				Name:         "empty-dir",
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 			},
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(dep, asOwner(d))
-	return dep
+	return nil
 }
 
 // persistentVolumeClaimForMySQL returns a PVC object
-func persistentVolumeClaimForMySQL(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
-	// ls := labelsForDrupalSite(d.Name)
-
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mysql-pv-claim-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
+func persistentVolumeClaimForMySQL(currentobject *corev1.PersistentVolumeClaim, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Spec = corev1.PersistentVolumeClaimSpec{
 			// Selector: &metav1.LabelSelector{
 			// 	MatchLabels: ls,
 			// },
@@ -760,25 +758,28 @@ func persistentVolumeClaimForMySQL(d *webservicesv1a1.DrupalSite) *corev1.Persis
 					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("5Gi"),
 				},
 			},
-		},
+		}
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, pvc, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(pvc, asOwner(d))
-	return pvc
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "mysql"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
 }
 
 // persistentVolumeClaimForDrupalSite returns a PVC object
-func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.PersistentVolumeClaim {
-	// ls := labelsForDrupalSite(d.Name)
-
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-pv-claim-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
+func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeClaim, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Spec = corev1.PersistentVolumeClaimSpec{
 			// Selector: &metav1.LabelSelector{
 			// 	MatchLabels: ls,
 			// },
@@ -789,291 +790,327 @@ func persistentVolumeClaimForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.P
 					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("10Gi"),
 				},
 			},
-		},
+		}
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, pvc, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(pvc, asOwner(d))
-	return pvc
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
 }
 
 // serviceForDrupalSite returns a service object for Nginx
-func serviceForDrupalSite(d *webservicesv1a1.DrupalSite) *corev1.Service {
+func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
-
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: ls,
-			Ports: []corev1.ServicePort{{
-				TargetPort: intstr.FromInt(8080),
-				Name:       "nginx",
-				Port:       80,
-				Protocol:   "TCP",
-			}},
-		},
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, svc, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(svc, asOwner(d))
-	return svc
+	currentobject.Spec.Selector = ls
+	currentobject.Spec.Ports = []corev1.ServicePort{{
+		TargetPort: intstr.FromInt(8080),
+		Name:       "nginx",
+		Port:       80,
+		Protocol:   "TCP",
+	}}
+	return nil
 }
 
 // serviceForDrupalSiteMySQL returns a service object for MySQL
-func serviceForDrupalSiteMySQL(d *webservicesv1a1.DrupalSite) *corev1.Service {
+func serviceForDrupalSiteMySQL(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
-
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-mysql",
-			Namespace: d.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: ls,
-			Ports: []corev1.ServicePort{{
-				TargetPort: intstr.FromInt(3306),
-				Name:       "mysql",
-				Port:       3306,
-				Protocol:   "TCP",
-			}},
-		},
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, svc, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(svc, asOwner(d))
-	return svc
+	currentobject.Spec.Selector = ls
+	currentobject.Spec.Ports = []corev1.ServicePort{{
+		TargetPort: intstr.FromInt(3306),
+		Name:       "mysql",
+		Port:       3306,
+		Protocol:   "TCP",
+	}}
+	return nil
 }
 
 // routeForDrupalSite returns a route object
-func routeForDrupalSite(d *webservicesv1a1.DrupalSite) *routev1.Route {
-	labels := labelsForDrupalSite(d.Name)
-	// NOTE: we temporarily remove route labels due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/42
-	//labels[routerShardLabel] = d.Spec.AssignedRouterShard
+func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	ls[routerShardLabel] = d.Spec.AssignedRouterShard
+
 	env := ""
 	if d.Spec.Environment.Name != productionEnvironment {
 		env = d.Spec.Environment.Name + "."
 	}
-	route := &routev1.Route{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "drupal-" + d.Name,
-			Namespace: d.Namespace,
-			Labels:    labels,
+
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = routev1.RouteSpec{
+		Host: env + d.Name + "." + ClusterName + ".cern.ch",
+		To: routev1.RouteTargetReference{
+			Kind:   "Service",
+			Name:   "drupal-" + d.Name,
+			Weight: pointer.Int32Ptr(100),
 		},
-		Spec: routev1.RouteSpec{
-			Host: env + d.Name + "." + ClusterName + ".cern.ch",
-			To: routev1.RouteTargetReference{
-				Kind:   "Service",
-				Name:   serviceForDrupalSite(d).Name,
-				Weight: pointer.Int32Ptr(100),
-			},
-			Port: &routev1.RoutePort{
-				TargetPort: intstr.FromInt(8080),
-			},
+		Port: &routev1.RoutePort{
+			TargetPort: intstr.FromInt(8080),
 		},
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, svc, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(route, asOwner(d))
-	return route
+	return nil
 }
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
-func jobForDrupalSiteDrush(d *webservicesv1a1.DrupalSite) *batchv1.Job {
+func jobForDrupalSiteDrush(currentobject *batchv1.Job, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
-	ls["job"] = "drush"
-	objectName := "drupal-drush-" + d.Name
-
-	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      objectName,
-			Namespace: d.Namespace,
-		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
+			Labels: ls,
+		}
+		currentobject.Spec.Template.Spec = corev1.PodSpec{
+			InitContainers: []corev1.Container{{
+				Image:           "bash",
+				Name:            "pvc-init",
+				ImagePullPolicy: "IfNotPresent",
+				Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
 				},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{{
-						Image:           "bash",
-						Name:            "pvc-init",
-						ImagePullPolicy: "IfNotPresent",
-						Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "DRUPAL_SHARED_VOLUME",
-								Value: "/drupal-data",
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "drupal-directory-" + d.Name,
-							MountPath: "/drupal-data",
-						}},
-					}},
-					RestartPolicy: "Never",
-					Containers: []corev1.Container{{
-						Image:           imageStreamForDrupalSitePHP(d).Name + ":" + d.Spec.DrupalVersion,
-						Name:            "drush",
-						ImagePullPolicy: "Always",
-						Command:         siteInstallJobForDrupalSite(),
-						Env: []corev1.EnvVar{
-							{
-								Name:  "DRUPAL_SHARED_VOLUME",
-								Value: "/drupal-data",
-							},
-						},
-						EnvFrom: []corev1.EnvFromSource{
-							{
-								SecretRef: &corev1.SecretEnvSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "drupal-mysql-secret",
-									},
-								},
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "drupal-directory-" + d.Name,
-							MountPath: "/drupal-data",
-						}},
-					}},
-					Volumes: []corev1.Volume{{
-						Name: "drupal-directory-" + d.Name,
-						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-								ClaimName: "drupal-pv-claim-" + d.Name,
-							},
-						},
-					}},
+				VolumeMounts: []corev1.VolumeMount{{
+					Name:      "drupal-directory-" + d.Name,
+					MountPath: "/drupal-data",
+				}},
+			}},
+			RestartPolicy: "Never",
+			Containers: []corev1.Container{{
+				Image:           "drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				Name:            "drush",
+				ImagePullPolicy: "Always",
+				Command:         siteInstallJobForDrupalSite(),
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
 				},
-			},
-		},
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "drupal-mysql-secret",
+							},
+						},
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{{
+					Name:      "drupal-directory-" + d.Name,
+					MountPath: "/drupal-data",
+				}},
+			}},
+			Volumes: []corev1.Volume{{
+				Name: "drupal-directory-" + d.Name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "drupal-pv-claim-" + d.Name,
+					},
+				},
+			}},
+		}
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(job, asOwner(d))
-	return job
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls["app"] = "drush"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
 }
 
-// configMapForPHPFPM returns a configMaps object to configure PHP
-func configMapForPHPFPM(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
+// updateConfigMapForPHPFPM ensures a configMaps object to configure PHP, if not present. Else configmap object is updated and a new rollout is triggered
+func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "php"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
 
 	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/php-fpm.conf"
 
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("reading PHP-FPM configuration failed"))
-		return nil
+		return newApplicationError(fmt.Errorf("reading PHP-FPM configMap failed: %w", err), ErrFilesystemIO)
 	}
 
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "php-fpm-cm-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Data: map[string]string{
-			"zz-docker.conf": string(content),
-		},
+	// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
+	currentConfig := currentobject.Data["zz-docker.conf"]
+	currentobject.Data = map[string]string{
+		"zz-docker.conf": string(content),
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(cm, asOwner(d))
-	return cm
+
+	if !currentobject.CreationTimestamp.IsZero() {
+		if currentConfig != string(content) {
+			// Roll out a new deployment
+			deploy := &appsv1.Deployment{}
+			err = c.Get(ctx, types.NamespacedName{Name: "drupal-" + d.Name, Namespace: d.Namespace}, deploy)
+			if err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
+			}
+			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"])
+			deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"] = strconv.Itoa(currentVersion + 1)
+			if err := c.Update(ctx, deploy); err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
+			}
+		}
+	}
+	return nil
 }
 
-// configMapForNginx returns a job object thats runs drush
-func configMapForNginx(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
+// updateConfigMapForNginx ensures a job object thats runs drush, if not present. Else configmap object is updated and a new rollout is triggered
+func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
 
 	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx-default.conf"
 
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("reading Nginx configuration failed"))
-		return nil
+		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
 	}
 
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "nginx-cm-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Data: map[string]string{
-			"default.conf": string(content),
-		},
+	currentConfig := currentobject.Data["default.conf"]
+	currentobject.Data = map[string]string{
+		"default.conf": string(content),
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(cm, asOwner(d))
-	return cm
+
+	if !currentobject.CreationTimestamp.IsZero() {
+		if currentConfig != string(content) {
+			// Roll out a new deployment
+			deploy := &appsv1.Deployment{}
+			err = c.Get(ctx, types.NamespacedName{Name: "drupal-" + d.Name, Namespace: d.Namespace}, deploy)
+			if err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
+			}
+			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"])
+			deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"] = strconv.Itoa(currentVersion + 1)
+			if err := c.Update(ctx, deploy); err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
+			}
+		}
+	}
+	return nil
 }
 
-// configMapForMySQL returns a configmap object to configure MySQL
-func configMapForMySQL(d *webservicesv1a1.DrupalSite, log logr.Logger) *corev1.ConfigMap {
+// updateConfigMapForMySQL ensures a configmap object to configure MySQL if not present. Else configmap object is updated and a new rollout is triggered
+func updateConfigMapForMySQL(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "mysql"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
 
 	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/mysql-config.cnf"
 
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("reading MySQL configuration failed"))
-		return nil
+		return newApplicationError(fmt.Errorf("reading MySQL configuration failed: %w", err), ErrFilesystemIO)
 	}
 
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mysql-cm-" + d.Name,
-			Namespace: d.Namespace,
-		},
-		Data: map[string]string{
-			"mysql-config.cnf": string(content),
-		},
+	currentConfig := currentobject.Data["mysql-config.cnf"]
+	currentobject.Data = map[string]string{
+		"mysql-config.cnf": string(content),
 	}
-	// Set DrupalSite instance as the owner and controller
-	// ctrl.SetControllerReference(d, dep, r.Scheme)
-	// Add owner reference
-	addOwnerRefToObject(cm, asOwner(d))
-	return cm
-}
 
-// createResource creates a given resource passed as an argument
-func createResource(ctx context.Context, res client.Object, name string, namespace string, r *DrupalSiteReconciler, log logr.Logger) (transientErr reconcileError) {
-	deleteRecreate := func() error {
-		err := r.Delete(ctx, res)
-		if err != nil {
-			return err
-		}
-		return r.Create(ctx, res)
-	}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, res)
-	if err != nil && apierrors.IsNotFound(err) {
-		log.Info("Creating Resource", "Resource.Namespace", namespace, "Resource.Name", name)
-		err := r.Create(ctx, res)
-		if err != nil {
-			switch {
-			case apierrors.IsAlreadyExists(err):
-				err = deleteRecreate()
-				if err != nil {
-					log.Error(err, "Failed to create new Resource", "Resource.Namespace", namespace, "Resource.Name", name)
-					return newApplicationError(err, ErrClientK8s)
-				}
-			default:
-				return newApplicationError(err, ErrClientK8s)
+	if !currentobject.CreationTimestamp.IsZero() {
+		if currentConfig != string(content) {
+			// Roll out a new deployment
+			deploy := &appsv1.Deployment{}
+			err = c.Get(ctx, types.NamespacedName{Name: "drupal-" + d.Name, Namespace: d.Namespace}, deploy)
+			if err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the MySQL configMap (deployment not found): %w", err), ErrClientK8s)
+			}
+			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["mysql-configmap-version"])
+			deploy.Spec.Template.ObjectMeta.Annotations["mysql-configmap-version"] = strconv.Itoa(currentVersion + 1)
+			if err := c.Update(ctx, deploy); err != nil {
+				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the MySQL configMap: %w", err), ErrClientK8s)
 			}
 		}
 	}
@@ -1082,7 +1119,7 @@ func createResource(ctx context.Context, res client.Object, name string, namespa
 
 /*
 ensureResourceX ensure the requested resource is created, with the following valid values
-	- dc_mysql: DeploymentConfig for MySQL
+	- dc_mysql: Deployment for MySQL
 	- svc_mysql: Service for MySQL
 	- cm_mysql: Configmap for MySQL
 	- pvc_mysql: PersistentVolume for the MySQL
@@ -1095,7 +1132,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- bc_s2i: BuildConfig for S2I sitebuilder
 	- bc_php: BuildConfig for PHP
 	- bc_nginx: BuildConfig for Nginx
-	- dc_drupal: DeploymentConfig for Nginx & PHP-FPM
+	- dc_drupal: Deployment for Nginx & PHP-FPM
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
@@ -1104,62 +1141,192 @@ ensureResourceX ensure the requested resource is created, with the following val
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
 	case "is_s2i":
-		res := imageStreamForDrupalSiteBuilderS2I(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSiteBuilderS2I(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "is_nginx":
-		res := imageStreamForDrupalSiteNginx(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSiteNginx(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "is_php":
-		res := imageStreamForDrupalSitePHP(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSitePHP(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "bc_s2i":
-		res := buildConfigForDrupalSiteBuilderS2I(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSiteBuilderS2I(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "bc_nginx":
-		res := buildConfigForDrupalSiteNginx(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSiteNginx(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "bc_php":
-		res := buildConfigForDrupalSitePHP(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSitePHP(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "dc_mysql":
-		res := deploymentConfigForDrupalSiteMySQL(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-mysql-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+			return deploymentForDrupalSiteMySQL(deploy, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "dc_drupal":
-		res := deploymentConfigForDrupalSite(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+			return deploymentForDrupalSite(deploy, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "svc_mysql":
-		res := serviceForDrupalSiteMySQL(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "drupal-mysql", Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
+			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return serviceForDrupalSiteMySQL(svc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "svc_nginx":
-		res := serviceForDrupalSite(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
+			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return serviceForDrupalSite(svc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "pvc_mysql":
-		res := persistentVolumeClaimForMySQL(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "mysql-pv-claim-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return persistentVolumeClaimForMySQL(pvc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "pvc_drupal":
-		res := persistentVolumeClaimForDrupalSite(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "drupal-pv-claim-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return persistentVolumeClaimForDrupalSite(pvc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "route":
-		res := routeForDrupalSite(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
+			log.Info("Ensuring Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
+			return routeForDrupalSite(route, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "site_install_job":
-		res := jobForDrupalSiteDrush(d)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+			log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+			return jobForDrupalSiteDrush(job, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "cm_php":
-		res := configMapForPHPFPM(d, log)
-		if res == nil {
-			return newApplicationError(nil, ErrFunctionDomain)
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-cm-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
 		}
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		return nil
 	case "cm_mysql":
-		res := configMapForMySQL(d, log)
-		if res == nil {
-			return newApplicationError(nil, ErrFunctionDomain)
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "mysql-cm-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return updateConfigMapForMySQL(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
 		}
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		return nil
 	case "cm_nginx":
-		res := configMapForNginx(d, log)
-		return createResource(ctx, res, res.Name, res.Namespace, r, log)
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-cm-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return updateConfigMapForNginx(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
@@ -1205,7 +1372,7 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 // isInstallJobCompleted checks if the drush job is successfully completed
 func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
-	jobObject := jobForDrupalSiteDrush(d)
+	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
 	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
 	if err == nil {
 		if found.Status.Succeeded != 0 {
@@ -1217,11 +1384,11 @@ func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *web
 
 // isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
 func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	deploymentConfig := deploymentConfigForDrupalSite(d)
-	err1 := r.Get(ctx, types.NamespacedName{Name: deploymentConfig.Name, Namespace: deploymentConfig.Namespace}, deploymentConfig)
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
 	if err1 == nil {
 		// Change the implementation here
-		if deploymentConfig.Status.ReadyReplicas != 0 {
+		if deployment.Status.ReadyReplicas != 0 {
 			return true
 		}
 	}

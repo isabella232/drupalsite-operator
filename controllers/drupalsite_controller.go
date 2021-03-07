@@ -21,12 +21,12 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	appsv1 "github.com/openshift/api/apps/v1"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,8 +47,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
-
-// +kubebuilder:rbac:groups=apps.openshift.io,resources=deploymentconfigs,verbs=*
+// +kubebuilder:rbac:groups=app,resources=deployments,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=buildconfig,verbs=*
 // +kubebuilder:rbac:groups=image.openshift.io,resources=imagestream,verbs=*
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=*
@@ -60,7 +59,7 @@ type DrupalSiteReconciler struct {
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
-		Owns(&appsv1.DeploymentConfig{}).
+		Owns(&appsv1.Deployment{}).
 		Owns(&buildv1.BuildConfig{}).
 		Owns(&imagev1.ImageStream{}).
 		Owns(&routev1.Route{}).
