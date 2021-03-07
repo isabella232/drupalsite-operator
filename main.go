@@ -41,10 +41,10 @@ import (
 	"gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
 
 	// +kubebuilder:scaffold:imports
-	appsv1 "github.com/openshift/api/apps/v1"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 var (

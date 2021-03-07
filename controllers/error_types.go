@@ -14,6 +14,7 @@ var (
 	// Consider constraining the arg type.
 	ErrFunctionDomain = errors.New("FunctionDomainError")
 	ErrClientK8s      = errors.New("k8sAPIClientError")
+	ErrFilesystemIO   = errors.New("FilesystemIOError")
 )
 
 type reconcileError interface {
