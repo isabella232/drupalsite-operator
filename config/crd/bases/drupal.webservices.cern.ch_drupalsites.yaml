@@ -36,12 +36,6 @@ spec:
           spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
-              assignedRouterShard:
-                description: We must set MaxLength to 63 characters as this value
-                  is stored in Kubernetes labels and there is limited length as mentioned
-                  in https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
-                maxLength: 63
-                type: string
               drupalVersion:
                 description: DrupalVersion defines the version of the Drupal to install
                 minLength: 1

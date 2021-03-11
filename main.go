@@ -132,7 +132,6 @@ func initEnv() {
 		controllers.ImageRecipesRepoRef = "master"
 	}
 	controllers.ClusterName = getenvOrDie("CLUSTER_NAME")
-	flag.Var(&controllers.RouterShards, "assignable-router-shard", "List of available router shards")
 
 	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + controllers.ImageRecipesRepoRef
 	directoryName := downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar")

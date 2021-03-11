@@ -115,7 +115,6 @@ github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
 # github.com/openshift/api v0.0.0-20201126092428-04abbec6c099
 ## explicit
-github.com/openshift/api/apps/v1
 github.com/openshift/api/build/v1
 github.com/openshift/api/image/docker10
 github.com/openshift/api/image/dockerpre012

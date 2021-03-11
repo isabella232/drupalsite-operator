@@ -23,9 +23,6 @@ spec:
       containers:
       - args:
         - --leader-elect
-        {{- range .Values.drupalsiteOperator.assignableRouterShards }}
-        - --assignable-router-shard={{ . }}
-        {{- end }}
         command:
         - /manager
         image: {{ .Values.image | quote }}

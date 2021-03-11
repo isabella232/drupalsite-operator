@@ -42,13 +42,6 @@ type DrupalSiteSpec struct {
 	// Environment defines the drupal site environments
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
-
-	// We must set MaxLength to 63 characters as this value is stored in Kubernetes labels and there is limited
-	// length as mentioned in
-	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
-	// +kubebuilder:validation:MaxLength=63
-	// +optional
-	AssignedRouterShard string `json:"assignedRouterShard,omitempty"`
 }
 
 // Environment defines the environment field in DrupalSite

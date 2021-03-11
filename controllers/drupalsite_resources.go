@@ -18,13 +18,10 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -50,7 +47,6 @@ const (
 	// finalizerStr string that is going to added to every DrupalSite created
 	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
 	productionEnvironment = "production"
-	routerShardLabel      = "drupal.cern.ch/router-shard"
 	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 )
 
@@ -64,8 +60,6 @@ var (
 	ImageRecipesRepoRef string
 	// ClusterName is used in the Route's Host field
 	ClusterName string
-	// RouterShards is the list of all router shards available in the cluster - passed as a flag to the operator
-	RouterShards strFlagList
 )
 
 type strFlagList []string
@@ -105,31 +99,7 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
 	}
-	update, specErr := assignRouterShard(drp)
-	switch {
-	case specErr != nil:
-		log.Info(specErr.Error())
-	case update:
-		log.Info(fmt.Sprintf("Assigned router shard %v to a drupal site", drp.Spec.AssignedRouterShard))
-	}
 	return
-}
-
-func assignRouterShard(drp *webservicesv1a1.DrupalSite) (update bool, err reconcileError) {
-	if drp.Spec.AssignedRouterShard != "" {
-		return false, nil
-	}
-	if len(RouterShards) == 0 {
-		return false, newApplicationError(errors.New("specify a valid list of available router shards with the --assignable-router-shard flag"), ErrInvalidSpec)
-	}
-	drp.Spec.AssignedRouterShard = randomStrElement(RouterShards)
-	return true, nil
-}
-
-// randomStrElement returns a random element from the array. Panic if len(list) == 0
-func randomStrElement(list []string) string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	return list[r.Intn(len(list))]
 }
 
 /*
@@ -875,7 +845,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
-	ls[routerShardLabel] = d.Spec.AssignedRouterShard
 
 	env := ""
 	if d.Spec.Environment.Name != productionEnvironment {
