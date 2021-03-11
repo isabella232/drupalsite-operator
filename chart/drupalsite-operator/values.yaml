@@ -18,5 +18,3 @@ resources:
 # Operator-specific configuration
 drupalsiteOperator:
   drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
-  assignableRouterShards:
-  - apps-shard-1
