@@ -5,9 +5,9 @@ metadata:
   name: drupalsite-operator-manager-role
 rules:
 - apiGroups:
-  - apps.openshift.io
+  - apps
   resources:
-  - deploymentconfigs
+  - deployments
   verbs:
   - '*'
 - apiGroups:
