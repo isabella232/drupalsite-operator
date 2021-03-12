@@ -24,6 +24,18 @@ type reconcileError interface {
 	Temporary() bool
 }
 
+// concat concatenates the Error of each reconcileError and sets the result's errorCondition to the first condition
+func concat(errs []reconcileError) reconcileError {
+	if len(errs) == 0 {
+		return nil
+	}
+	sum := errors.New("")
+	for _, e := range errs {
+		sum = fmt.Errorf("%v\n%v", sum, e)
+	}
+	return newApplicationError(sum, errs[0].Unwrap())
+}
+
 // applicationError wraps an error condition and gives it more context from where it occurred
 type applicationError struct {
 	innerException error
