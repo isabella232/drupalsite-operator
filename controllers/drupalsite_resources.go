@@ -106,71 +106,71 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content, apart from the ingress Route.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job.
 */
-func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
 
 	// 1. BuildConfigs and ImageStreams
 
 	if len(drp.Spec.Environment.ExtraConfigRepo) > 0 {
 		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", log); transientErr != nil {
-			return transientErr.Wrap("%v: for S2I SiteBuilder ImageStream")
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder ImageStream"))
 		}
 		if transientErr := r.ensureResourceX(ctx, drp, "bc_s2i", log); transientErr != nil {
-			return transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig")
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "is_php", log); transientErr != nil {
-		return transientErr.Wrap("%v: for PHP ImageStream")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP ImageStream"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "is_nginx", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Nginx ImageStream")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx ImageStream"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "bc_php", log); transientErr != nil {
-		return transientErr.Wrap("%v: for PHP BuildConfig")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP BuildConfig"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "bc_nginx", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Nginx BuildConfig")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx BuildConfig"))
 	}
 
 	// 2. Data layer
 
 	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Drupal PVC")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal PVC"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "pvc_mysql", log); transientErr != nil {
-		return transientErr.Wrap("%v: for MySQL PVC")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for MySQL PVC"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "dc_mysql", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Mysql DC")
+	if transientErr := r.ensureResourceX(ctx, drp, "deploy_mysql", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Mysql DC"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_mysql", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Mysql SVC")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Mysql SVC"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_mysql", log); transientErr != nil {
-		return transientErr.Wrap("%v: for MySQL CM")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for MySQL CM"))
 	}
 
 	// 3. Serving layer
 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
-		return transientErr.Wrap("%v: for PHP-FPM CM")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP-FPM CM"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Nginx CM")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "dc_drupal", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Drupal DC")
+	if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Nginx SVC")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 
 	// 4. Ingress
 
 	if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-		return transientErr.Wrap("%v: for site install Job")
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 	}
-	return nil
+	return transientErrs
 }
 
 // ensureIngressResources ensures the presence of the Route to access the website from the outside world
@@ -1088,7 +1088,7 @@ func updateConfigMapForMySQL(ctx context.Context, currentobject *corev1.ConfigMa
 
 /*
 ensureResourceX ensure the requested resource is created, with the following valid values
-	- dc_mysql: Deployment for MySQL
+	- deploy_mysql: Deployment for MySQL
 	- svc_mysql: Service for MySQL
 	- cm_mysql: Configmap for MySQL
 	- pvc_mysql: PersistentVolume for the MySQL
@@ -1101,7 +1101,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- bc_s2i: BuildConfig for S2I sitebuilder
 	- bc_php: BuildConfig for PHP
 	- bc_nginx: BuildConfig for Nginx
-	- dc_drupal: Deployment for Nginx & PHP-FPM
+	- deploy_drupal: Deployment for Nginx & PHP-FPM
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
@@ -1175,7 +1175,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "dc_mysql":
+	case "deploy_mysql":
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-mysql-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
@@ -1186,7 +1186,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "dc_drupal":
+	case "deploy_drupal":
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)

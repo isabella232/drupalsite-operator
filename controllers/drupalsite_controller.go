@@ -125,7 +125,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Create route
 
 	// Ensure all primary resources
-	if transientErr := r.ensureResources(drupalSite, log); transientErr != nil {
+	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
+		transientErr := concat(transientErrs)
 		setNotReady(drupalSite, transientErr)
 		return handleTransientErr(transientErr, "%v while creating the resources")
 	}
