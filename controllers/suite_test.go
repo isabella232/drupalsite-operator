@@ -22,16 +22,22 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"k8s.io/client-go/kubernetes/scheme"
+	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
+	buildv1 "github.com/openshift/api/build/v1"
+	imagev1 "github.com/openshift/api/image/v1"
+	routev1 "github.com/openshift/api/route/v1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -49,28 +55,73 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func() {
+var scheme = runtime.NewScheme()
+
+var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+
+	customApiServerFlags := []string{
+		"--secure-port=6884",
+	}
+
+	apiServerFlags := append([]string(nil), envtest.DefaultKubeAPIServerFlags...)
+	apiServerFlags = append(apiServerFlags, customApiServerFlags...)
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "config", "crd", "bases"),
+			filepath.Join("..", "testResources", "mock_crd"),
+		},
+		BinaryAssetsDirectory:    filepath.Join("..", "testbin", "bin"),
+		ErrorIfCRDPathMissing:    true,
+		KubeAPIServerFlags:       apiServerFlags,
+		AttachControlPlaneOutput: true,
 	}
+	err := drupalwebservicesv1alpha1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	// +kubebuilder:scaffold:scheme
+
+	err = clientgoscheme.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = buildv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = appsv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = routev1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = imagev1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
 
 	cfg, err := testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = drupalwebservicesv1alpha1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
+	})
+	Expect(err).ToNot(HaveOccurred())
 
-	// +kubebuilder:scaffold:scheme
+	err = (&DrupalSiteReconciler{
+		Client: k8sManager.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
+	go func() {
+		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
 
-}, 60)
+	k8sClient = k8sManager.GetClient()
+	Expect(k8sClient).ToNot(BeNil())
+
+	close(done)
+}, 100)
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
