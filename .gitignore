@@ -26,3 +26,6 @@ bin
 
 __*
 secret.yaml
+
+# Envtest bin files
+testbin/*

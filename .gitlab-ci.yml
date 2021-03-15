@@ -14,4 +14,6 @@ GoTest:
   stage: go_test
   image: golang:1.15
   script:
-    - go test -v -mod=vendor ./...
+    - export CLUSTER_NAME=test
+    - export RUNTIME_REPO=https://gitlab.cern.ch/drupal/paas/drupal-runtime.git
+    - make test
