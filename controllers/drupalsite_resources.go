@@ -474,7 +474,6 @@ func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webser
 func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Status = dbodv1a1.DBODRegistrationStatus{}
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -489,9 +488,9 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 		currentobject.Labels[k] = v
 	}
 	currentobject.Spec = dbodv1a1.DBODRegistrationSpec{
-		DbodClass: "test-dbodclass",
-		DbName:    "testdbodclass",
-		DbUser:    "testUser3",
+		DbodClass: string(d.Spec.Environment.DBODClass),
+		DbName:    string(d.Namespace + "-" + d.Name),
+		DbUser:    string(d.Namespace + "-" + d.Name),
 		RegistrationLabels: map[string]string{
 			"drupalSite": d.Name,
 		},
@@ -1169,7 +1168,7 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
 func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-  return len(r.getDBODProvisionedSecret(ctx,d)) > 0
+	return len(r.getDBODProvisionedSecret(ctx, d)) > 0
 }
 
 // getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource

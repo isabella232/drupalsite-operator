@@ -62,7 +62,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=*
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=dbod.cern,resources=dbodregistrations,verbs=*
-// +kubebuilder:rbac:groups=dbod.cern,resources=dbodclasses,verbs=get,list,watch
+// +kubebuilder:rbac:groups=dbod.cern,resources=dbodclasses,verbs=get;list;watch;
 
 func (r *DrupalSiteReconciler) initEnv() {
 	log := r.Log
