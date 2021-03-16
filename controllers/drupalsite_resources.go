@@ -105,8 +105,8 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 }
 
 /*
-ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content, apart from the ingress Route.
-This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job.
+ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
+This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.
 */
 func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
@@ -151,28 +151,28 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
+	if r.isDBODProvisioned(ctx, drp) {
+		if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
+		}
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
+	if r.isDBODProvisioned(ctx, drp) {
+		if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+		}
+	}
 
 	// 4. Ingress
 
-	if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") {
+		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
+		}
 	}
 	return transientErrs
-}
-
-// ensureIngressResources ensures the presence of the Route to access the website from the outside world
-func (r *DrupalSiteReconciler) ensureIngressResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	ctx := context.TODO()
-	if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
-		return transientErr.Wrap("%v: for Route")
-	}
-	return nil
 }
 
 // labelsForDrupalSite returns the labels for selecting the resources
@@ -999,20 +999,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "deploy_drupal":
-		if r.isDBODProvisioned(ctx, d) {
-			if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-				deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-					log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-					return deploymentForDrupalSite(deploy, dbodSecret, d)
-				})
-				if err != nil {
-					log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+				log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+				return deploymentForDrupalSite(deploy, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+				return newApplicationError(err, ErrClientK8s)
 			}
-		} else {
-			return newApplicationError(fmt.Errorf("DBOD not provisioned"), ErrDBOD)
 		}
 		return nil
 	case "svc_nginx":
@@ -1049,20 +1045,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "site_install_job":
-		if r.isDBODProvisioned(ctx, d) {
-			if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-				job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
-				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-					log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-					return jobForDrupalSiteDrush(job, dbodSecret, d)
-				})
-				if err != nil {
-					log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return jobForDrupalSiteDrush(job, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return newApplicationError(err, ErrClientK8s)
 			}
-		} else {
-			return newApplicationError(fmt.Errorf("DBOD not provisioned"), ErrDBOD)
 		}
 		return nil
 	case "cm_php":

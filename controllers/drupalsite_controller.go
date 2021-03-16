@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -42,6 +43,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+const (
+	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
+	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -159,16 +165,19 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Ensure installed - Installed status
 	// Create route
 
-	// Ensure all primary resources
+	// Ensure all resources
 	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
 		transientErr := concat(transientErrs)
 		setNotReady(drupalSite, transientErr)
-		return handleTransientErr(transientErr, "%v while creating the resources")
+		return handleTransientErr(transientErr, "%v while ensuring the resources")
 	}
 
 	// Check if DBOD has been provisioned
 	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
-		return reconcile.Result{Requeue: true}, nil
+		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
+			r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+		return reconcile.Result{Requeue: true, RequeueAfter: REQUEUE_INTERVAL}, nil
 	}
 
 	// Check if the drupal site is ready to serve requests
@@ -187,14 +196,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if update := setNotInstalled(drupalSite); update {
 			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		}
-	}
-
-	// If the installed status and ready status is true, create the route
-	if drupalSite.ConditionTrue("Installed") && drupalSite.ConditionTrue("Ready") {
-		if transientErr := r.ensureIngressResources(drupalSite, log); transientErr != nil {
-			return handleTransientErr(transientErr, "%v while creating route")
-		}
-		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 
 	return ctrl.Result{}, nil
