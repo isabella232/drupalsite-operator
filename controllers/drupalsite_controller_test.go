@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -127,22 +126,30 @@ var _ = Describe("DrupalSite controller", func() {
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() string {
+
+				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				Eventually(func() bool {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) == 0 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
-						return ""
+					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
+						return false
 					}
-					fmt.Println(deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name)
-					return deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name
-				}, timeout, interval).Should(Equal("test"))
-				Eventually(func() string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
-						return ""
+					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
+						return true
 					}
-					fmt.Println(deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name)
-					return deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name
-				}, timeout, interval).Should(Equal("test"))
+					return false
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the drush job to have the EnvFrom secret field set correctly")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-drush-" + key.Name, Namespace: key.Namespace}, &job)
+					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
+						return false
+					}
+					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
+						return true
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
 				By("Expecting PHP_FPM configmaps created")
@@ -495,10 +502,30 @@ var _ = Describe("DrupalSite controller", func() {
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "dbod-" + key.Name, Namespace: key.Namespace}, &dbod)
-					return dbod.Status.DbCredentialsSecret
-				}, timeout, interval).Should(Not(HaveLen(0)))
+
+				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &deploy)
+					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
+						return false
+					}
+					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
+						return true
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the drush job to have the EnvFrom secret field set correctly")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-drush-" + key.Name, Namespace: key.Namespace}, &job)
+					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
+						return false
+					}
+					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
+						return true
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
 				By("Expecting PHP_FPM configmaps created")
