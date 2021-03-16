@@ -1169,14 +1169,7 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
 func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
-	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
-	if err1 == nil {
-		if len(dbodCR.Status.DbCredentialsSecret) != 0 {
-			return true
-		}
-	}
-	return false
+  return len(r.getDBODProvisionedSecret(ctx,d)) > 0
 }
 
 // getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
