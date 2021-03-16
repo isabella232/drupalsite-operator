@@ -21,9 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strconv"
-	"strings"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
@@ -41,68 +39,7 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-const (
-	// finalizerStr string that is going to added to every DrupalSite created
-	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
-	productionEnvironment = "production"
-	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
-)
-
-var (
-	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
-	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
-	ImageRecipesRepo string
-	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
-	// and other config data to build the images
-	// Example: "s2i"
-	ImageRecipesRepoRef string
-	// ClusterName is used in the Route's Host field
-	ClusterName string
-)
-
-type strFlagList []string
-
-func (i *strFlagList) String() string {
-	return strings.Join(*i, ",")
-}
-
-func (i *strFlagList) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
-//validateSpec validates the spec against the DrupalSiteSpec definition
-func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
-	_, err := govalidator.ValidateStruct(drpSpec)
-	if err != nil {
-		return newApplicationError(err, ErrInvalidSpec)
-	}
-	return nil
-}
-
-func contains(a []string, x string) bool {
-	for _, n := range a {
-		if x == n {
-			return true
-		}
-	}
-	return false
-}
-
-// ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
-// then returns if it needs to be updated.
-func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
-	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
-		log.Info("Adding finalizer")
-		controllerutil.AddFinalizer(drp, finalizerStr)
-		update = true
-	}
-	return
-}
 
 /*
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
@@ -175,17 +112,194 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	return transientErrs
 }
 
+/*
+ensureResourceX ensure the requested resource is created, with the following valid values
+	- pvc_drupal: PersistentVolume for the drupalsite
+	- site_install_job: Kubernetes Job for the drush site-install
+	- is_base: ImageStream for sitebuilder-base
+	- is_s2i: ImageStream for S2I sitebuilder
+	- is_php: ImageStream for PHP
+	- is_nginx: ImageStream for Nginx
+	- bc_s2i: BuildConfig for S2I sitebuilder
+	- bc_php: BuildConfig for PHP
+	- bc_nginx: BuildConfig for Nginx
+	- deploy_drupal: Deployment for Nginx & PHP-FPM
+	- svc_nginx: Service for Nginx
+	- cm_php: ConfigMap for PHP-FPM
+	- cm_nginx: ConfigMap for Nginx
+	- route: Route for the drupalsite
+	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
+*/
+func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
+	switch resType {
+	case "is_s2i":
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSiteBuilderS2I(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "is_nginx":
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSiteNginx(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "is_php":
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
+			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return imageStreamForDrupalSitePHP(is, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "bc_s2i":
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSiteBuilderS2I(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "bc_nginx":
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSiteNginx(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "bc_php":
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
+			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return buildConfigForDrupalSitePHP(bc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "deploy_drupal":
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+				log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+				return deploymentForDrupalSite(deploy, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
+		}
+		return nil
+	case "svc_nginx":
+		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
+			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return serviceForDrupalSite(svc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "pvc_drupal":
+		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "drupal-pv-claim-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return persistentVolumeClaimForDrupalSite(pvc, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "route":
+		route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
+			log.Info("Ensuring Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
+			return routeForDrupalSite(route, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "site_install_job":
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return jobForDrupalSiteDrush(job, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
+		}
+		return nil
+	case "cm_php":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-cm-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "cm_nginx":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-cm-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return updateConfigMapForNginx(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "dbod_cr":
+		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
+			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
+			return dbodForDrupalSite(dbod, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	default:
+		return newApplicationError(nil, ErrFunctionDomain)
+	}
+}
+
 // labelsForDrupalSite returns the labels for selecting the resources
 // belonging to the given drupalSite CR name.
 func labelsForDrupalSite(name string) map[string]string {
 	return map[string]string{"drupalSite": name}
 }
-
-// TODO: Translate the `drupalVersion` -> {`PHP_BASE_VERSION`, `NGINX_VERSION`, `COMPOSER_VERSION`}
-// Possibly an operator configmap
-// see https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/29
-func phpBaseVersion(d *webservicesv1a1.DrupalSite) string { return "7.3.23-fpm-alpine3.12" }
-func nginxVersion(d *webservicesv1a1.DrupalSite) string   { return "1.17.4" }
 
 // baseImageReferenceToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
 // If yes, the S2I buildconfig will be used; baseImageReferenceToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
@@ -912,209 +1026,6 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	return nil
 }
 
-/*
-ensureResourceX ensure the requested resource is created, with the following valid values
-	- pvc_drupal: PersistentVolume for the drupalsite
-	- site_install_job: Kubernetes Job for the drush site-install
-	- is_base: ImageStream for sitebuilder-base
-	- is_s2i: ImageStream for S2I sitebuilder
-	- is_php: ImageStream for PHP
-	- is_nginx: ImageStream for Nginx
-	- bc_s2i: BuildConfig for S2I sitebuilder
-	- bc_php: BuildConfig for PHP
-	- bc_nginx: BuildConfig for Nginx
-	- deploy_drupal: Deployment for Nginx & PHP-FPM
-	- svc_nginx: Service for Nginx
-	- cm_php: ConfigMap for PHP-FPM
-	- cm_nginx: ConfigMap for Nginx
-	- route: Route for the drupalsite
-	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
-*/
-func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
-	switch resType {
-	case "is_s2i":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return imageStreamForDrupalSiteBuilderS2I(is, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "is_nginx":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return imageStreamForDrupalSiteNginx(is, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "is_php":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return imageStreamForDrupalSitePHP(is, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "bc_s2i":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return buildConfigForDrupalSiteBuilderS2I(bc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "bc_nginx":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-nginx-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return buildConfigForDrupalSiteNginx(bc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "bc_php":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "drupal-php-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return buildConfigForDrupalSitePHP(bc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "deploy_drupal":
-		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-				log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-				return deploymentForDrupalSite(deploy, dbodSecret, d)
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-		return nil
-	case "svc_nginx":
-		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
-			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
-			return serviceForDrupalSite(svc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "pvc_drupal":
-		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "drupal-pv-claim-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
-			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
-			return persistentVolumeClaimForDrupalSite(pvc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "route":
-		route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
-			log.Info("Ensuring Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
-			return routeForDrupalSite(route, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "site_install_job":
-		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return jobForDrupalSiteDrush(job, dbodSecret, d)
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-		return nil
-	case "cm_php":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-cm-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "cm_nginx":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-cm-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return updateConfigMapForNginx(ctx, cm, d, r.Client)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "dbod_cr":
-		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
-			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
-			return dbodForDrupalSite(dbod, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	default:
-		return newApplicationError(nil, ErrFunctionDomain)
-	}
-}
-
-// updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
-	reconcile.Result, error) {
-	if err := r.Update(ctx, drp); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
-// updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
-	reconcile.Result, error) {
-	if err := r.Status().Update(ctx, drp); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
 // addOwnerRefToObject appends the desired OwnerReference to the object
 func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
@@ -1130,47 +1041,6 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 		UID:        d.UID,
 		Controller: &trueVar,
 	}
-}
-
-// isInstallJobCompleted checks if the drush job is successfully completed
-func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	found := &batchv1.Job{}
-	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
-	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
-	if err == nil {
-		if found.Status.Succeeded != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
-func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
-	err1 := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
-	if err1 == nil {
-		// Change the implementation here
-		if deployment.Status.ReadyReplicas != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
-func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	return len(r.getDBODProvisionedSecret(ctx, d)) > 0
-}
-
-// getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
-func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
-	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
-	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
-	if err1 == nil {
-		return dbodCR.Status.DbCredentialsSecret
-	}
-	return ""
 }
 
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush

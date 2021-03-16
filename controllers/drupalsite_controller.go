@@ -27,18 +27,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
-	"github.com/operator-framework/operator-lib/status"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -46,9 +48,27 @@ import (
 )
 
 const (
+	// finalizerStr string that is going to added to every DrupalSite created
+	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
+	productionEnvironment = "production"
+	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
 	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
 )
+
+var (
+	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
+	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+	ImageRecipesRepo string
+	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
+	// and other config data to build the images
+	// Example: "s2i"
+	ImageRecipesRepoRef string
+	// ClusterName is used in the Route's Host field
+	ClusterName string
+)
+
+type strFlagList []string
 
 // DrupalSiteReconciler reconciles a DrupalSite object
 type DrupalSiteReconciler struct {
@@ -69,30 +89,6 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 // +kubebuilder:rbac:groups=dbod.cern,resources=dbodregistrations,verbs=*
 // +kubebuilder:rbac:groups=dbod.cern,resources=dbodclasses,verbs=get;list;watch;
-
-func (r *DrupalSiteReconciler) initEnv() {
-	log := r.Log
-	log.Info("Initializing environment")
-	// <git_url>@<git_ref>
-	// Drupal runtime repo containing the dockerfiles and other config data
-	// to build the runtime images. After '@' a git ref can be specified (default: "master").
-	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@s2i"
-	runtimeRepo := strings.Split(getenvOrDie("RUNTIME_REPO", log), "@")
-	ImageRecipesRepo = runtimeRepo[0]
-	if len(runtimeRepo) > 1 {
-		ImageRecipesRepoRef = runtimeRepo[1]
-	} else {
-		ImageRecipesRepoRef = "master"
-	}
-	ClusterName = getenvOrDie("CLUSTER_NAME", log)
-
-	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + ImageRecipesRepoRef
-	directoryName := downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
-	configPath := "/tmp/drupal-runtime/"
-	createConfigDirectory(configPath, log)
-	untar("/tmp/repo.tar", "/tmp/drupal-runtime", log)
-	renameConfigDirectory(directoryName, "/tmp/drupal-runtime", log)
-}
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -201,6 +197,73 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
+// business logic
+
+func (r *DrupalSiteReconciler) initEnv() {
+	log := r.Log
+	log.Info("Initializing environment")
+	// <git_url>@<git_ref>
+	// Drupal runtime repo containing the dockerfiles and other config data
+	// to build the runtime images. After '@' a git ref can be specified (default: "master").
+	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@s2i"
+	runtimeRepo := strings.Split(getenvOrDie("RUNTIME_REPO", log), "@")
+	ImageRecipesRepo = runtimeRepo[0]
+	if len(runtimeRepo) > 1 {
+		ImageRecipesRepoRef = runtimeRepo[1]
+	} else {
+		ImageRecipesRepoRef = "master"
+	}
+	ClusterName = getenvOrDie("CLUSTER_NAME", log)
+
+	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + ImageRecipesRepoRef
+	directoryName := downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
+	configPath := "/tmp/drupal-runtime/"
+	createConfigDirectory(configPath, log)
+	untar("/tmp/repo.tar", "/tmp/drupal-runtime", log)
+	renameConfigDirectory(directoryName, "/tmp/drupal-runtime", log)
+}
+
+// isInstallJobCompleted checks if the drush job is successfully completed
+func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	found := &batchv1.Job{}
+	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
+	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
+	if err == nil {
+		if found.Status.Succeeded != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
+func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err1 == nil {
+		// Change the implementation here
+		if deployment.Status.ReadyReplicas != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
+func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	return len(r.getDBODProvisionedSecret(ctx, d)) > 0
+}
+
+// getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
+func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
+	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
+	if err1 == nil {
+		return dbodCR.Status.DbCredentialsSecret
+	}
+	return ""
+}
+
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	// finalizer: dependentResources
@@ -214,40 +277,27 @@ func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.L
 	return r.updateCRorFailReconcile(ctx, log, drp)
 }
 
-func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Ready",
-		Status: "True",
-	})
+//validateSpec validates the spec against the DrupalSiteSpec definition
+func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
+	_, err := govalidator.ValidateStruct(drpSpec)
+	if err != nil {
+		return newApplicationError(err, ErrInvalidSpec)
+	}
+	return nil
 }
-func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:    "Ready",
-		Status:  "False",
-		Reason:  status.ConditionReason(transientErr.Unwrap().Error()),
-		Message: transientErr.Error(),
-	})
+
+// ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
+// then returns if it needs to be updated.
+func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
+	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
+		log.Info("Adding finalizer")
+		controllerutil.AddFinalizer(drp, finalizerStr)
+		update = true
+	}
+	return
 }
-func setInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Installed",
-		Status: "True",
-	})
-}
-func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Installed",
-		Status: "False",
-	})
-}
-func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:    "Error",
-		Status:  "True",
-		Reason:  status.ConditionReason(err.Unwrap().Error()),
-		Message: err.Error(),
-	})
-}
+
+// CODE BELOW WILL GO soon -------------
 
 // getenvOrDie checks for the given variable in the environment, if not exists
 func getenvOrDie(name string, log logr.Logger) string {
