@@ -15,6 +15,7 @@ var (
 	ErrFunctionDomain = errors.New("FunctionDomainError")
 	ErrClientK8s      = errors.New("k8sAPIClientError")
 	ErrFilesystemIO   = errors.New("FilesystemIOError")
+	ErrDBOD           = errors.New("DBODError")
 )
 
 type reconcileError interface {
