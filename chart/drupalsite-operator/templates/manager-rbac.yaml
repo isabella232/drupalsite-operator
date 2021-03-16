@@ -71,6 +71,20 @@ rules:
   - routes/finalizers
   verbs:
   - '*'
+- apiGroups:
+  - dbod.cern
+  resources:
+  - dbodregistrations
+  verbs:
+  - '*'
+- apiGroups:
+  - dbod.cern
+  resources:
+  - dbodclasses
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: v1
 kind: ServiceAccount
