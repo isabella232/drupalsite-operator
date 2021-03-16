@@ -22,7 +22,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -74,19 +73,16 @@ var _ = BeforeSuite(func(done Done) {
 			filepath.Join("..", "config", "crd", "bases"),
 			filepath.Join("..", "testResources", "mock_crd"),
 		},
-		BinaryAssetsDirectory: filepath.Join("..", "testbin", "bin"),
-		ErrorIfCRDPathMissing: true,
-		KubeAPIServerFlags:    apiServerFlags,
-		// AttachControlPlaneOutput: true,
+		BinaryAssetsDirectory:    filepath.Join("..", "testbin", "bin"),
+		ErrorIfCRDPathMissing:    true,
+		KubeAPIServerFlags:       apiServerFlags,
+		AttachControlPlaneOutput: true,
 	}
 	err := drupalwebservicesv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	// +kubebuilder:scaffold:scheme
 
 	err = clientgoscheme.AddToScheme(scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = dbodv1a1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = buildv1.AddToScheme(scheme)
