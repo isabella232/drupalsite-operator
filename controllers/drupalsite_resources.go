@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -601,10 +603,11 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+	dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
 	currentobject.Spec = dbodv1a1.DBODRegistrationSpec{
 		DbodClass: string(d.Spec.Environment.DBODClass),
-		DbName:    string(d.Namespace + "-" + d.Name),
-		DbUser:    string(d.Namespace + "-" + d.Name),
+		DbName:    hex.EncodeToString(dbID[1:10]),
+		DbUser:    hex.EncodeToString(dbID[1:10]),
 		RegistrationLabels: map[string]string{
 			"drupalSite": d.Name,
 		},

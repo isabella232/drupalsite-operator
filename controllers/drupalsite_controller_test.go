@@ -75,8 +75,9 @@ var _ = Describe("DrupalSite controller", func() {
 				Publish:       false,
 				DrupalVersion: "8.9.13",
 				Environment: drupalwebservicesv1alpha1.Environment{
-					Name:     "dev",
-					QoSClass: "standard",
+					Name:      "dev",
+					QoSClass:  "standard",
+					DBODClass: "test",
 				},
 			},
 		}

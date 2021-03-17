@@ -8,4 +8,4 @@ spec:
   environment:
     name: "dev"
     qosClass: "standard"
-    dbodClass: "test-dbodclass" 
+    dbodClass: "test" 

@@ -1,4 +1,4 @@
-apiVersion: apiextensions.k8s.io/v1beta1
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   # name must match the spec fields below, and be in the form: <plural>.<group>
@@ -6,13 +6,8 @@ metadata:
 spec:
   # group name to use for REST API: /apis/<group>/<version>
   group: route.openshift.io
-  # list of versions supported by this CustomResourceDefinition
-  version: v1
   # either Namespaced or Cluster
   scope: Namespaced
-  subresources:
-    # enable spec/status
-    status: {}
   names:
     # plural name to be used in the URL: /apis/<group>/<version>/<plural>
     plural: routes
@@ -33,3 +28,25 @@ spec:
   - name: TLS
     type: string
     JSONPath: .spec.tls.type
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
