@@ -1046,5 +1046,7 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
 func siteInstallJobForDrupalSite() []string {
 	// return []string{"sh", "-c", "echo"}
-	return []string{"sh", "-c", "drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com"}
+	return []string{"sh", "-c",
+		"drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com",
+	}
 }
