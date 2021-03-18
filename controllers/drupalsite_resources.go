@@ -647,7 +647,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 	currentobject.Spec.Template.Spec = corev1.PodSpec{
 		Containers: []corev1.Container{{
-			Image:           "drupal-nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
+      Image: "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/drupal-nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
 			Name:            "nginx",
 			ImagePullPolicy: "IfNotPresent",
 			Ports: []corev1.ContainerPort{{
@@ -687,7 +687,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			},
 		},
 			{
-				Image:           "drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
+        Image: "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				Name:            "php-fpm",
 				ImagePullPolicy: "IfNotPresent",
 				Ports: []corev1.ContainerPort{{
