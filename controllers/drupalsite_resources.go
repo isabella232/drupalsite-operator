@@ -772,7 +772,7 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 			// 	MatchLabels: ls,
 			// },
 			StorageClassName: pointer.StringPtr("cephfs-no-backup"),
-			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteMany"},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("10Gi"),
