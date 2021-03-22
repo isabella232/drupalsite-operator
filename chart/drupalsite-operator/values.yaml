@@ -1,5 +1,4 @@
 # Name of the k8s cluster where the operator is deployed. Used in the `ApplicationRegistration` naming convention.
-clusterName: {}
 
 image: {}
 imagePullPolicy: Always
@@ -17,4 +16,5 @@ resources:
 
 # Operator-specific configuration
 drupalsiteOperator:
+  defaultDoamin: "web.cern.ch"
   drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"

@@ -837,16 +837,11 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
 
-	env := ""
-	if d.Spec.Environment.Name != productionEnvironment {
-		env = d.Spec.Environment.Name + "."
-	}
-
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
 	currentobject.Spec = routev1.RouteSpec{
-		Host: env + d.Name + "." + ClusterName + ".cern.ch",
+		Host: d.Spec.SiteURL,
 		To: routev1.RouteTargetReference{
 			Kind:   "Service",
 			Name:   "drupal-" + d.Name,

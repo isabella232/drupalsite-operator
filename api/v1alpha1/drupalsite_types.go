@@ -34,6 +34,12 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Publish bool `json:"publish"`
 
+	// SiteURL is the URL where the site should be made available.
+	// Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain> is configured per cluster (typically `web.cern.ch`)
+	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
+	// +optional
+	SiteURL string `json:"siteUrl,omitempty"`
+
 	// DrupalVersion defines the version of the Drupal to install
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1

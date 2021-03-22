@@ -7,13 +7,11 @@ stages:
   - go_test
 
 variables:
-  CLUSTER_NAME: drupalsite-operator-ci
+  DEFAULT_DOMAIN: "webtest.cern.ch"
   RUNTIME_REPO: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
 
 GoTest:
   stage: go_test
   image: golang:1.15
   script:
-    - export CLUSTER_NAME=test
-    - export RUNTIME_REPO=https://gitlab.cern.ch/drupal/paas/drupal-runtime.git
     - make test

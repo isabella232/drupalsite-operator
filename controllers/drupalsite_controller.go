@@ -64,8 +64,8 @@ var (
 	// and other config data to build the images
 	// Example: "s2i"
 	ImageRecipesRepoRef string
-	// ClusterName is used in the Route's Host field
-	ClusterName string
+	// DefaultDomain is used in the Route's Host field
+	DefaultDomain string
 )
 
 type strFlagList []string
@@ -213,7 +213,7 @@ func (r *DrupalSiteReconciler) initEnv() {
 	} else {
 		ImageRecipesRepoRef = "master"
 	}
-	ClusterName = getenvOrDie("CLUSTER_NAME", log)
+	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
 
 	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + ImageRecipesRepoRef
 	directoryName := downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
@@ -293,6 +293,13 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		log.Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
+	}
+	if drp.Spec.SiteURL == "" {
+		if drp.Spec.Environment.Name == productionEnvironment {
+			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
+
+		}
+		drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 	}
 	return
 }

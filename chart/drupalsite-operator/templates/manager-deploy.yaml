@@ -30,8 +30,8 @@ spec:
         env:
         - name: RUNTIME_REPO
           value: {{ .Values.drupalsiteOperator.drupalRuntimeRepo }}
-        - name: CLUSTER_NAME
-          value: {{ .Values.clusterName }}
+        - name: DEFAULT_DOMAIN
+          value: {{ .Values.drupalsiteOperator.defaultDomain }}
         livenessProbe:
           httpGet:
             path: /healthz
