@@ -34,6 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	tektoncd "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+
+	"gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
+
 	// +kubebuilder:scaffold:imports
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
@@ -51,6 +56,7 @@ func init() {
 
 	utilruntime.Must(drupalwebservicesv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(dbodv1a1.AddToScheme(scheme))
+	utilruntime.Must(tektoncd.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(routev1.AddToScheme(scheme))

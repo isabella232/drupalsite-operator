@@ -42,6 +42,29 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	tektoncd "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+)
+
+const (
+	// finalizerStr string that is going to added to every DrupalSite created
+	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
+	productionEnvironment = "production"
+	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
+)
+
+var (
+	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
+	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+	ImageRecipesRepo string
+	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
+	// and other config data to build the images
+	// Example: "s2i"
+	ImageRecipesRepoRef string
+	// ClusterName is used in the Route's Host field
+	ClusterName string
 )
 
 /*
@@ -876,7 +899,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 }
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
-func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
+func (r *DrupalSiteReconciler) jobForDrupalSiteDrush(currentobject *batchv1.Job, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -906,7 +929,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
-				Command:         siteInstallJobForDrupalSite(),
+				Command:         []string{""}, //  r.siteInstallJobForDrupalSite(d.Name, d.Namespace),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
@@ -945,6 +968,8 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+	r.siteInstallJobForDrupalSite(d.Name, d.Namespace)
+
 	return nil
 }
 
@@ -1063,9 +1088,14 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 }
 
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
-func siteInstallJobForDrupalSite() []string {
-	// return []string{"sh", "-c", "echo"}
-	return []string{"sh", "-c",
-		"drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com",
-	}
+func (r *DrupalSiteReconciler) siteInstallJobForDrupalSite(sitename string, namespace string) error {
+	taskRef := tektoncd.TaskRef{Name: "site-install", Kind: tektoncd.ClusterTaskKind}
+	taskParam1 := tektoncd.Param{Name: "drupalSite", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: sitename}}
+	taskParam2 := tektoncd.Param{Name: "namespace", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: namespace}}
+	taskSpec := tektoncd.TaskRunSpec{ServiceAccountName: "tektoncd", TaskRef: &taskRef, Params: []tektoncd.Param{taskParam1, taskParam2}}
+	newTask := tektoncd.TaskRun{Spec: taskSpec}
+	newTask.ObjectMeta.SetNamespace(namespace)
+	newTask.ObjectMeta.SetName("site-install")
+	return r.Create(context.TODO(), &newTask)
+	//return []string{"sh", "-c", "drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com"}
 }

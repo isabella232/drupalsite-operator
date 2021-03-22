@@ -15,3 +15,11 @@ The [architecture description](docs/README.md) explains in more detail.
 
 This project was generated with the [operator-sdk](https://sdk.operatorframework.io/)
 and has been updated to `operator-sdk-v1.3`.
+
+
+## TODO: Confirm we want to add this!
+
+Required variables to run DrupalSite Operator locally:
+`CLUSTER_NAME` ,ex: "clu-drupal-test"   
+`RUNTIME_REPO` ,ex: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+
