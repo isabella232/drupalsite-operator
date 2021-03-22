@@ -240,6 +240,18 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Switch "publish: false"
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.Publish = false
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting Route to be removed after switching publish to false.")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
+				}, timeout, interval).Should(Not(Succeed()))
 			})
 		})
 	})
