@@ -106,7 +106,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") {
+	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}

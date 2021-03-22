@@ -24,6 +24,8 @@ import (
 	. "github.com/onsi/gomega"
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
+	routev1 "github.com/openshift/api/route/v1"
+	"github.com/operator-framework/operator-lib/status"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -72,7 +74,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Namespace: key.Namespace,
 			},
 			Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-				Publish:       false,
+				Publish:       true,
 				DrupalVersion: "8.9.13",
 				Environment: drupalwebservicesv1alpha1.Environment{
 					Name:      "dev",
@@ -112,6 +114,7 @@ var _ = Describe("DrupalSite controller", func() {
 				is := imagev1.ImageStream{}
 				bc := buildv1.BuildConfig{}
 				dbod := dbodv1a1.DBODRegistration{}
+				route := routev1.Route{}
 
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
@@ -221,6 +224,22 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-nginx-" + key.Name, Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update drupalSite custom resource status fields to allow route conditions
+				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Installed", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check Route
+				By("Expecting Route to be created since publish is true")
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
+					return route.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
 	})
@@ -248,6 +267,7 @@ var _ = Describe("DrupalSite controller", func() {
 				deploy := appsv1.Deployment{}
 				is := imagev1.ImageStream{}
 				bc := buildv1.BuildConfig{}
+				route := routev1.Route{}
 
 				// Check PHP-FPM configMap recreation
 				By("Expecting PHP_FPM configmaps recreated")
@@ -357,6 +377,17 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-nginx-" + key.Name, Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Route
+				By("Expecting Route recreated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
+					return k8sClient.Delete(ctx, &route)
+				}, timeout, interval).Should(Succeed())
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
+					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
@@ -488,6 +519,7 @@ var _ = Describe("DrupalSite controller", func() {
 				is := imagev1.ImageStream{}
 				bc := buildv1.BuildConfig{}
 				dbod := dbodv1a1.DBODRegistration{}
+				route := routev1.Route{}
 
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
@@ -604,6 +636,21 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-nginx-" + key.Name, Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update drupalSite custom resource status fields to allow route conditions
+				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Installed", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check Route
+				By("Expecting Route to not be created since publish is false")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
+				}, timeout, interval).Should(Not(Succeed()))
 			})
 		})
 	})
