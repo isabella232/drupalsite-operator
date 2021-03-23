@@ -83,6 +83,12 @@ spec:
               publish:
                 description: Publish defines if the site has to be published or not
                 type: boolean
+              siteUrl:
+                description: SiteURL is the URL where the site should be made available.
+                  Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain>
+                  is configured per cluster (typically `web.cern.ch`)
+                pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                type: string
             required:
             - drupalVersion
             - environment
