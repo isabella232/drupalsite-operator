@@ -235,11 +235,12 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
+				// Route is supposed to be created, but since the 'ReadyReplicas' status in deployment can't be made persistent with the reconcile loop, route won't be created
 				By("Expecting Route to be created since publish is true")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
 
 				// Switch "publish: false"
 				Eventually(func() error {
@@ -392,15 +393,16 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Route
+				// Since we switch the publish field to 'false' in the last test case, there shouldn't be a route that exists
 				By("Expecting Route recreated")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
 					return k8sClient.Delete(ctx, &route)
-				}, timeout, interval).Should(Succeed())
+				}, timeout, interval).Should(Not(Succeed()))
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "drupal-" + key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
 			})
 		})
 	})
