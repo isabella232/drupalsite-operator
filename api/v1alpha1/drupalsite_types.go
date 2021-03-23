@@ -96,6 +96,11 @@ type DrupalSiteStatus struct {
 	// +kubebuilder:validation:type=array
 	// +optional
 	Conditions status.Conditions `json:"conditions,omitempty"`
+
+	// PreviousDrupalVersion stores the `drupalVersion` string during the upgrade process to alow erollback operations
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	PreviousDrupalVersion string `json:"previousDrupalVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true

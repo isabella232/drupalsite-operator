@@ -37,6 +37,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -109,7 +110,6 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
-
 	log.Info("Reconciling request")
 
 	// Fetch the DrupalSite instance
@@ -141,13 +141,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		if transientErr.Temporary() {
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
-			return reconcile.Result{}, transientErr
+			return reconcile.Result{Requeue: true}, nil
 		}
 		log.Error(transientErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		return reconcile.Result{}, nil
 	}
 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
+
 	if update := ensureSpecFinalizer(drupalSite, log); update {
 		log.Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
@@ -158,15 +159,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 	}
 
-	// Ensure installed - Installed status
-	// Create route
-
-	// Ensure all resources
-	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
-		transientErr := concat(transientErrs)
-		setNotReady(drupalSite, transientErr)
-		return handleTransientErr(transientErr, "%v while ensuring the resources")
-	}
+	// 2. Check all conditions. No actions performed  here.
 
 	// Check if DBOD has been provisioned
 	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
@@ -181,6 +174,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if update := setReady(drupalSite); update {
 			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		}
+	} else {
+		if update := setNotReady(drupalSite, nil); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
 	}
 
 	// Check if the site is installed and mark the condition
@@ -190,6 +187,36 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	} else {
 		if update := setNotInstalled(drupalSite); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
+	if baseUpdating := r.baseUpdateNeeded(ctx, drupalSite); baseUpdating {
+		if update := setConditionStatus(drupalSite, "BaseUpdating", true, nil); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+	} else {
+		if update := setConditionStatus(drupalSite, "BaseUpdating", false, nil); update {
+			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
+	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
+
+	// Ensure all resources
+	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
+		transientErr := concat(transientErrs)
+		setNotReady(drupalSite, transientErr)
+		return handleTransientErr(transientErr, "%v while ensuring the resources")
+	}
+
+	// Check if base updating status condition is checked
+	if drupalSite.ConditionTrue("BaseUpdating") {
+		err := r.runBaseUpdate(ctx, drupalSite)
+		if err.Temporary() {
+			return handleTransientErr(err, "%v while running base update")
+		} else {
+			setConditionStatus(drupalSite, "BaseUpdating", false, err)
 			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
 		}
 	}
@@ -256,6 +283,8 @@ func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webserv
 
 // getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
 func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
+	// TODO maybe change this during update
+	// TODO instead of checking checking status to fetch the DbCredentialsSecret, use the 'registrationLabels` to filter and get the name of the secret
 	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: "dbod-" + d.Name, Namespace: d.Namespace}}
 	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
 	if err1 == nil {
@@ -302,6 +331,47 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 	}
 	return
+}
+
+// getRunningdeployment fetches the running drupal deployment
+func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webservicesv1a1.DrupalSite) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+	err1 := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err1 == nil {
+		return deployment
+	}
+	return nil
+}
+
+// baseUpdateNeeded checks if a base update is required based on the image tag version and the drupalVersion in the CR spec
+func (r *DrupalSiteReconciler) baseUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	deployment := r.getRunningdeployment(ctx, d)
+	if deployment == nil {
+		if len(deployment.Spec.Template.Spec.Containers) > 0 {
+			imageTag := strings.Split(deployment.Spec.Template.Spec.Containers[0].Image, ":")[1]
+			deploymentStatus := GetDeploymentCondition(deployment.Status, appsv1.DeploymentProgressing)
+			if d.Spec.DrupalVersion != imageTag && deploymentStatus.Status != corev1.ConditionTrue {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// GetDeploymentCondition returns the condition with the provided type.
+func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
+	for i := range status.Conditions {
+		c := status.Conditions[i]
+		if c.Type == condType {
+			return &c
+		}
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) runBaseUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+	// 1. put site in maintenance
+	return nil
 }
 
 // CODE BELOW WILL GO soon -------------

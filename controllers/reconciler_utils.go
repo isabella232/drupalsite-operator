@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -18,12 +19,7 @@ func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:    "Ready",
-		Status:  "False",
-		Reason:  status.ConditionReason(transientErr.Unwrap().Error()),
-		Message: transientErr.Error(),
-	})
+	return setConditionStatus(drp, "Ready", false, transientErr)
 }
 func setInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
@@ -38,12 +34,31 @@ func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:    "Error",
-		Status:  "True",
-		Reason:  status.ConditionReason(err.Unwrap().Error()),
-		Message: err.Error(),
-	})
+	return setConditionStatus(drp, "Error", true, err)
+}
+func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType string, statusFlag bool, err reconcileError) (update bool) {
+	statusStr := func() corev1.ConditionStatus {
+		if statusFlag {
+			return "True"
+		} else {
+			return "False"
+		}
+	}
+	condition := func() status.Condition {
+		if err != nil {
+			return status.Condition{
+				Type:    "BaseUpdating",
+				Status:  statusStr(),
+				Reason:  status.ConditionReason(err.Unwrap().Error()),
+				Message: err.Error(),
+			}
+		}
+		return status.Condition{
+			Type:   "BaseUpdating",
+			Status: statusStr(),
+		}
+	}
+	return drp.Status.Conditions.SetCondition(condition())
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
