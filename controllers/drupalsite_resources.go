@@ -1092,10 +1092,9 @@ func (r *DrupalSiteReconciler) siteInstallJobForDrupalSite(sitename string, name
 	taskRef := tektoncd.TaskRef{Name: "site-install", Kind: tektoncd.ClusterTaskKind}
 	taskParam1 := tektoncd.Param{Name: "drupalSite", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: sitename}}
 	taskParam2 := tektoncd.Param{Name: "namespace", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: namespace}}
-	taskSpec := tektoncd.TaskRunSpec{ServiceAccountName: "tektoncd", TaskRef: &taskRef, Params: []tektoncd.Param{taskParam1, taskParam2}}
-	newTask := tektoncd.TaskRun{Spec: taskSpec}
+	newTask := tektoncd.TaskRun{Spec: tektoncd.TaskRunSpec{ServiceAccountName: "tektoncd", TaskRef: &taskRef, Params: []tektoncd.Param{taskParam1, taskParam2}}}
 	newTask.ObjectMeta.SetNamespace(namespace)
-	newTask.ObjectMeta.SetName("site-install")
+	newTask.ObjectMeta.SetName("")
 	return r.Create(context.TODO(), &newTask)
 	//return []string{"sh", "-c", "drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com"}
 }
