@@ -169,24 +169,21 @@ github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210312144809-29eb48685cf7
-## explicit
-gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1
-# go.uber.org/atomic v1.6.0
 # github.com/tektoncd/pipeline v0.22.0
 ## explicit
 github.com/tektoncd/pipeline/pkg/apis/config
 github.com/tektoncd/pipeline/pkg/apis/pipeline
 github.com/tektoncd/pipeline/pkg/apis/pipeline/pod
-github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1
 github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1
 github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1
 github.com/tektoncd/pipeline/pkg/apis/run/v1alpha1
 github.com/tektoncd/pipeline/pkg/apis/validate
-github.com/tektoncd/pipeline/pkg/contexts
 github.com/tektoncd/pipeline/pkg/list
 github.com/tektoncd/pipeline/pkg/reconciler/pipeline/dag
 github.com/tektoncd/pipeline/pkg/substitution
+# gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210312144809-29eb48685cf7
+## explicit
+gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1
 # go.uber.org/atomic v1.7.0
 go.uber.org/atomic
 # go.uber.org/multierr v1.5.0

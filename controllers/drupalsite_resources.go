@@ -42,29 +42,8 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tektoncd "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-)
-
-const (
-	// finalizerStr string that is going to added to every DrupalSite created
-	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
-	productionEnvironment = "production"
-	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
-)
-
-var (
-	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
-	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
-	ImageRecipesRepo string
-	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
-	// and other config data to build the images
-	// Example: "s2i"
-	ImageRecipesRepoRef string
-	// ClusterName is used in the Route's Host field
-	ClusterName string
 )
 
 /*
@@ -279,7 +258,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return jobForDrupalSiteDrush(job, dbodSecret, d)
+				return r.jobForDrupalSiteDrush(job, dbodSecret, d) // dbodSecret, d)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
@@ -899,7 +878,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 }
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
-func (r *DrupalSiteReconciler) jobForDrupalSiteDrush(currentobject *batchv1.Job, d *webservicesv1a1.DrupalSite) error {
+func (r *DrupalSiteReconciler) jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
