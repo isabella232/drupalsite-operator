@@ -17,9 +17,11 @@ This project was generated with the [operator-sdk](https://sdk.operatorframework
 and has been updated to `operator-sdk-v1.3`.
 
 
-## TODO: Confirm we want to add this!
+## Setup to run the Operator Locally
 
-Required variables to run DrupalSite Operator locally:
-`CLUSTER_NAME` ,ex: "clu-drupal-test"   
-`RUNTIME_REPO` ,ex: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+Required environment variables:
 
+ env var | example | description
+ --- | --- | ---
+`DEFAULT_DOMAIN`  | `webtest.cern.ch`           | TODO.
+`RUNTIME_REPO` | `https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master` | Allows to select the images that will be used by the operator, if `@feature-branch` will use the images set on the feature branch (Can be used commit hash as well)

@@ -32,7 +32,6 @@ import (
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -102,7 +101,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "site_install_task", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 		}
 	}
@@ -124,7 +123,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 /*
 ensureResourceX ensure the requested resource is created, with the following valid values
 	- pvc_drupal: PersistentVolume for the drupalsite
-	- site_install_job: Kubernetes Job for the drush site-install
+	- site_install_task: Tekton TaskRun install DrupalSite
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- is_php: ImageStream for PHP
@@ -253,17 +252,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "site_install_job":
+	case "site_install_task":
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "drupal-drush-" + d.Name, Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return r.jobForDrupalSiteDrush(job, dbodSecret, d) // dbodSecret, d)
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return newApplicationError(err, ErrClientK8s)
-			}
+			//TODO: Confirm that the taskRun has been created?
+			r.siteInstallTaskRunForDrupalSite(d.Name, d.Namespace)
 		}
 		return nil
 	case "cm_php":
@@ -877,81 +869,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	return nil
 }
 
-// jobForDrupalSiteDrush returns a job object thats runs drush
-func (r *DrupalSiteReconciler) jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
-	ls := labelsForDrupalSite(d.Name)
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
-			Labels: ls,
-		}
-		currentobject.Spec.Template.Spec = corev1.PodSpec{
-			InitContainers: []corev1.Container{{
-				Image:           "bash",
-				Name:            "pvc-init",
-				ImagePullPolicy: "IfNotPresent",
-				Command:         []string{"bash", "-c", "mkdir -p $DRUPAL_SHARED_VOLUME/{files,private,modules,themes}"},
-				Env: []corev1.EnvVar{
-					{
-						Name:  "DRUPAL_SHARED_VOLUME",
-						Value: "/drupal-data",
-					},
-				},
-				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
-				}},
-			}},
-			RestartPolicy: "Never",
-			Containers: []corev1.Container{{
-				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/drupal-php-" + d.Name + ":" + d.Spec.DrupalVersion,
-				Name:            "drush",
-				ImagePullPolicy: "Always",
-				Command:         []string{""}, //  r.siteInstallJobForDrupalSite(d.Name, d.Namespace),
-				Env: []corev1.EnvVar{
-					{
-						Name:  "DRUPAL_SHARED_VOLUME",
-						Value: "/drupal-data",
-					},
-				},
-				EnvFrom: []corev1.EnvFromSource{
-					{
-						SecretRef: &corev1.SecretEnvSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: dbodSecret,
-							},
-						},
-					},
-				},
-				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
-				}},
-			}},
-			Volumes: []corev1.Volume{{
-				Name: "drupal-directory-" + d.Name,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "drupal-pv-claim-" + d.Name,
-					},
-				},
-			}},
-		}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls["app"] = "drush"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	r.siteInstallJobForDrupalSite(d.Name, d.Namespace)
-
-	return nil
-}
-
 // updateConfigMapForPHPFPM ensures a configMaps object to configure PHP, if not present. Else configmap object is updated and a new rollout is triggered
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -1066,14 +983,14 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 	}
 }
 
-// siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
-func (r *DrupalSiteReconciler) siteInstallJobForDrupalSite(sitename string, namespace string) error {
+// siteInstallTaskRunForDrupalSite creates a TaskRun that will install the Drupal site
+// TaskRun definitions are set here: https://gitlab.cern.ch/drupal/paas/drupal-operations
+func (r *DrupalSiteReconciler) siteInstallTaskRunForDrupalSite(sitename string, namespace string) error {
 	taskRef := tektoncd.TaskRef{Name: "site-install", Kind: tektoncd.ClusterTaskKind}
 	taskParam1 := tektoncd.Param{Name: "drupalSite", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: sitename}}
 	taskParam2 := tektoncd.Param{Name: "namespace", Value: tektoncd.ArrayOrString{Type: tektoncd.ParamTypeString, StringVal: namespace}}
 	newTask := tektoncd.TaskRun{Spec: tektoncd.TaskRunSpec{ServiceAccountName: "tektoncd", TaskRef: &taskRef, Params: []tektoncd.Param{taskParam1, taskParam2}}}
 	newTask.ObjectMeta.SetNamespace(namespace)
-	newTask.ObjectMeta.SetName("")
+	newTask.ObjectMeta.SetName(sitename + "-site-install")
 	return r.Create(context.TODO(), &newTask)
-	//return []string{"sh", "-c", "drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com"}
 }

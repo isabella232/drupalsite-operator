@@ -176,24 +176,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{Requeue: true, RequeueAfter: REQUEUE_INTERVAL}, nil
 	}
 
-	// Check if the drupal site is ready to serve requests
-	if siteReady := r.isDrupalSiteReady(ctx, drupalSite); siteReady {
-		if update := setReady(drupalSite); update {
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	}
-
-	// Check if the site is installed and mark the condition
-	if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
-		if update := setInstalled(drupalSite); update {
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	} else {
-		if update := setNotInstalled(drupalSite); update {
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	}
-
 	return ctrl.Result{}, nil
 }
 
