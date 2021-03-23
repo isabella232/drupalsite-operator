@@ -34,6 +34,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,6 +110,10 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
+		}
+	} else {
+		if transientErr := r.ensureNoRoute(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
 		}
 	}
 	return transientErrs
@@ -295,6 +300,22 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
+}
+
+func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "drupal-" + d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, route); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
 }
 
 // labelsForDrupalSite returns the labels for selecting the resources
