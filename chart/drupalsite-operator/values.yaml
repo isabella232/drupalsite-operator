@@ -16,5 +16,5 @@ resources:
 
 # Operator-specific configuration
 drupalsiteOperator:
-  defaultDoamin: "web.cern.ch"
+  defaultDomain: "web.cern.ch"
   drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
