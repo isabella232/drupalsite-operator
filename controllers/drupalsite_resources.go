@@ -85,18 +85,21 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 	return execToPodThroughAPI(containerName, podList.Items[0].Name, d.Namespace, stdin, command...)
 }
 
+// execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
+func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
+	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
+	if err != nil || stderr != "" {
+		return "", fmt.Errorf("STDERR: %s \n%w", stderr, err)
+	}
+	return stdout, nil
+}
+
 /*
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.
 */
 func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
-
-	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "drush", "version")
-	if err != nil {
-		log.Error(err, "Error while exec into pod")
-	}
-	log.Info("EXEC", "stdout", sout, "stderr", serr)
 
 	// 1. BuildConfigs and ImageStreams
 
@@ -185,7 +188,6 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
-	nameVersionHash := md5.Sum([]byte(d.Name + d.Spec.DrupalVersion))
 	switch resType {
 	case "is_s2i":
 		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
@@ -221,7 +223,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "bc_s2i":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + hex.EncodeToString(nameVersionHash[0:7]), Namespace: d.Namespace}}
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
@@ -233,7 +235,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "bc_nginx":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + hex.EncodeToString(nameVersionHash[0:7]), Namespace: d.Namespace}}
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + nameVersionHash(d), Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
 			return buildConfigForDrupalSiteNginx(bc, d)
@@ -244,7 +246,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "bc_php":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "php-" + hex.EncodeToString(nameVersionHash[0:7]), Namespace: d.Namespace}}
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "php-" + nameVersionHash(d), Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
 			return buildConfigForDrupalSitePHP(bc, d)
@@ -339,7 +341,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "dbod_cr":
-		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: hex.EncodeToString(nameVersionHash[0:7]) + d.Name, Namespace: d.Namespace}}
+		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name + nameVersionHash(d), Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
 			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
 			return dbodForDrupalSite(dbod, d)
@@ -1144,5 +1146,11 @@ func enableSiteMaintenanceModeCommandForDrupalSite() []string {
 func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 	return []string{"sh", "-c",
 		"drush state:set system.maintenance_mode 0 --input-format=integer && drush cache:rebuild",
+	}
+}
+
+func checkUpdbStatus() []string {
+	return []string{"sh", "-c",
+		"drush updatedb-status --format=json 2>/dev/null | jq '. | length'",
 	}
 }

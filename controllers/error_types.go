@@ -14,6 +14,7 @@ var (
 	// Consider constraining the arg type.
 	ErrFunctionDomain = errors.New("FunctionDomainError")
 	ErrClientK8s      = errors.New("k8sAPIClientError")
+	ErrPodExec        = errors.New("ExecInPodError")
 	ErrFilesystemIO   = errors.New("FilesystemIOError")
 	ErrDBOD           = errors.New("DBODError")
 )

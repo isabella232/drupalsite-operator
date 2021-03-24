@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -19,7 +21,7 @@ func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
-	return setConditionStatus(drp, "Ready", false, transientErr)
+	return setConditionStatus(drp, "Ready", false, transientErr, false)
 }
 func setInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
@@ -34,27 +36,30 @@ func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
-	return setConditionStatus(drp, "Error", true, err)
+	return setConditionStatus(drp, "Error", true, err, false)
 }
-func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType string, statusFlag bool, err reconcileError) (update bool) {
+func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType status.ConditionType, statusFlag bool, err reconcileError, statusUnknown bool) (update bool) {
 	statusStr := func() corev1.ConditionStatus {
+		if statusUnknown {
+			return corev1.ConditionUnknown
+		}
 		if statusFlag {
-			return "True"
+			return corev1.ConditionTrue
 		} else {
-			return "False"
+			return corev1.ConditionFalse
 		}
 	}
 	condition := func() status.Condition {
 		if err != nil {
 			return status.Condition{
-				Type:    "BaseUpdating",
+				Type:    conditionType,
 				Status:  statusStr(),
 				Reason:  status.ConditionReason(err.Unwrap().Error()),
 				Message: err.Error(),
 			}
 		}
 		return status.Condition{
-			Type:   "BaseUpdating",
+			Type:   conditionType,
 			Status: statusStr(),
 		}
 	}
@@ -79,6 +84,12 @@ func (r *DrupalSiteReconciler) updateCRStatusorFailReconcile(ctx context.Context
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// nameVersionHash returns a hash using the drupalSite name and version
+func nameVersionHash(drp *webservicesv1a1.DrupalSite) string {
+	hash := md5.Sum([]byte(drp.Name + drp.Spec.DrupalVersion))
+	return hex.EncodeToString(hash[0:7])
 }
 
 func (i *strFlagList) String() string {

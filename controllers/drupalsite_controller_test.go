@@ -119,14 +119,14 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "dbod-" + key.Name, Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
 				By("Updating secret name in DBOD resource status")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "dbod-" + key.Name, Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
@@ -214,14 +214,14 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check PHP buildConfig
 				By("Expecting PHP buildConfig created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx buildConfig
 				By("Expecting Nginx buildConfigs created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -373,22 +373,22 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check PHP buildConfig
 				By("Expecting PHP buildConfig recreated")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return k8sClient.Delete(ctx, &bc)
 				}, timeout, interval).Should(Succeed())
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx buildConfig
 				By("Expecting Nginx buildConfigs recreated")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return k8sClient.Delete(ctx, &bc)
 				}, timeout, interval).Should(Succeed())
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -538,14 +538,14 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "dbod-" + key.Name, Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
 				By("Updating secret name in DBOD resource status")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "dbod-" + key.Name, Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
@@ -633,21 +633,21 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check S2I buildConfig
 				By("Expecting S2I buildConfig created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check PHP buildConfig
 				By("Expecting PHP buildConfig created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx buildConfig
 				By("Expecting Nginx buildConfigs created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 

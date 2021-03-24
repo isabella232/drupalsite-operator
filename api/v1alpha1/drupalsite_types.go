@@ -132,3 +132,8 @@ func (drp DrupalSite) ConditionTrue(condition status.ConditionType) (update bool
 	init := drp.Status.Conditions.GetCondition(condition)
 	return init != nil && init.Status == v1.ConditionTrue
 }
+
+func (drp DrupalSite) ErrorTrue(condition status.ConditionType) (update bool) {
+	init := drp.Status.Conditions.GetCondition(condition)
+	return init != nil && init.Reason == "Error"
+}
