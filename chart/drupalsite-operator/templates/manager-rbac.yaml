@@ -38,6 +38,15 @@ rules:
   - get
   - list
 - apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites
