@@ -128,12 +128,14 @@ func init() {
 	SchemeBuilder.Register(&DrupalSite{}, &DrupalSiteList{})
 }
 
+// ConditionTrue reports if the condition is true
 func (drp DrupalSite) ConditionTrue(condition status.ConditionType) (update bool) {
 	init := drp.Status.Conditions.GetCondition(condition)
 	return init != nil && init.Status == v1.ConditionTrue
 }
 
-func (drp DrupalSite) ErrorTrue(condition status.ConditionType) (update bool) {
+// ConditionReasonSet reports if the condition Reason is not empty
+func (drp DrupalSite) ConditionReasonSet(condition status.ConditionType) (update bool) {
 	init := drp.Status.Conditions.GetCondition(condition)
-	return init != nil && init.Reason == "Error"
+	return init != nil && init.Reason != ""
 }

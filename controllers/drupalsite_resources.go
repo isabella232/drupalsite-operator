@@ -385,7 +385,7 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite) corev1.ObjectReferen
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
+			Name: "site-builder-s2i-" + nameVersionHash(d) + ":" + d.Spec.DrupalVersion,
 		}
 	}
 	return corev1.ObjectReference{
@@ -403,7 +403,7 @@ func triggersForBuildConfigs(d *webservicesv1a1.DrupalSite) buildv1.BuildTrigger
 			ImageChange: &buildv1.ImageChangeTrigger{
 				From: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
+					Name: "site-builder-s2i-" + nameVersionHash(d) + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		}

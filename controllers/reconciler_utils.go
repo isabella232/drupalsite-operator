@@ -92,6 +92,25 @@ func nameVersionHash(drp *webservicesv1a1.DrupalSite) string {
 	return hex.EncodeToString(hash[0:7])
 }
 
+// getBuildStatus gets the build status from one of the builds for a given resources
+func getBuildStatus(resource string, drp *webservicesv1a1.DrupalSite) (string, err) {
+	buildList := &buildv1.BuildList{}
+	buildLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + "-" + nameVersionHash(d)},
+	})
+	options := client.ListOptions{
+		LabelSelector: buildLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &buildList, &options)
+	if err != nil {
+		return nil, newApplicationError(err, ErrClientK8s)
+	}
+	// Check for one more build?
+	if len(buildList.Items) > 0 {
+		return buildList.Items[0].Status.Phase, nil
+}
+
 func (i *strFlagList) String() string {
 	return strings.Join(*i, ",")
 }
