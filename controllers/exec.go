@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strings"
+	"os"
 
 	core_v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -21,8 +22,13 @@ import (
 func getClientConfig() (*rest.Config, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		err = fmt.Errorf("InClusterConfig as well as BuildConfigFromFlags Failed. Error in InClusterConfig: %+v", err)
-		return nil, err
+		err1 := err
+		kubeconfig := os.Getenv("KUBECONFIG")
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			err = fmt.Errorf("InClusterConfig as well as BuildConfigFromFlags Failed. Error in InClusterConfig: %+v\nError in BuildConfigFromFlags: %+v", err1, err)
+			return nil, err
+		}
 	}
 	return config, nil
 }
@@ -69,7 +75,7 @@ func getRESTClient() (*rest.RESTClient, error) {
 // :return: string: Output of the command. (STDOUT)
 //          string: Errors. (STDERR)
 //           error: If any error has occurred otherwise `nil`
-func execToPodThroughAPI(command, containerName, podName, namespace string, stdin io.Reader) (stdout string, stderr string, err error) {
+func execToPodThroughAPI(containerName, podName, namespace string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
 	config, err := getClientConfig()
 	if err != nil {
 		return "", "", err
@@ -92,7 +98,7 @@ func execToPodThroughAPI(command, containerName, podName, namespace string, stdi
 
 	parameterCodec := runtime.NewParameterCodec(scheme)
 	req.VersionedParams(&core_v1.PodExecOptions{
-		Command:   strings.Fields(command),
+		Command:   command,
 		Container: containerName,
 		Stdin:     stdin != nil,
 		Stdout:    true,

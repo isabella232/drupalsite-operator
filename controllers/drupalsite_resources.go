@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -45,10 +46,43 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func (r *DrupalSiteReconciler) execToDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, command, containerName string, stdin io.Reader) (stdout string, stderr string, err error) {
-	//pod := r.Get(ctx)
-
-	return execToPodThroughAPI(command, containerName, "test", d.Namespace, stdin)
+// execToServerPod executes a command to the first running server pod of the Drupal site.
+//
+// Commands are interpreted similar to how kubectl does it, eg to do "drush cr" either of these will work:
+// - "drush", "cr"
+// - "sh", "-c", "drush cr"
+// The last syntax allows passing an entire bash script as a string.
+//
+// Example:
+// ````
+//	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "sh", "-c", "drush version; ls")
+//	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "drush", "version")
+//	if err != nil {
+//		log.Error(err, "Error while exec into pod")
+//	}
+//	log.Info("EXEC", "stdout", sout, "stderr", serr)
+// ````
+func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
+	})
+	if err != nil {
+		return "", "", err
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &podList, &options)
+	if err != nil {
+		return "", "", err
+	}
+	if len(podList.Items) == 0 {
+		return "", "", errors.New("can't find pod with these labels")
+	}
+	fmt.Println(podList.Items[0].Name)
+	return execToPodThroughAPI(containerName, podList.Items[0].Name, d.Namespace, stdin, command...)
 }
 
 /*
@@ -58,7 +92,12 @@ This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service
 func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
 
-	r.execToDeployment(ctx, drp, "ls", "php-fpm", nil)
+	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "drush", "version")
+	if err != nil {
+		log.Error(err, "Error while exec into pod")
+	}
+	log.Info("EXEC", "stdout", sout, "stderr", serr)
+
 	// 1. BuildConfigs and ImageStreams
 
 	if len(drp.Spec.Environment.ExtraConfigRepo) > 0 {

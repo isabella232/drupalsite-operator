@@ -191,15 +191,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if baseUpdating := r.baseUpdateNeeded(ctx, drupalSite); baseUpdating {
-		if update := setConditionStatus(drupalSite, "BaseUpdating", true, nil); update {
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	} else {
-		if update := setConditionStatus(drupalSite, "BaseUpdating", false, nil); update {
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	}
+	//if baseUpdating := r.baseUpdateNeeded(ctx, drupalSite); baseUpdating {
+	//	if update := setConditionStatus(drupalSite, "BaseUpdating", true, nil); update {
+	//		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+	//	}
+	//} else {
+	//	if update := setConditionStatus(drupalSite, "BaseUpdating", false, nil); update {
+	//		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+	//	}
+	//}
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
 
@@ -211,15 +211,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if base updating status condition is checked
-	if drupalSite.ConditionTrue("BaseUpdating") {
-		err := r.runBaseUpdate(ctx, drupalSite)
-		if err.Temporary() {
-			return handleTransientErr(err, "%v while running base update")
-		} else {
-			setConditionStatus(drupalSite, "BaseUpdating", false, err)
-			return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
-		}
-	}
+	//if drupalSite.ConditionTrue("BaseUpdating") {
+	//	err := r.runBaseUpdate(ctx, drupalSite)
+	//	if err.Temporary() {
+	//		return handleTransientErr(err, "%v while running base update")
+	//	} else {
+	//		setConditionStatus(drupalSite, "BaseUpdating", false, err)
+	//		return r.updateCRStatusorFailReconcile(ctx, log, drupalSite)
+	//	}
+	//}
 
 	return ctrl.Result{}, nil
 }
