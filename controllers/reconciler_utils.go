@@ -8,9 +8,12 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	buildv1 "github.com/openshift/api/build/v1"
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -76,8 +79,8 @@ func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log 
 	return reconcile.Result{}, nil
 }
 
-// updateCRStatusorFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteReconciler) updateCRStatusorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
+// updateCRStatusOrFailReconcile tries to update the Custom Resource Status and logs any error
+func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Status().Update(ctx, drp); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
@@ -86,29 +89,31 @@ func (r *DrupalSiteReconciler) updateCRStatusorFailReconcile(ctx context.Context
 	return reconcile.Result{}, nil
 }
 
-// nameVersionHash returns a hash using the drupalSite name and version
-func nameVersionHash(drp *webservicesv1a1.DrupalSite) string {
-	hash := md5.Sum([]byte(drp.Name + drp.Spec.DrupalVersion))
-	return hex.EncodeToString(hash[0:7])
-}
-
 // getBuildStatus gets the build status from one of the builds for a given resources
-func getBuildStatus(resource string, drp *webservicesv1a1.DrupalSite) (string, err) {
+func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource string, drp *webservicesv1a1.DrupalSite) (buildv1.BuildPhase, error) {
 	buildList := &buildv1.BuildList{}
 	buildLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + "-" + nameVersionHash(d)},
+		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + "-" + nameVersionHash(drp)},
 	})
 	options := client.ListOptions{
 		LabelSelector: buildLabels,
-		Namespace:     d.Namespace,
+		Namespace:     drp.Namespace,
 	}
-	err = r.List(ctx, &buildList, &options)
+	err = r.List(ctx, buildList, &options)
 	if err != nil {
-		return nil, newApplicationError(err, ErrClientK8s)
+		return "", newApplicationError(err, ErrClientK8s)
 	}
 	// Check for one more build?
 	if len(buildList.Items) > 0 {
 		return buildList.Items[0].Status.Phase, nil
+	}
+	return "", newApplicationError(err, ErrClientK8s)
+}
+
+// nameVersionHash returns a hash using the drupalSite name and version
+func nameVersionHash(drp *webservicesv1a1.DrupalSite) string {
+	hash := md5.Sum([]byte(drp.Name + drp.Spec.DrupalVersion))
+	return hex.EncodeToString(hash[0:7])
 }
 
 func (i *strFlagList) String() string {

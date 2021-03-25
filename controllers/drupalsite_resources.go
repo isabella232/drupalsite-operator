@@ -1138,7 +1138,7 @@ func siteInstallJobForDrupalSite() []string {
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed for jobForDrupalSiteMaintenanceMode
 func enableSiteMaintenanceModeCommandForDrupalSite() []string {
 	return []string{"sh", "-c",
-		"drush state:set system.maintenance_mode 1 --input-format=integer && drush cache:rebuild",
+		"drush state:set system.maintenance_mode 1 --input-format=integer",
 	}
 }
 
@@ -1153,4 +1153,8 @@ func checkUpdbStatus() []string {
 	return []string{"sh", "-c",
 		"drush updatedb-status --format=json 2>/dev/null | jq '. | length'",
 	}
+}
+
+func checkSiteMaitenanceStatus() []string {
+	return []string{"sh", "-c", "drush state:get system.maintenance_mode | grep -q '1'; if [[ $? -eq 0 ]] ; then echo 'true'; else echo 'false'; fi"}
 }
