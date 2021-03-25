@@ -119,14 +119,14 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
 				By("Updating secret name in DBOD resource status")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
@@ -538,14 +538,14 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
 				By("Updating secret name in DBOD resource status")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &dbod)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					dbod.Status.DbCredentialsSecret = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())

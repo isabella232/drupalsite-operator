@@ -257,7 +257,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "deploy_drupal":
-		if d.ConditionTrue("BaseUpdating") || d.ConditionTrue("DBUpdating") {
+		if d.ConditionTrue("CodeUpdating") || d.ConditionTrue("DBUpdating") {
 			return nil
 		}
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
@@ -341,7 +341,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "dbod_cr":
-		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name + nameVersionHash(d), Namespace: d.Namespace}}
+		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
 			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
 			return dbodForDrupalSite(dbod, d)
@@ -512,7 +512,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 			Output: buildv1.BuildOutput{
 				To: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
+					Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		},
@@ -582,7 +582,7 @@ func buildConfigForDrupalSitePHP(currentobject *buildv1.BuildConfig, d *webservi
 			Output: buildv1.BuildOutput{
 				To: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
+					Name: "php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		},
@@ -650,7 +650,7 @@ func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webser
 			Output: buildv1.BuildOutput{
 				To: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: currentobject.Name + ":" + d.Spec.DrupalVersion,
+					Name: "nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		},
