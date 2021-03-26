@@ -145,7 +145,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 				By("Expecting the drush job to have the EnvFrom secret field set correctly")
 				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
 						return false
 					}
@@ -207,7 +207,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -362,11 +362,11 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job recreated")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return k8sClient.Delete(ctx, &job)
 				}, timeout, interval).Should(Succeed())
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -564,7 +564,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 				By("Expecting the drush job to have the EnvFrom secret field set correctly")
 				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
 						return false
 					}
@@ -626,7 +626,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "drush-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 

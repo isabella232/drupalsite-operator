@@ -138,8 +138,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	handleTransientErr := func(transientErr reconcileError, logstrFmt string) (reconcile.Result, error) {
-		setNotReady(drupalSite, transientErr)
+	handleTransientErr := func(transientErr reconcileError, logstrFmt string, status string) (reconcile.Result, error) {
+		if status == "Ready" {
+			setConditionStatus(drupalSite, "Ready", false, transientErr, false)
+		} else if status == "UpdateNeeded" {
+			setConditionStatus(drupalSite, "UpdateNeeded", false, transientErr, false)
+		}
 		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		if transientErr.Temporary() {
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
@@ -180,10 +184,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// TODO simplify logic by splitting into 2
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
-	if updateNeeded, err := r.updateNeeded(ctx, drupalSite); err != nil || updateNeeded {
-		if err != nil {
+	updateNeeded, typeUpdate, reconcileErr := r.updateNeeded(ctx, drupalSite)
+	if reconcileErr != nil || updateNeeded {
+		if reconcileErr != nil {
 			// Do not return in this case, but continue the reconciliation
-			update = setConditionStatus(drupalSite, "UpdateNeeded", true, err, true) || update
+			update = setConditionStatus(drupalSite, "UpdateNeeded", true, reconcileErr, true) || update
 		} else {
 			update = setConditionStatus(drupalSite, "UpdateNeeded", true, nil, false) || update
 		}
@@ -202,75 +207,74 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
 		transientErr := concat(transientErrs)
 		setNotReady(drupalSite, transientErr)
-		return handleTransientErr(transientErr, "%v while ensuring the resources")
+		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
 	}
 
-	// If an update process is marked, then put the site in maintenance mode, and if not, take it off maintenance
-	if drupalSite.ConditionTrue("CodeUpdating") || drupalSite.ConditionTrue("DBUpdating") {
-		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, enableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-	} else {
-		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, disableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-	}
-
-	// Set "CodeUpdating" and perform code update
+	// Set "UpdateNeeded" and perform code update
 	// 1. set the Status.previousDrupalVersion
 	// 2. wait for Builds to be ready
-	// 3. set condition "CodeUpdating":=True
-	// 4. ensure updated deployment
-	// 5. set condition "CodeUpdating":=False
-	if drupalSite.ConditionTrue("UpdateNeeded") && !drupalSite.ConditionReasonSet("CodeUpdating") {
+	// 3. ensure updated deployment
+	// 4. set condition "CodeUpdatingFailed" to true if there is an unrecoverable error & rollback
 
+	if drupalSite.ConditionTrue("UpdateNeeded") && typeUpdate == "CodeUpdate" {
 		// wait for Builds to succeed
 		if err := r.checkBuildstatusForUpdate(ctx, drupalSite); err != nil {
 			if err.Temporary() {
-				return handleTransientErr(err, "%v while building images for the new Drupal version")
+				// try to reconcile after a few seconds like half a minute or so
+				return handleTransientErr(err, "%v while building images for the new Drupal version", "UpdateNeeded")
 			} else {
-				setConditionStatus(drupalSite, "CodeUpdating", false, err, false)
+				err.Wrap("%v: Failed to update version " + drupalSite.Spec.DrupalVersion)
+				setConditionStatus(drupalSite, "CodeUpdatingFailed", true, err, false)
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
-		}
-
-		if update := setConditionStatus(drupalSite, "CodeUpdating", true, nil, false); update {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 
 		if err := r.ensureUpdatedDeployment(ctx, drupalSite); err != nil {
 			if err.Temporary() {
-				return handleTransientErr(err, "%v while deploying the updated Drupal images")
+				return handleTransientErr(err, "%v while deploying the updated Drupal images of version", "UpdateNeeded")
 			} else {
-				setConditionStatus(drupalSite, "CodeUpdating", false, err, false)
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+				err.Wrap("%v: Failed to update version " + drupalSite.Spec.DrupalVersion)
+				setConditionStatus(drupalSite, "CodeUpdatingFailed", true, err, false)
+				//rollback here
+				if err := r.rollBackCodeUpdate(ctx, drupalSite, newApplicationError(nil, ErrDeploymentUpdateFailed)); err != nil {
+					return ctrl.Result{}, nil
+				}
 			}
 		}
 
-		if update := setConditionStatus(drupalSite, "CodeUpdating", false, nil, false); update {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
+		setConditionStatus(drupalSite, "CodeUpdatingFailed", false, nil, false)
+		setConditionStatus(drupalSite, "UpdateNeeded", false, nil, false)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
+
+	// If an update process is marked, then put the site in maintenance mode, and if not, take it off maintenance
+	// if drupalSite.ConditionTrue("CodeUpdating") || drupalSite.ConditionTrue("DBUpdating") {
+
+	// } else {
+	// 	if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, disableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
+	// 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	// 	}
+	// }
 
 	// Set "DBUpdating" and perform DB update
-	if drupalSite.ConditionTrue("UpdateNeeded") && !drupalSite.ConditionReasonSet("CodeUpdating") &&
-		!drupalSite.ConditionTrue("CodeUpdating") && !drupalSite.ConditionReasonSet("DBUpdating") {
-		if update := setConditionStatus(drupalSite, "DBUpdating", true, nil, false); update {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-		err := r.runDBUpdate(ctx, drupalSite)
-		if err != nil {
-			if err.Temporary() {
-				return handleTransientErr(err, "%v while running DB update")
-			} else {
-				setConditionStatus(drupalSite, "DBUpdating", false, err, false)
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		}
-		if update := setConditionStatus(drupalSite, "DBUpdating", false, nil, false); update {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-	}
+	//
+	// if drupalSite.ConditionTrue("UpdateNeeded") && typeUpdate == "DBUpdate" {
+	// 	if err := r.takeDBBackup(ctx, drupalSite); err != nil {
+
+	// 	}
+	// 	if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, enableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
+	// 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	// 	}
+	// 	err := r.runDBUpdate(ctx, drupalSite)
+	// 	if err != nil {
+	// 		if err.Temporary() {
+	// 			return handleTransientErr(err, "%v while running DB update")
+	// 		} else {
+	// 			setConditionStatus(drupalSite, "DBUpdating", false, err, false)
+	// 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	// 		}
+	// 	}
+	// }
 
 	// 4. Check DBOD has been provisioned and reconcile if needed
 	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
@@ -423,39 +427,49 @@ func (r *DrupalSiteReconciler) isGivenImageInNginxImageStreamTagItems(ctx contex
 	return false, ErrClientK8s
 }
 
-// updateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
-func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
+// didRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
+func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, error) {
+	pod, err := r.getRunningPod(ctx, d)
+	if err != nil {
+		return false, err
+	}
+	if pod.Status.Phase != corev1.PodRunning || pod.Annotations["drupalVersion"] != d.Spec.DrupalVersion {
+		return false, errors.New("Pod did not roll out successfully")
+	}
+	return true, nil
+}
+
+// UpdateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
+func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, string, reconcileError) {
 	deployment, err := r.getRunningdeployment(ctx, d)
 	if err != nil {
-		return false, newApplicationError(err, ErrClientK8s)
+		return false, "", newApplicationError(err, ErrClientK8s)
 	}
 	// If the deployment has a different image tag, then update needed
 	// NOTE: a more robust check could be done with Drush inside the pod
 	if len(deployment.Spec.Template.Spec.Containers) > 0 {
 		image := deployment.Spec.Template.Spec.Containers[0].Image
 		if len(image) < 2 {
-			return false, newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
+			return false, "", newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
 		}
-		deploymentProgressing := GetDeploymentCondition(deployment.Status, appsv1.DeploymentProgressing)
-		imageInTag, err := r.isGivenImageInNginxImageStreamTagItems(ctx, d, image)
-		if err != nil {
-			return false, newApplicationError(errors.New("cannot check if the given image is part of the nginx imagestream tag items  "), ErrClientK8s)
-		}
-		// sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkSiteMaitenanceStatus()...)
-		// fmt.Println(sout[1:])
-		if !imageInTag && deploymentProgressing.Status != corev1.ConditionTrue {
-			return true, nil
+		imageInTag := d.Spec.DrupalVersion == strings.Split(image, ":")[2]
+		// if err != nil {
+		// 	return false, "", newApplicationError(errors.New("cannot check if the given image is part of the nginx imagestream tag items  "), ErrClientK8s)
+		// }
+		// Check if image is different, check if current site is ready and installed
+		if !imageInTag && d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
+			return true, "CodeUpdate", nil
 		}
 	}
-	// If drush updb-status needs update, then update needed
+	// If drush updb-status needs update, then a database update needed
 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
 	if err != nil {
-		return false, newApplicationError(err, ErrPodExec)
+		return false, "", newApplicationError(err, ErrPodExec)
 	}
 	if sout != "" {
-		return true, nil
+		return true, "DBUpdate", nil
 	}
-	return false, nil
+	return false, "", nil
 }
 
 // GetDeploymentCondition returns the condition with the provided type.
@@ -490,8 +504,10 @@ func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d 
 		return newApplicationError(err, ErrClientK8s)
 	case status == "Failed" || status == "Error":
 		return r.rollBackCodeUpdate(ctx, d, newApplicationError(nil, ErrBuildFailed))
+	case status != buildv1.BuildPhaseComplete:
+		return newApplicationError(err, ErrTemporary)
 	}
-	return newApplicationError(err, ErrTemporary)
+	return nil
 }
 
 // ensureUpdatedDeployment runs the logic to do the base update for a new Drupal version
@@ -508,7 +524,6 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 			return newApplicationError(err, ErrClientK8s)
 		}
 	}
-
 	// Check if deployment has rolled out
 	deployment, err := r.getRunningdeployment(ctx, d)
 	if err != nil {
@@ -521,10 +536,9 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 		}
 	}
 
-	if GetDeploymentCondition(deployment.Status, appsv1.DeploymentAvailable) != nil {
-		if GetDeploymentCondition(deployment.Status, appsv1.DeploymentAvailable).Status == corev1.ConditionTrue {
-
-		}
+	rollout, err := r.didRollOutSucceed(ctx, d)
+	if rollout != true || err != nil {
+		return newApplicationError(err, ErrTemporary)
 	}
 
 	return nil
@@ -545,17 +559,25 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 		}
 	}
 
+	d.Spec.DrupalVersion = d.Status.PreviousDrupalVersion
 	// Make error permanent
-	if err.Temporary() {
-		err = newApplicationError(err, ErrPermanent)
-	}
-	setConditionStatus(d, "CodeUpdating", false, err, false)
-	return err
-}
-
-func (r *DrupalSiteReconciler) runDBUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+	// if err.Temporary() {
+	// 	err = newApplicationError(err, ErrPermanent)
+	// }
+	setConditionStatus(d, "UpdateNeeded", false, nil, false)
 	return nil
 }
+
+// func (r *DrupalSiteReconciler) runDBUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+// 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
+// 	if err != nil {
+// 		return newApplicationError(err, ErrPodExec)
+// 	}
+// 	if sout != "" {
+// 		return nil
+// 	}
+// 	return
+// }
 
 // CODE BELOW WILL GO soon -------------
 

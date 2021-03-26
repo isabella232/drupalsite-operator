@@ -63,12 +63,22 @@ import (
 //	log.Info("EXEC", "stdout", sout, "stderr", serr)
 // ````
 func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
+	pod, err := r.getRunningPod(ctx, d)
+	if err != nil {
+		return "", "", err
+	}
+	fmt.Println(pod.Name)
+	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
+}
+
+// getRunningPod fetches the list of the running pods for the current deployment and returns the first one from the list
+func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservicesv1a1.DrupalSite) (corev1.Pod, error) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
 	})
 	if err != nil {
-		return "", "", err
+		return corev1.Pod{}, err
 	}
 	options := client.ListOptions{
 		LabelSelector: podLabels,
@@ -76,13 +86,12 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 	}
 	err = r.List(ctx, &podList, &options)
 	if err != nil {
-		return "", "", err
+		return corev1.Pod{}, err
 	}
 	if len(podList.Items) == 0 {
-		return "", "", errors.New("can't find pod with these labels")
+		return corev1.Pod{}, errors.New("can't find pod with these labels")
 	}
-	fmt.Println(podList.Items[0].Name)
-	return execToPodThroughAPI(containerName, podList.Items[0].Name, d.Namespace, stdin, command...)
+	return podList.Items[0], nil
 }
 
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
@@ -257,7 +266,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "deploy_drupal":
-		if d.ConditionTrue("CodeUpdating") || d.ConditionTrue("DBUpdating") {
+		if d.ConditionTrue("UpdateNeeded") {
 			return nil
 		}
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
@@ -700,6 +709,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				"{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace +
 				"\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\"php-fpm\")].image\",\"pause\":\"false\"}]",
 		}
+		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
 			"php-configmap-version":   "1",
 			"nginx-configmap-version": "1",
@@ -722,10 +732,12 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		MatchLabels: ls,
 	}
 	currentobject.Spec.Template.ObjectMeta.Labels = ls
+	// Add an annotation to be able to verify what version of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
+	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
 
 	currentobject.Spec.Template.Spec = corev1.PodSpec{
 		Containers: []corev1.Container{{
-			Image:           "nginx-" + d.Name + ":" + drupalVersion,
+			Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
 			Name:            "nginx",
 			ImagePullPolicy: "IfNotPresent",
 			Ports: []corev1.ContainerPort{{
@@ -765,7 +777,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			},
 		},
 			{
-				Image:           "php-" + d.Name + ":" + drupalVersion,
+				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				Name:            "php-fpm",
 				ImagePullPolicy: "IfNotPresent",
 				Ports: []corev1.ContainerPort{{
@@ -960,7 +972,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           "php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),
@@ -1145,7 +1157,7 @@ func enableSiteMaintenanceModeCommandForDrupalSite() []string {
 // disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed for jobForDrupalSiteMaintenanceMode
 func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 	return []string{"sh", "-c",
-		"drush state:set system.maintenance_mode 0 --input-format=integer && drush cache:rebuild",
+		"drush state:set system.maintenance_mode 0 --input-format=integer && drush cache:rebuild 2>/dev/null",
 	}
 }
 
@@ -1157,4 +1169,9 @@ func checkUpdbStatus() []string {
 
 func checkSiteMaitenanceStatus() []string {
 	return []string{"sh", "-c", "drush state:get system.maintenance_mode | grep -q '1'; if [[ $? -eq 0 ]] ; then echo 'true'; else echo 'false'; fi"}
+}
+
+func runUpDBCommand() []string {
+	return []string{"sh", "-c",
+		"drush updatedb --format=json 2>/dev/null | jq '. | length'"}
 }
