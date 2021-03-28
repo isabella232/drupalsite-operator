@@ -234,7 +234,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return handleTransientErr(err, "%v while deploying the updated Drupal images of version", "UpdateNeeded")
 			} else {
 				err.Wrap("%v: Failed to update version " + drupalSite.Spec.DrupalVersion)
-				setConditionStatus(drupalSite, "CodeUpdatingFailed", true, err, false)
 				//rollback here
 				if err := r.rollBackCodeUpdate(ctx, drupalSite, newApplicationError(nil, ErrDeploymentUpdateFailed)); err != nil {
 					return ctrl.Result{}, nil
@@ -247,34 +246,51 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// If an update process is marked, then put the site in maintenance mode, and if not, take it off maintenance
-	// if drupalSite.ConditionTrue("CodeUpdating") || drupalSite.ConditionTrue("DBUpdating") {
+	// Put site in maintenance mode
+	// Take db Backup on PVC
+	// Run drush updatedb
+	// Restore backup if backup fails
+	// Remove site from maintenance mode
 
-	// } else {
-	// 	if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, disableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
-	// 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	// 	}
-	// }
+	if drupalSite.ConditionTrue("UpdateNeeded") && typeUpdate == "DBUpdate" {
+		// Enable maintenance mode
+		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, enableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
+			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
 
-	// Set "DBUpdating" and perform DB update
-	//
-	// if drupalSite.ConditionTrue("UpdateNeeded") && typeUpdate == "DBUpdate" {
-	// 	if err := r.takeDBBackup(ctx, drupalSite); err != nil {
+		// Take backup
+		backupFileName := "db_backup_" + drupalSite.Spec.DrupalVersion + time.Now().Local().Format("02-01-2006")
+		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, takeBackup(backupFileName)...); err != nil {
+			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
 
-	// 	}
-	// 	if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, enableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
-	// 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	// 	}
-	// 	err := r.runDBUpdate(ctx, drupalSite)
-	// 	if err != nil {
-	// 		if err.Temporary() {
-	// 			return handleTransientErr(err, "%v while running DB update")
-	// 		} else {
-	// 			setConditionStatus(drupalSite, "DBUpdating", false, err, false)
-	// 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	// 		}
-	// 	}
-	// }
+		// Run updb
+		sout, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, runUpDBCommand()...)
+		if err != nil {
+			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+		// Check if update succeeded
+		if sout != "" {
+			setConditionStatus(drupalSite, "UpdateNeeded", false, nil, false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+
+		// If error roll back
+		err = r.rollBackDBUpdate(ctx, drupalSite, newApplicationError(nil, ErrDBUpdateFailed), backupFileName)
+		if err != nil {
+			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+
+		// disable site maintenance mode
+		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, disableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
+			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	}
 
 	// 4. Check DBOD has been provisioned and reconcile if needed
 	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
@@ -544,8 +560,8 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 	return nil
 }
 
-// rollBackCodeUpdate rolls back the update process to the previous version when it is called.
-// It restores the deployment's image and unsets condition "CodeUpdating"
+// rollBackCodeUpdate rolls back the code update process to the previous version when it is called.
+// It restores the deployment's image and unsets condition "UpdateNeeded"
 // If successful, it returns a permanent error to block any update retries.
 func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, err reconcileError) reconcileError {
 	// Restore the server deployment
@@ -564,6 +580,20 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	// if err.Temporary() {
 	// 	err = newApplicationError(err, ErrPermanent)
 	// }
+	setConditionStatus(d, "CodeUpdatingFailed", true, err, false)
+	setConditionStatus(d, "UpdateNeeded", false, nil, false)
+	return nil
+}
+
+// rollBackDBUpdate rolls back the DB update process to the previous version of the database from the backup.
+// It restores the deployment's image and unsets condition "UpdateNeeded"
+// If successful, it returns a permanent error to block any update retries.
+func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, err reconcileError, backupFileName string) reconcileError {
+	// Restore the database backup
+	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, restoreBackup(backupFileName)...); err != nil {
+		return newApplicationError(err, ErrPodExec)
+	}
+	setConditionStatus(d, "DBUpdatingFailed", true, err, false)
 	setConditionStatus(d, "UpdateNeeded", false, nil, false)
 	return nil
 }

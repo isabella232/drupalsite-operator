@@ -1147,31 +1147,46 @@ func siteInstallJobForDrupalSite() []string {
 	}
 }
 
-// enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed for jobForDrupalSiteMaintenanceMode
+// enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
 func enableSiteMaintenanceModeCommandForDrupalSite() []string {
 	return []string{"sh", "-c",
 		"drush state:set system.maintenance_mode 1 --input-format=integer",
 	}
 }
 
-// disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed for jobForDrupalSiteMaintenanceMode
+// disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to disable maintenance mode
 func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 	return []string{"sh", "-c",
 		"drush state:set system.maintenance_mode 0 --input-format=integer && drush cache:rebuild 2>/dev/null",
 	}
 }
 
+// checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
 	return []string{"sh", "-c",
 		"drush updatedb-status --format=json 2>/dev/null | jq '. | length'",
 	}
 }
 
+//checkSiteMaitenanceStatus outputs the command needed to check if a site is in maintenance mode or not
 func checkSiteMaitenanceStatus() []string {
 	return []string{"sh", "-c", "drush state:get system.maintenance_mode | grep -q '1'; if [[ $? -eq 0 ]] ; then echo 'true'; else echo 'false'; fi"}
 }
 
+// runUpDBCommand outputs the command needed to update the database in drupal
 func runUpDBCommand() []string {
 	return []string{"sh", "-c",
 		"drush updatedb --format=json 2>/dev/null | jq '. | length'"}
+}
+
+// takeBackup outputs the command need to take the database backup to a given filename
+func takeBackup(filename string) []string {
+	return []string{"sh", "-c",
+		"drush sql-dump > /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
+}
+
+// restoreBackup outputs the command need to restore the database backup from a given filename
+func restoreBackup(filename string) []string {
+	return []string{"sh", "-c",
+		"drush sql-drop -y ; drush sql-connect < /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
 }

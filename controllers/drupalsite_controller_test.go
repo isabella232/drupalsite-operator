@@ -669,6 +669,90 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
+	Describe("Update the drupalsite object", func() {
+		Context("With a different drupal Version", func() {
+			It("Should be updated successfully", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-advanced",
+					Namespace: "advanced",
+				}
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Publish:       false,
+						DrupalVersion: "8.9.13",
+						Environment: drupalwebservicesv1alpha1.Environment{
+							Name:            "dev",
+							QoSClass:        "standard",
+							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
+						},
+					},
+				}
+				newVersion := "8.9.13-new"
+
+				// Create drupalSite object
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				By("Expecting drupalSite object created")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				trueVar := true
+				expectedOwnerReference := v1.OwnerReference{
+					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+					Kind:       "DrupalSite",
+					Name:       key.Name,
+					UID:        cr.UID,
+					Controller: &trueVar,
+				}
+				bc := buildv1.BuildConfig{}
+				By("Updating the version")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					drupalSiteObject.Spec.DrupalVersion = newVersion
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting new S2I buildConfig to be updated")
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
+					return bc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check PHP buildConfig
+				By("Expecting new PHP buildConfig created")
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
+					return bc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Nginx buildConfig
+				By("Expecting new Nginx buildConfigs created")
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
+					return bc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check if the drupalSiteObject status has UpdateNeeded set
+				By("Expecting 'UpdateNeeded' set on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					// The condition for UpdateNeeded would be set to Unknown and the reason would be ExecError
+					return cr.Status.Conditions.GetCondition("UpdateNeeded").Status != corev1.ConditionStatus(v1.ConditionFalse)
+				}, timeout, interval).Should(BeTrue())
+
+				// Further tests need to be implemented, if we can bypass ExecErr with envtest
+			})
+		})
+	})
+
 	Describe("Deleting the drupalsite object", func() {
 		Context("With s2i spec", func() {
 			It("Should be deleted successfully", func() {
@@ -697,7 +781,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}
 				By("Expecting to delete successfully")
 				Eventually(func() error {
-					return k8sClient.Delete(context.Background(), drupalSiteObject)
+					return k8sClient.Delete(ctx, drupalSiteObject)
 				}, timeout, interval).Should(Succeed())
 
 				By("Expecting to delete finish")

@@ -105,7 +105,7 @@ func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource stri
 	}
 	// Check for one more build?
 	if len(buildList.Items) > 0 {
-		return buildList.Items[0].Status.Phase, nil
+		return buildList.Items[len(buildList.Items)-1].Status.Phase, nil
 	}
 	return "", newApplicationError(err, ErrClientK8s)
 }

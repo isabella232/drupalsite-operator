@@ -20,6 +20,7 @@ var (
 	ErrDBOD                   = errors.New("DBODError")
 	ErrBuildFailed            = errors.New("BuildError")
 	ErrDeploymentUpdateFailed = errors.New("DeploymentUpdateError")
+	ErrDBUpdateFailed         = errors.New("DBUpdateError")
 )
 
 type reconcileError interface {
