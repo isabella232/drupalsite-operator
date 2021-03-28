@@ -865,7 +865,7 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteMany"},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("10Gi"),
+					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse(d.Spec.DiskSize),
 				},
 			},
 		}

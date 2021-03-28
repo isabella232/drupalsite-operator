@@ -48,6 +48,10 @@ type DrupalSiteSpec struct {
 	// Environment defines the drupal site environments
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
+
+	// DiskSize defines the drupal site PVC size
+	// +kubebuilder:validation:Required
+	DiskSize string `json:"diskSize"`
 }
 
 // Environment defines the environment field in DrupalSite

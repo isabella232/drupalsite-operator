@@ -36,6 +36,9 @@ spec:
           spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
+              diskSize:
+                description: DiskSize defines the drupal site PVC size
+                type: string
               drupalVersion:
                 description: DrupalVersion defines the version of the Drupal to install
                 minLength: 1
@@ -90,6 +93,7 @@ spec:
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
             required:
+            - diskSize
             - drupalVersion
             - environment
             - publish

@@ -76,6 +76,7 @@ var _ = Describe("DrupalSite controller", func() {
 			Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 				Publish:       true,
 				DrupalVersion: "8.9.13",
+				DiskSize:      "10Gi",
 				Environment: drupalwebservicesv1alpha1.Environment{
 					Name:      "dev",
 					QoSClass:  "standard",
@@ -491,6 +492,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish:       false,
 						DrupalVersion: "8.9.13",
+						DiskSize:      "10Gi",
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
@@ -688,6 +690,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish:       false,
 						DrupalVersion: "8.9.13",
+						DiskSize:      "10Gi",
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
@@ -772,6 +775,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish:       false,
 						DrupalVersion: "8.9.13",
+						DiskSize:      "10Gi",
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",

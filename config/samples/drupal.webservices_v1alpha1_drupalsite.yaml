@@ -5,7 +5,8 @@ metadata:
 spec:
   publish: false
   drupalVersion: "8.9.13"
+  diskSize: "5Gi"
   environment:
     name: "dev"
     qosClass: "standard"
-    dbodClass: "test" 
+    dbodClass: "test"
