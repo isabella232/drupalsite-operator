@@ -23,6 +23,14 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - build.openshift.io
+  resources:
+  - builds
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - persistentvolumeclaims
