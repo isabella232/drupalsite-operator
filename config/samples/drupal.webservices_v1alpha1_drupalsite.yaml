@@ -9,4 +9,5 @@ spec:
   environment:
     name: "dev"
     qosClass: "standard"
-    dbodClass: "test"
+    dbodClass: "test" 
+  diskSize: "1Gi"
