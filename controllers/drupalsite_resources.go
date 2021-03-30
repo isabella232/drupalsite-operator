@@ -709,6 +709,15 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
 func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
+	nginxResources, err := resourceRequestLimit("10Mi", "30m", "20Mi", "500m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	phpfpmResources, err := resourceRequestLimit("100Mi", "200m", "270Mi", "1800m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Annotations = map[string]string{
@@ -734,15 +743,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	ls["app"] = "drupal"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
-	}
-
-	nginxResources, err := resourceLimit("50Mi", "50m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
-	}
-	phpfpmResources, err := resourceLimit("200Mi", "1000m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
 	}
 
 	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
@@ -943,6 +943,12 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
 		// Do nothing
 		return nil
+	}
+	if len(currentobject.Annotations) < 1 {
+		currentobject.Annotations = map[string]string{}
+	}
+	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
