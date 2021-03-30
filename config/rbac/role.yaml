@@ -21,9 +21,17 @@ rules:
 - apiGroups:
   - build.openshift.io
   resources:
-  - buildconfig
+  - buildconfigs
   verbs:
   - '*'
+- apiGroups:
+  - build.openshift.io
+  resources:
+  - builds
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -38,6 +46,7 @@ rules:
   verbs:
   - get
   - list
+  - watch
 - apiGroups:
   - dbod.cern
   resources:
@@ -81,7 +90,7 @@ rules:
 - apiGroups:
   - image.openshift.io
   resources:
-  - imagestream
+  - imagestreams
   verbs:
   - '*'
 - apiGroups:

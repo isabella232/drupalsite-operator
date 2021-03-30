@@ -8,14 +8,19 @@ import (
 // ErrorConditions
 var (
 	// Generic temporary error
-	ErrTemporary   = errors.New("TemporaryError")
+	ErrTemporary   = errors.New("GenericTemporaryError")
+	ErrPermanent   = errors.New("GenericPermanentError")
 	ErrInvalidSpec = errors.New("InvalidSpec")
 	// ErrFunctionDomain can be returned by a function that was passed invalid arguments, such as the default case of a switch.
 	// Consider constraining the arg type.
-	ErrFunctionDomain = errors.New("FunctionDomainError")
-	ErrClientK8s      = errors.New("k8sAPIClientError")
-	ErrFilesystemIO   = errors.New("FilesystemIOError")
-	ErrDBOD           = errors.New("DBODError")
+	ErrFunctionDomain         = errors.New("FunctionDomainError")
+	ErrClientK8s              = errors.New("k8sAPIClientError")
+	ErrPodExec                = errors.New("ExecInPodError")
+	ErrFilesystemIO           = errors.New("FilesystemIOError")
+	ErrDBOD                   = errors.New("DBODError")
+	ErrBuildFailed            = errors.New("BuildError")
+	ErrDeploymentUpdateFailed = errors.New("DeploymentUpdateError")
+	ErrDBUpdateFailed         = errors.New("DBUpdateError")
 )
 
 type reconcileError interface {
@@ -69,6 +74,10 @@ func (e *applicationError) Temporary() bool {
 	case ErrInvalidSpec:
 		return false
 	case ErrFunctionDomain:
+		return false
+	case ErrPermanent:
+		return false
+	case ErrBuildFailed:
 		return false
 	default:
 		return true

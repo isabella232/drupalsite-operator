@@ -48,6 +48,10 @@ type DrupalSiteSpec struct {
 	// Environment defines the drupal site environments
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
+
+	// DiskSize defines the drupal site PVC size
+	// +kubebuilder:validation:Required
+	DiskSize string `json:"diskSize"`
 }
 
 // Environment defines the environment field in DrupalSite
@@ -96,6 +100,11 @@ type DrupalSiteStatus struct {
 	// +kubebuilder:validation:type=array
 	// +optional
 	Conditions status.Conditions `json:"conditions,omitempty"`
+
+	// PreviousDrupalVersion stores the `drupalVersion` string during the upgrade process to alow erollback operations
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	PreviousDrupalVersion string `json:"previousDrupalVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -123,7 +132,14 @@ func init() {
 	SchemeBuilder.Register(&DrupalSite{}, &DrupalSiteList{})
 }
 
+// ConditionTrue reports if the condition is true
 func (drp DrupalSite) ConditionTrue(condition status.ConditionType) (update bool) {
 	init := drp.Status.Conditions.GetCondition(condition)
 	return init != nil && init.Status == v1.ConditionTrue
+}
+
+// ConditionReasonSet reports if the condition Reason is not empty
+func (drp DrupalSite) ConditionReasonSet(condition status.ConditionType) (update bool) {
+	init := drp.Status.Conditions.GetCondition(condition)
+	return init != nil && init.Reason != ""
 }
