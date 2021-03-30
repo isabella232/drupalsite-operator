@@ -46,6 +46,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	// BuildResources are the resource requests/limits for the image builds. Set during initEnv()
+	BuildResources corev1.ResourceRequirements
+)
+
 // execToServerPod executes a command to the first running server pod of the Drupal site.
 //
 // Commands are interpreted similar to how kubectl does it, eg to do "drush cr" either of these will work:
@@ -502,6 +507,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{
@@ -553,6 +559,7 @@ func buildConfigForDrupalSitePHP(currentobject *buildv1.BuildConfig, d *webservi
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{
@@ -621,6 +628,7 @@ func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webser
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{

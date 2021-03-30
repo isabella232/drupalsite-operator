@@ -313,6 +313,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *DrupalSiteReconciler) initEnv() {
 	log := r.Log
 	log.Info("Initializing environment")
+
+	var err error
+	BuildResources, err = resourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
+	if err != nil {
+		log.Error(err, "Invalid configuration: can't parse build resources")
+		os.Exit(1)
+	}
 	// <git_url>@<git_ref>
 	// Drupal runtime repo containing the dockerfiles and other config data
 	// to build the runtime images. After '@' a git ref can be specified (default: "master").
