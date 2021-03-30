@@ -727,6 +727,16 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+
+	nginxResources, err := resourceLimit("50Mi", "50m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	phpfpmResources, err := resourceLimit("200Mi", "1000m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+
 	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
 	currentobject.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: ls,
@@ -775,6 +785,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					MountPath: "/var/run/",
 				},
 			},
+			Resources: nginxResources,
 		},
 			{
 				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
@@ -815,6 +826,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 						MountPath: "/var/run/",
 					},
 				},
+				Resources: phpfpmResources,
 			}},
 		Volumes: []corev1.Volume{
 			{
