@@ -46,6 +46,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	// BuildResources are the resource requests/limits for the image builds. Set during initEnv()
+	BuildResources corev1.ResourceRequirements
+)
+
 // execToServerPod executes a command to the first running server pod of the Drupal site.
 //
 // Commands are interpreted similar to how kubectl does it, eg to do "drush cr" either of these will work:
@@ -502,6 +507,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{
@@ -553,6 +559,7 @@ func buildConfigForDrupalSitePHP(currentobject *buildv1.BuildConfig, d *webservi
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{
@@ -621,6 +628,7 @@ func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webser
 	}
 	currentobject.Spec = buildv1.BuildConfigSpec{
 		CommonSpec: buildv1.CommonSpec{
+			Resources:                 BuildResources,
 			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 			Source: buildv1.BuildSource{
 				Git: &buildv1.GitBuildSource{
@@ -701,6 +709,15 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
 func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
+	nginxResources, err := resourceRequestLimit("10Mi", "30m", "20Mi", "500m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	phpfpmResources, err := resourceRequestLimit("100Mi", "200m", "270Mi", "1800m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Annotations = map[string]string{
@@ -727,6 +744,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+
 	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
 	currentobject.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: ls,
@@ -775,6 +793,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					MountPath: "/var/run/",
 				},
 			},
+			Resources: nginxResources,
 		},
 			{
 				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
@@ -815,6 +834,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 						MountPath: "/var/run/",
 					},
 				},
+				Resources: phpfpmResources,
 			}},
 		Volumes: []corev1.Volume{
 			{
@@ -923,6 +943,12 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
 		// Do nothing
 		return nil
+	}
+	if len(currentobject.Annotations) < 1 {
+		currentobject.Annotations = map[string]string{}
+	}
+	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"

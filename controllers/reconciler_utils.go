@@ -12,6 +12,7 @@ import (
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -123,4 +124,45 @@ func (i *strFlagList) String() string {
 func (i *strFlagList) Set(value string) error {
 	*i = append(*i, value)
 	return nil
+}
+
+// resourceList is a k8s API object representing the given amount of memory and CPU resources
+func resourceList(memory, cpu string) (corev1.ResourceList, error) {
+	memoryQ, err := k8sapiresource.ParseQuantity(memory)
+	if err != nil {
+		return nil, err
+	}
+	cpuQ, err := k8sapiresource.ParseQuantity(cpu)
+	if err != nil {
+		return nil, err
+	}
+	return corev1.ResourceList{
+		"memory": memoryQ,
+		"cpu":    cpuQ,
+	}, nil
+}
+
+// resourceRequestLimit is a k8s API object representing the resource requests and limits given as strings
+func resourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.ResourceRequirements, error) {
+	reqs, err := resourceList(memReq, cpuReq)
+	if err != nil {
+		return corev1.ResourceRequirements{}, err
+	}
+	lims, err := resourceList(memLim, cpuLim)
+	if err != nil {
+		return corev1.ResourceRequirements{}, err
+	}
+	return corev1.ResourceRequirements{
+		Requests: reqs,
+		Limits:   lims,
+	}, nil
+}
+
+// resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
+func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
+	lims, err := resourceList(memLim, cpuLim)
+	if err != nil {
+		return corev1.ResourceRequirements{}, err
+	}
+	return corev1.ResourceRequirements{Limits: lims}, nil
 }
