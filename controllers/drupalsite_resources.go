@@ -709,11 +709,11 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
 func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
-	nginxResources, err := resourceRequestLimit("10Mi", "30m", "20Mi", "500m")
+	nginxResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmResources, err := resourceRequestLimit("100Mi", "200m", "270Mi", "1800m")
+	phpfpmResources, err := resourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
