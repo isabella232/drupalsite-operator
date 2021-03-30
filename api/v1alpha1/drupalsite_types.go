@@ -101,10 +101,10 @@ type DrupalSiteStatus struct {
 	// +optional
 	Conditions status.Conditions `json:"conditions,omitempty"`
 
-	// PreviousDrupalVersion stores the `drupalVersion` string during the upgrade process to alow erollback operations
+	// LastRunningDrupalVersion stores the `drupalVersion` string during the upgrade process to alow erollback operations
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	PreviousDrupalVersion string `json:"previousDrupalVersion,omitempty"`
+	LastRunningDrupalVersion string `json:"lastRunningDrupalVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true

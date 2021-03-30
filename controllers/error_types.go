@@ -21,6 +21,7 @@ var (
 	ErrBuildFailed            = errors.New("BuildError")
 	ErrDeploymentUpdateFailed = errors.New("DeploymentUpdateError")
 	ErrDBUpdateFailed         = errors.New("DBUpdateError")
+	ErrRollBack               = errors.New("RollbackError")
 )
 
 type reconcileError interface {
