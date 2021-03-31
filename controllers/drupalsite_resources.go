@@ -749,6 +749,14 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	}
 	currentobject.Spec.Template.ObjectMeta.Labels = ls
 
+	if _, bool := d.Annotations["nodeSelectorLabel"]; bool {
+		if _, bool = d.Annotations["nodeSelectorValue"]; bool {
+			currentobject.Spec.Template.Spec.NodeSelector = map[string]string{
+				d.Annotations["nodeSelectorLabel"]: d.Annotations["nodeSelectorValue"],
+			}
+		}
+	}
+
 	currentobject.Spec.Template.Spec.Volumes = []corev1.Volume{
 		{
 			Name: "drupal-directory-" + d.Name,
