@@ -267,7 +267,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if updateNeeded && typeUpdate == "DBUpdate" && !drupalSite.ConditionTrue("DBUpdatingFailed") {
 		// Enable maintenance mode
 		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, enableSiteMaintenanceModeCommandForDrupalSite()...); err != nil {
-			setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
+			// setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 

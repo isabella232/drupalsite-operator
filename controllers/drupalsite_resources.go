@@ -720,9 +720,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Annotations = map[string]string{
-			"image.openshift.io/triggers": "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}, {\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]",
-		}
+		currentobject.Annotations = map[string]string{}
 		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
 			"php-configmap-version":   "1",
@@ -737,6 +735,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		// Do nothing
 		return nil
 	}
+	currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}, {\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
 	for k, v := range ls {
@@ -869,7 +868,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	currentobject.Spec.Template.Spec.Containers[1].Resources = phpfpmResources
 
 	_, bool := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
-	if !bool || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Status.LastRunningDrupalVersion {
+	if !bool || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
 		currentobject.Spec.Template.Spec.Containers[0].Image = "nginx-" + d.Name + ":" + drupalVersion
 		currentobject.Spec.Template.Spec.Containers[1].Image = "php-" + d.Name + ":" + drupalVersion
 	}
