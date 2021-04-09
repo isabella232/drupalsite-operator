@@ -80,6 +80,8 @@ func (e *applicationError) Temporary() bool {
 		return false
 	case ErrBuildFailed:
 		return false
+	case ErrRollBack:
+		return false
 	default:
 		return true
 	}

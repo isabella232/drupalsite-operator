@@ -181,7 +181,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = setNotInstalled(drupalSite) || update
 	}
 
-	// TODO simplify logic by splitting into 2
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
 	updateNeeded, typeUpdate, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	if !drupalSite.ConditionTrue("CodeUpdatingFailed") && !drupalSite.ConditionTrue("DBUpdatingFailed") {
@@ -457,7 +456,7 @@ func (r *DrupalSiteReconciler) isGivenImageInNginxImageStreamTagItems(ctx contex
 		}
 		return false, nil
 	}
-	return false, ErrClientK8s
+	return false, newApplicationError(err, ErrClientK8s)
 }
 
 // didRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
@@ -486,16 +485,7 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 			return false, "", newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
 		}
 		fmt.Println(deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"])
-		// fmt.Println(image)
-		// imageInTag := false
-		// if strings.Contains(image, "sha256") {
-		// 	imageInTag, err = r.isGivenImageInNginxImageStreamTagItems(ctx, d, image)
-		// 	if err != nil {
-		// 		return false, "", newApplicationError(errors.New("cannot check if the given image is part of the nginx imagestream tag items  "), ErrClientK8s)
-		// 	}
-		// } else {
-		// 	imageInTag = d.Spec.DrupalVersion == strings.Split(image, ":")[2]
-		// }
+
 		// Check if image is different, check if current site is ready and installed
 		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
 			return true, "CodeUpdate", nil
@@ -576,11 +566,6 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 		}
 	}
 
-	// rollout, err := r.didRollOutSucceed(ctx, d)
-	// if rollout != true || err != nil {
-	// 	return newApplicationError(err, ErrTemporary)
-	// }
-
 	return nil
 }
 
@@ -598,12 +583,6 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 			return newApplicationError(err, ErrClientK8s)
 		}
 	}
-
-	// d.Spec.DrupalVersion = d.Status.LastRunningDrupalVersion
-	// Make error permanent
-	// if err.Temporary() {
-	// 	err = newApplicationError(err, ErrPermanent)
-	// }
 
 	rollout, err := r.didRollOutSucceed(ctx, d)
 	if rollout != true || err != nil {
@@ -626,17 +605,6 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 	d.Spec.DrupalVersion = d.Status.LastRunningDrupalVersion
 	return nil
 }
-
-// func (r *DrupalSiteReconciler) runDBUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
-// 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
-// 	if err != nil {
-// 		return newApplicationError(err, ErrPodExec)
-// 	}
-// 	if sout != "" {
-// 		return nil
-// 	}
-// 	return
-// }
 
 // CODE BELOW WILL GO soon -------------
 
