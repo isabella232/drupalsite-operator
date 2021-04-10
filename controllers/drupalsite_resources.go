@@ -877,8 +877,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 	}
 
-	_, bool := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
-	if !bool || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
+	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
+	if !annotExists || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
