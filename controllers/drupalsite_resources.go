@@ -271,7 +271,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "deploy_drupal":
-		if d.ConditionTrue("UpdateNeeded") {
+		if d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed") {
 			return nil
 		}
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
@@ -720,17 +720,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Annotations = map[string]string{
-			"image.openshift.io/triggers": "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion +
-				"\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\"nginx\")].image\",\"pause\":\"false\"}," +
-				"{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace +
-				"\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\"php-fpm\")].image\",\"pause\":\"false\"}]",
-		}
+		currentobject.Annotations = map[string]string{}
 		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
 			"php-configmap-version":   "1",
 			"nginx-configmap-version": "1",
 		}
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}}
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -739,6 +735,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		// Do nothing
 		return nil
 	}
+	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
+	// a wrong image built from a different build, that is left out on the node
+	currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}, {\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
 	for k, v := range ls {
@@ -750,26 +749,66 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		MatchLabels: ls,
 	}
 	currentobject.Spec.Template.ObjectMeta.Labels = ls
-	// Add an annotation to be able to verify what version of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
-	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
 
-	currentobject.Spec.Template.Spec = corev1.PodSpec{
-		Containers: []corev1.Container{{
-			Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
-			Name:            "nginx",
-			ImagePullPolicy: "IfNotPresent",
-			Ports: []corev1.ContainerPort{{
+	if _, bool := d.Annotations["nodeSelectorLabel"]; bool {
+		if _, bool = d.Annotations["nodeSelectorValue"]; bool {
+			currentobject.Spec.Template.Spec.NodeSelector = map[string]string{
+				d.Annotations["nodeSelectorLabel"]: d.Annotations["nodeSelectorValue"],
+			}
+		}
+	}
+
+	currentobject.Spec.Template.Spec.Volumes = []corev1.Volume{
+		{
+			Name: "drupal-directory-" + d.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: "pv-claim-" + d.Name,
+				},
+			}},
+		{
+			Name: "php-config-volume",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "php-fpm-" + d.Name,
+					},
+				},
+			},
+		},
+		{
+			Name: "nginx-config-volume",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "nginx-" + d.Name,
+					},
+				},
+			},
+		},
+		{
+			Name:         "empty-dir",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+	}
+
+	for i, container := range currentobject.Spec.Template.Spec.Containers {
+		switch container.Name {
+		case "nginx":
+			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "IfNotPresent"
+			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 8080,
 				Name:          "nginx",
 				Protocol:      "TCP",
-			}},
-			Env: []corev1.EnvVar{
+			}}
+			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
 				{
 					Name:  "DRUPAL_SHARED_VOLUME",
 					Value: "/drupal-data",
 				},
-			},
-			EnvFrom: []corev1.EnvFromSource{
+			}
+			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
 				{
 					SecretRef: &corev1.SecretEnvSource{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -777,8 +816,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 						},
 					},
 				},
-			},
-			VolumeMounts: []corev1.VolumeMount{
+			}
+			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
 				{
 					Name:      "drupal-directory-" + d.Name,
 					MountPath: "/drupal-data",
@@ -792,84 +831,65 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "empty-dir",
 					MountPath: "/var/run/",
 				},
-			},
-			Resources: nginxResources,
-		},
-			{
-				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
-				Name:            "php-fpm",
-				ImagePullPolicy: "IfNotPresent",
-				Ports: []corev1.ContainerPort{{
-					ContainerPort: 9000,
-					Name:          "php-fpm",
-					Protocol:      "TCP",
-				}},
-				Env: []corev1.EnvVar{
-					{
-						Name:  "DRUPAL_SHARED_VOLUME",
-						Value: "/drupal-data",
-					},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
+
+		case "php-fpm":
+			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "IfNotPresent"
+			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+				ContainerPort: 9000,
+				Name:          "php-fpm",
+				Protocol:      "TCP",
+			}}
+			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
+				{
+					Name:  "DRUPAL_SHARED_VOLUME",
+					Value: "/drupal-data",
 				},
-				EnvFrom: []corev1.EnvFromSource{
-					{
-						SecretRef: &corev1.SecretEnvSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: dbodSecret,
-							},
-						},
-					},
-				},
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "drupal-directory-" + d.Name,
-						MountPath: "/drupal-data",
-					},
-					{
-						Name:      "php-config-volume",
-						MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
-						SubPath:   "zz-docker.conf",
-					},
-					{
-						Name:      "empty-dir",
-						MountPath: "/var/run/",
-					},
-				},
-				Resources: phpfpmResources,
-			}},
-		Volumes: []corev1.Volume{
-			{
-				Name: "drupal-directory-" + d.Name,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "pv-claim-" + d.Name,
-					},
-				}},
-			{
-				Name: "php-config-volume",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
+			}
+			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
+				{
+					SecretRef: &corev1.SecretEnvSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "php-fpm-" + d.Name,
+							Name: dbodSecret,
 						},
 					},
 				},
-			},
-			{
-				Name: "nginx-config-volume",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "nginx-" + d.Name,
-						},
-					},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "drupal-directory-" + d.Name,
+					MountPath: "/drupal-data",
 				},
-			},
-			{
-				Name:         "empty-dir",
-				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-			},
-		},
+				{
+					Name:      "php-config-volume",
+					MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
+					SubPath:   "zz-docker.conf",
+				},
+				{
+					Name:      "empty-dir",
+					MountPath: "/var/run/",
+				},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
+		}
+
 	}
+
+	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
+	if !annotExists || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
+		for i, container := range currentobject.Spec.Template.Spec.Containers {
+			switch container.Name {
+			case "nginx":
+				currentobject.Spec.Template.Spec.Containers[i].Image = "nginx-" + d.Name + ":" + drupalVersion
+			case "php-fpm":
+				currentobject.Spec.Template.Spec.Containers[i].Image = "php-" + d.Name + ":" + drupalVersion
+			}
+		}
+	}
+	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
+	// Add an annotation to be able to verify what version of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
 	return nil
 }
 
@@ -998,7 +1018,8 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				Image: "php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				// "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),
@@ -1202,7 +1223,7 @@ func checkSiteMaitenanceStatus() []string {
 // runUpDBCommand outputs the command needed to update the database in drupal
 func runUpDBCommand() []string {
 	return []string{"sh", "-c",
-		"drush updatedb --format=json 2>/dev/null | jq '. | length'"}
+		"drush updatedb -y 2>/dev/null || echo \"error\" >&2 "}
 }
 
 // takeBackup outputs the command need to take the database backup to a given filename
@@ -1214,5 +1235,5 @@ func takeBackup(filename string) []string {
 // restoreBackup outputs the command need to restore the database backup from a given filename
 func restoreBackup(filename string) []string {
 	return []string{"sh", "-c",
-		"drush sql-drop -y ; drush sql-connect < /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
+		"drush sql-drop -y ; `drush sql-connect` < /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
 }

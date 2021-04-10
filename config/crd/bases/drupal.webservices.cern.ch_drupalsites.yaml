@@ -142,8 +142,8 @@ spec:
                   - type
                   type: object
                 type: array
-              previousDrupalVersion:
-                description: PreviousDrupalVersion stores the `drupalVersion` string
+              lastRunningDrupalVersion:
+                description: LastRunningDrupalVersion stores the `drupalVersion` string
                   during the upgrade process to alow erollback operations
                 minLength: 1
                 type: string
