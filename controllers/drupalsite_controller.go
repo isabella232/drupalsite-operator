@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -398,12 +399,30 @@ func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webserv
 func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
 	// TODO maybe change this during update
 	// TODO instead of checking checking status to fetch the DbCredentialsSecret, use the 'registrationLabels` to filter and get the name of the secret
-	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
-	if err1 == nil {
-		return dbodCR.Status.DbCredentialsSecret
+	dbodCR := &dbodv1a1.DBODRegistration{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, dbodCR)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return dbodCR.Status.DbCredentialsSecret
+}
+
+// getSecretDataDecoded fetches the given secret and decodes the data for the given string
+func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	data := make(map[string]string, len(keys))
+	if err != nil {
+		return data
+	}
+	for _, key := range keys {
+		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
+		if err != nil {
+			return data
+		}
+		data[key] = string(val)
+	}
+	return data
 }
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
