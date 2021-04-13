@@ -155,6 +155,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 		}
 	}
+	if r.isDBODProvisioned(ctx, drp) {
+		if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+		}
+	}
 
 	// 4. Ingress
 
@@ -174,6 +179,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 ensureResourceX ensure the requested resource is created, with the following valid values
 	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush site-install
+	- clone_job: Kubernetes Job for cloning a drupal site
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- bc_s2i: BuildConfig for S2I sitebuilder
@@ -268,6 +274,21 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
 				return newApplicationError(err, ErrClientK8s)
+			}
+		}
+		return nil
+	case "clone_job":
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			if d.Spec.CloneFrom != "" {
+				job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
+				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+					log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+					return jobForDrupalSiteClone(job, dbodSecret, d)
+				})
+				if err != nil {
+					log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+					return newApplicationError(err, ErrClientK8s)
+				}
 			}
 		}
 		return nil
@@ -851,6 +872,112 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 		return nil
 	}
 	ls["app"] = "drush"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
+}
+
+// jobForDrupalSiteClone returns a job object thats clones a drupalsite
+func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
+	ls := labelsForDrupalSite(d.Name)
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
+			Labels: ls,
+		}
+		currentobject.Spec.Template.Spec = corev1.PodSpec{
+			ServiceAccountName: "drupalsite-operator",
+			InitContainers: []corev1.Container{
+				{
+					Image:           "php-" + d.Spec.CloneFrom + ":" + d.Spec.DrupalVersion,
+					Name:            "db-backup",
+					ImagePullPolicy: "Always",
+					Command:         takeBackup("dbSourceBackUp"),
+					Env: []corev1.EnvVar{
+						{
+							Name:  "DRUPAL_SHARED_VOLUME",
+							Value: "/drupal-data",
+						},
+					},
+					EnvFrom: []corev1.EnvFromSource{
+						{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: dbodSecret,
+								},
+							},
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						MountPath: "/drupal-data",
+					}},
+				}, {
+					Image:           "quay.io/openshift/origin-cli:4.7.0",
+					Name:            "unpublish-change-datasource-destination",
+					ImagePullPolicy: "Always",
+					Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
+						" oc patch deployment " + d.Name + " -p '{ \"metadata\": {\"annotations\": {\"drupal.cern.ch/admin-custom-edit\":\"replace-datasource-destination\"}}}';" +
+						" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.CloneFrom}},
+				{
+					Image:           "php-" + d.Name + ":" + d.Spec.DrupalVersion,
+					Name:            "db-restore",
+					ImagePullPolicy: "Always",
+					Command:         restoreBackup("dbSourceBackUp"),
+					Env: []corev1.EnvVar{
+						{
+							Name:  "DRUPAL_SHARED_VOLUME",
+							Value: "/drupal-data",
+						},
+					},
+					EnvFrom: []corev1.EnvFromSource{
+						{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: dbodSecret,
+								},
+							},
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						MountPath: "/drupal-data",
+					}},
+				},
+			},
+			RestartPolicy: "Never",
+			Containers: []corev1.Container{{
+				Image:           "quay.io/openshift/origin-cli:4.7.0",
+				Name:            "publish",
+				ImagePullPolicy: "Always",
+				Command:         []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n" + d.Namespace}},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "drupal-directory-" + d.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "drupal-directory-" + d.Spec.CloneFrom,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Spec.CloneFrom,
+						},
+					},
+				}},
+		}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls["app"] = "clone"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
