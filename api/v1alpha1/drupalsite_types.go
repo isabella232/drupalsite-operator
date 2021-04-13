@@ -52,6 +52,10 @@ type DrupalSiteSpec struct {
 	// DiskSize defines the drupal site PVC size
 	// +kubebuilder:validation:Required
 	DiskSize string `json:"diskSize"`
+
+	// CloneFrom defines the drupal site to be cloned
+	// +optional
+	CloneFrom string `json:"cloneFrom"`
 }
 
 // Environment defines the environment field in DrupalSite
