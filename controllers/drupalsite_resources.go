@@ -618,6 +618,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 	// a wrong image built from a different build, that is left out on the node
 	// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
+        // ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 	// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
@@ -677,6 +678,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		switch container.Name {
 		case "nginx":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
+                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 8080,
@@ -717,6 +719,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
+                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 9000,
