@@ -617,7 +617,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	}
 	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 	// a wrong image built from a different build, that is left out on the node
-	currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}, {\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"php-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
+	// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
+	// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
 	for k, v := range ls {
@@ -676,7 +677,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		switch container.Name {
 		case "nginx":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
-			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "IfNotPresent"
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 8080,
 				Name:          "nginx",
@@ -716,7 +717,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
-			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "IfNotPresent"
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 9000,
 				Name:          "php-fpm",
