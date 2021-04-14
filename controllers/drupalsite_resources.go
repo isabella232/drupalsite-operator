@@ -125,14 +125,8 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "is_php", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP ImageStream"))
-	}
 	if transientErr := r.ensureResourceX(ctx, drp, "is_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx ImageStream"))
-	}
-	if transientErr := r.ensureResourceX(ctx, drp, "bc_php", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP BuildConfig"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "bc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx BuildConfig"))
@@ -189,10 +183,8 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- site_install_job: Kubernetes Job for the drush site-install
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
-	- is_php: ImageStream for PHP
 	- is_nginx: ImageStream for Nginx
 	- bc_s2i: BuildConfig for S2I sitebuilder
-	- bc_php: BuildConfig for PHP
 	- bc_nginx: BuildConfig for Nginx
 	- deploy_drupal: Deployment for Nginx & PHP-FPM
 	- svc_nginx: Service for Nginx
@@ -225,17 +217,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "is_php":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "php-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return imageStreamForDrupalSitePHP(is, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
 	case "bc_s2i":
 		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
@@ -253,17 +234,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
 			return buildConfigForDrupalSiteNginx(bc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "bc_php":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "php-" + nameVersionHash(d), Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return buildConfigForDrupalSitePHP(bc, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
@@ -399,7 +369,7 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite) corev1.ObjectReferen
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + nameVersionHash(d) + ":" + d.Spec.DrupalVersion,
+			Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
 		}
 	}
 	return corev1.ObjectReference{
@@ -417,7 +387,7 @@ func triggersForBuildConfigs(d *webservicesv1a1.DrupalSite) buildv1.BuildTrigger
 			ImageChange: &buildv1.ImageChangeTrigger{
 				From: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: "site-builder-s2i-" + nameVersionHash(d) + ":" + d.Spec.DrupalVersion,
+					Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
 				},
 			},
 		}
@@ -439,27 +409,6 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "site-builder"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec.LookupPolicy.Local = true
-	return nil
-}
-
-// imageStreamForDrupalSitePHP returns a ImageStream object for Drupal PHP
-func imageStreamForDrupalSitePHP(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "php"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
@@ -535,75 +484,6 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 			{
 				Type: buildv1.ConfigChangeBuildTriggerType,
 			},
-		},
-	}
-	return nil
-}
-
-// buildConfigForDrupalSitePHP returns a BuildConfig object for Drupal PHP
-func buildConfigForDrupalSitePHP(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "php"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec = buildv1.BuildConfigSpec{
-		CommonSpec: buildv1.CommonSpec{
-			Resources:                 BuildResources,
-			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-			Source: buildv1.BuildSource{
-				Git: &buildv1.GitBuildSource{
-					Ref: ImageRecipesRepoRef,
-					URI: ImageRecipesRepo,
-				},
-				ContextDir: "images/php-fpm",
-				Images: []buildv1.ImageSource{
-					{
-						From: baseImageReferenceToUse(d),
-						Paths: []buildv1.ImageSourcePath{
-							{
-								SourcePath:     "/app/.",
-								DestinationDir: "./images/php-fpm/drupal-files/",
-							},
-						},
-					},
-				},
-			},
-			Strategy: buildv1.BuildStrategy{
-				DockerStrategy: &buildv1.DockerBuildStrategy{
-					BuildArgs: []corev1.EnvVar{
-						{
-							Name:  "DRUPAL_VERSION",
-							Value: d.Spec.DrupalVersion,
-						},
-					},
-					Env: []corev1.EnvVar{
-						{
-							Name:  "SITE_BUILDER_DIR",
-							Value: "drupal-files",
-						},
-					},
-				},
-			},
-			Output: buildv1.BuildOutput{
-				To: &corev1.ObjectReference{
-					Kind: "ImageStreamTag",
-					Name: "php-" + d.Name + ":" + d.Spec.DrupalVersion,
-				},
-			},
-		},
-		Triggers: []buildv1.BuildTriggerPolicy{
-			triggersForBuildConfigs(d),
 		},
 	}
 	return nil
@@ -884,7 +764,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			case "nginx":
 				currentobject.Spec.Template.Spec.Containers[i].Image = "nginx-" + d.Name + ":" + drupalVersion
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "php-" + d.Name + ":" + drupalVersion
+				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d).Name
 			}
 		}
 	}
@@ -1018,8 +898,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image: "php-" + d.Name + ":" + d.Spec.DrupalVersion,
-				// "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/php-" + d.Name + ":" + d.Spec.DrupalVersion,
+				Image:           baseImageReferenceToUse(d).Name,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),

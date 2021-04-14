@@ -191,13 +191,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check PHP imageStream
-				By("Expecting PHP imageStream created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check Nginx imageStream
 				By("Expecting Nginx imageStream created")
 				Eventually(func() []v1.OwnerReference {
@@ -210,13 +203,6 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check PHP buildConfig
-				By("Expecting PHP buildConfig created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx buildConfig
@@ -338,17 +324,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check PHP imageStream
-				By("Expecting PHP imageStream recreated")
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &is)
-					return k8sClient.Delete(ctx, &is)
-				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check Nginx imageStream
 				By("Expecting Nginx imageStream recreated")
 				Eventually(func() error {
@@ -369,17 +344,6 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check PHP buildConfig
-				By("Expecting PHP buildConfig recreated")
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return k8sClient.Delete(ctx, &bc)
-				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx buildConfig
@@ -611,17 +575,17 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check PHP imageStream
-				By("Expecting PHP imageStream created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check Nginx imageStream
 				By("Expecting Nginx imageStream created")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &is)
+					return is.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check sitebuilder-s2i imageStream
+				By("Expecting sitebuilder-s2i imageStream created")
+				Eventually(func() []v1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + key.Name, Namespace: key.Namespace}, &is)
 					return is.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -636,13 +600,6 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting S2I buildConfig created")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check PHP buildConfig
-				By("Expecting PHP buildConfig created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -726,13 +683,6 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting new S2I buildConfig to be updated")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check PHP buildConfig
-				By("Expecting new PHP buildConfig created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "php-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
