@@ -626,6 +626,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		currentobject.Labels[k] = v
 	}
 
+	shareProcessNamespace := true
+	currentobject.Spec.Template.Spec.ShareProcessNamespace = &shareProcessNamespace
+
 	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
 	currentobject.Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: ls,
