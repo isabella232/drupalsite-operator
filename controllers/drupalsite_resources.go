@@ -125,13 +125,6 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "is_nginx", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx ImageStream"))
-	}
-	if transientErr := r.ensureResourceX(ctx, drp, "bc_nginx", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx BuildConfig"))
-	}
-
 	// 2. Data layer
 
 	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
@@ -183,9 +176,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- site_install_job: Kubernetes Job for the drush site-install
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
-	- is_nginx: ImageStream for Nginx
 	- bc_s2i: BuildConfig for S2I sitebuilder
-	- bc_nginx: BuildConfig for Nginx
 	- deploy_drupal: Deployment for Nginx & PHP-FPM
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
@@ -206,34 +197,12 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "is_nginx":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return imageStreamForDrupalSiteNginx(is, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
 	case "bc_s2i":
 		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
 			return buildConfigForDrupalSiteBuilderS2I(bc, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "bc_nginx":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + nameVersionHash(d), Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
-			return buildConfigForDrupalSiteNginx(bc, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
@@ -378,25 +347,6 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite) corev1.ObjectReferen
 	}
 }
 
-// triggersForBuildConfigs defines build triggers to be configured for the Nginx and PHP buildConfigs based on the input
-// field `environment.ExtraConfigRepo`
-func triggersForBuildConfigs(d *webservicesv1a1.DrupalSite) buildv1.BuildTriggerPolicy {
-	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
-		return buildv1.BuildTriggerPolicy{
-			Type: buildv1.ImageChangeBuildTriggerType,
-			ImageChange: &buildv1.ImageChangeTrigger{
-				From: &corev1.ObjectReference{
-					Kind: "ImageStreamTag",
-					Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
-				},
-			},
-		}
-	}
-	return buildv1.BuildTriggerPolicy{
-		Type: buildv1.ConfigChangeBuildTriggerType,
-	}
-}
-
 // imageStreamForDrupalSiteBuilderS2I returns a ImageStream object for Drupal SiteBuilder S2I
 func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -409,27 +359,6 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "site-builder"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec.LookupPolicy.Local = true
-	return nil
-}
-
-// imageStreamForDrupalSiteNginx returns a ImageStream object for Drupal Nginx
-func imageStreamForDrupalSiteNginx(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "nginx"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
@@ -484,75 +413,6 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 			{
 				Type: buildv1.ConfigChangeBuildTriggerType,
 			},
-		},
-	}
-	return nil
-}
-
-// buildConfigForDrupalSiteNginx returns a BuildConfig object for Drupal Nginx
-func buildConfigForDrupalSiteNginx(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "nginx"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec = buildv1.BuildConfigSpec{
-		CommonSpec: buildv1.CommonSpec{
-			Resources:                 BuildResources,
-			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-			Source: buildv1.BuildSource{
-				Git: &buildv1.GitBuildSource{
-					Ref: ImageRecipesRepoRef,
-					URI: ImageRecipesRepo,
-				},
-				ContextDir: "images/nginx",
-				Images: []buildv1.ImageSource{
-					{
-						From: baseImageReferenceToUse(d),
-						Paths: []buildv1.ImageSourcePath{
-							{
-								SourcePath:     "/app/.",
-								DestinationDir: "./images/nginx/drupal-files/",
-							},
-						},
-					},
-				},
-			},
-			Strategy: buildv1.BuildStrategy{
-				DockerStrategy: &buildv1.DockerBuildStrategy{
-					BuildArgs: []corev1.EnvVar{
-						{
-							Name:  "DRUPAL_VERSION",
-							Value: d.Spec.DrupalVersion,
-						},
-					},
-					Env: []corev1.EnvVar{
-						{
-							Name:  "SITE_BUILDER_DIR",
-							Value: "drupal-files",
-						},
-					},
-				},
-			},
-			Output: buildv1.BuildOutput{
-				To: &corev1.ObjectReference{
-					Kind: "ImageStreamTag",
-					Name: "nginx-" + d.Name + ":" + d.Spec.DrupalVersion,
-				},
-			},
-		},
-		Triggers: []buildv1.BuildTriggerPolicy{
-			triggersForBuildConfigs(d),
 		},
 	}
 	return nil
@@ -722,6 +582,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
                         // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -769,14 +630,14 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "nginx-" + d.Name + ":" + drupalVersion
+				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + d.Spec.DrupalVersion
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d).Name
 			}
 		}
 	}
-	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
 	// Add an annotation to be able to verify what version of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
+	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
 	return nil
 }
 

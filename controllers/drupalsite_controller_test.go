@@ -112,8 +112,6 @@ var _ = Describe("DrupalSite controller", func() {
 				pvc := corev1.PersistentVolumeClaim{}
 				job := batchv1.Job{}
 				deploy := appsv1.Deployment{}
-				is := imagev1.ImageStream{}
-				bc := buildv1.BuildConfig{}
 				dbod := dbodv1a1.DBODRegistration{}
 				route := routev1.Route{}
 
@@ -191,25 +189,11 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check Nginx imageStream
-				By("Expecting Nginx imageStream created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Nginx buildConfig
-				By("Expecting Nginx buildConfigs created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
@@ -265,8 +249,6 @@ var _ = Describe("DrupalSite controller", func() {
 				pvc := corev1.PersistentVolumeClaim{}
 				job := batchv1.Job{}
 				deploy := appsv1.Deployment{}
-				is := imagev1.ImageStream{}
-				bc := buildv1.BuildConfig{}
 				route := routev1.Route{}
 
 				// Check PHP-FPM configMap recreation
@@ -324,17 +306,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check Nginx imageStream
-				By("Expecting Nginx imageStream recreated")
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &is)
-					return k8sClient.Delete(ctx, &is)
-				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check Drush job
 				By("Expecting Drush job recreated")
 				Eventually(func() error {
@@ -344,17 +315,6 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Nginx buildConfig
-				By("Expecting Nginx buildConfigs recreated")
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return k8sClient.Delete(ctx, &bc)
-				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Route
@@ -377,7 +337,10 @@ var _ = Describe("DrupalSite controller", func() {
 			It("Should not be updated successfully", func() {
 				By("By updating service object")
 				svc := corev1.Service{}
-				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
+				Eventually(func() map[string]string {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
+					return svc.Labels
+				}, timeout, interval).Should(Not(BeEmpty()))
 				svc.Labels["app"] = "testUpdateLabel"
 				Eventually(func() error {
 					return k8sClient.Update(ctx, &svc)
@@ -575,13 +538,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check Nginx imageStream
-				By("Expecting Nginx imageStream created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &is)
-					return is.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check sitebuilder-s2i imageStream
 				By("Expecting sitebuilder-s2i imageStream created")
 				Eventually(func() []v1.OwnerReference {
@@ -600,13 +556,6 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting S2I buildConfig created")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Nginx buildConfig
-				By("Expecting Nginx buildConfigs created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -683,13 +632,6 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting new S2I buildConfig to be updated")
 				Eventually(func() []v1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
-					return bc.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Nginx buildConfig
-				By("Expecting new Nginx buildConfigs created")
-				Eventually(func() []v1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
