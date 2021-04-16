@@ -72,7 +72,7 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 	if err != nil {
 		return "", "", err
 	}
-	fmt.Println(pod.Name)
+
 	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
 }
 
