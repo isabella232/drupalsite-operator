@@ -69,6 +69,10 @@ spec:
                         pattern: '[a-z0-9]+(?:[\/._-][a-z0-9]+)*.'
                         type: string
                     type: object
+                  initCloneFrom:
+                    description: InitCloneFrom initializes this environment by cloning
+                      the specified DrupalSite (usually production). Immutable.
+                    type: string
                   name:
                     description: Name specifies the environment name for the DrupalSite.
                       The name will be used for resource lables and route name
