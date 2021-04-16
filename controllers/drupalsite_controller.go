@@ -17,14 +17,12 @@ limitations under the License.
 package controllers
 
 import (
-	"archive/tar"
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
+	"io/ioutil"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -342,11 +340,11 @@ func (r *DrupalSiteReconciler) initEnv() {
 	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
 
 	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + ImageRecipesRepoRef
-	directoryName := downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
+	downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
 	configPath := "/tmp/drupal-runtime/"
 	createConfigDirectory(configPath, log)
 	untar("/tmp/repo.tar", "/tmp/drupal-runtime", log)
-	renameConfigDirectory(directoryName, "/tmp/drupal-runtime", log)
+	renameConfigDirectory("/tmp/drupal-runtime", log)
 }
 
 // isInstallJobCompleted checks if the drush job is successfully completed
@@ -619,81 +617,31 @@ func getenvOrDie(name string, log logr.Logger) string {
 }
 
 // downloadFile downloads from the given URL and writes it to the given filename
-func downloadFile(url string, fileName string, log logr.Logger) string {
-	resp, err := http.Get(url)
-	if err != nil || resp.StatusCode != 200 {
-		log.Error(err, fmt.Sprintf("fetching image recipes repo failed"))
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		log.Info("Received non 200 response code")
-		os.Exit(1)
-	}
-	directoryName := strings.TrimRight(strings.Trim(strings.Split(resp.Header["Content-Disposition"][0], "=")[1], "\""), ".tar")
-	//Create a empty file
-	file, err := os.Create(fileName)
+func downloadFile(url string, fileName string, log logr.Logger) {
+	_, err := exec.Command("wget", url, "-O", fileName).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to create file"))
+		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
 		os.Exit(1)
 	}
-	defer file.Close()
-
-	//Write the bytes to the file
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to write to a file"))
-		os.Exit(1)
-	}
-	log.Info(fmt.Sprintf("Downloaded the file %s", fileName))
-	return directoryName
 }
 
 // untar decompress the given tar file to the given target directory
 func untar(tarball, target string, log logr.Logger) {
-	reader, err := os.Open(tarball)
+	_, err := exec.Command("tar", "-xf", tarball, "-C", target).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to open the tar file"))
+		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
 		os.Exit(1)
-	}
-	defer reader.Close()
-	tarReader := tar.NewReader(reader)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Error(err, fmt.Sprintf("Failed to read the file"))
-			os.Exit(1)
-		}
-		path := filepath.Join(target, header.Name)
-		info := header.FileInfo()
-		if info.IsDir() {
-			if err = os.MkdirAll(path, info.Mode()); err != nil {
-				log.Error(err, fmt.Sprintf("Failed to create a directory"))
-				os.Exit(1)
-			}
-			continue
-		}
-
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Failed to create file"))
-			os.Exit(1)
-		}
-		defer file.Close()
-		_, err = io.Copy(file, tarReader)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Failed to write to a file"))
-			os.Exit(1)
-		}
 	}
 }
 
 // renameConfigDirectory reorganises the configuration files into the appropriate directories after decompressing them
-func renameConfigDirectory(directoryName string, path string, log logr.Logger) {
+func renameConfigDirectory(path string, log logr.Logger) {
+	files, err := ioutil.ReadDir(path)
+	if err != nil || len(files) < 0 {
+		log.Error(err, "Error creating config files during initEnv")
+		os.Exit(1)
+	}
+	directoryName := files[0].Name()
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-critical", "/tmp/qos-critical", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-eco", "/tmp/qos-eco", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-standard", "/tmp/qos-standard", log)
@@ -706,31 +654,32 @@ func createConfigDirectory(configPath string, log logr.Logger) {
 	removeFileIfExists("/tmp/qos-eco", log)
 	removeFileIfExists("/tmp/qos-standard", log)
 	removeFileIfExists("/tmp/drupal-runtime", log)
-	err := os.MkdirAll("/tmp/drupal-runtime", 0755)
-	log.Info(fmt.Sprintf("Creating Directory %s", "/tmp/drupal-runtime"))
-	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to create the directory /tmp/drupal-runtime"))
-		os.Exit(1)
-	}
+	createDir("/tmp/drupal-runtime", log)
 }
 
 // removeFileIfExists checks if the given file/ directory exists. If it does, it removes it
 func removeFileIfExists(path string, log logr.Logger) {
-	_, err := os.Stat(path)
-	if !os.IsNotExist(err) {
-		err = os.RemoveAll(path)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("Failed to delete the directory %s", path))
-			os.Exit(1)
-		}
+	_, err := exec.Command("rm", "-rf", path).Output()
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Error cleaning up old config files during initEnv"))
+		os.Exit(1)
 	}
 }
 
-// moveFile checks if the given file/ directory exists. If it does, it removes it
+// moveFile moves it to the given location
 func moveFile(from string, to string, log logr.Logger) {
-	err := os.Rename(from, to)
+	_, err := exec.Command("mv", from, to).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Failed to move the directory from %s to %s", from, to))
+		log.Error(err, fmt.Sprintf("Error moving config files during initEnv"))
+		os.Exit(1)
+	}
+}
+
+// createDir creates the given directory in the given path
+func createDir(path string, log logr.Logger) {
+	_, err := exec.Command("mkdir", "-p", path).Output()
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Error creating config files during initEnv"))
 		os.Exit(1)
 	}
 }
