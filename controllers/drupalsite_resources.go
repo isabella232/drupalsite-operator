@@ -151,19 +151,23 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+		if drp.Spec.InitCloneFrom == "" {
+			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+			}
 		}
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+		if drp.Spec.InitCloneFrom != "" {
+			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+			}
 		}
 	}
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+	if (drp.ConditionTrue("Installed") || drp.ConditionTrue("Cloned")) && drp.ConditionTrue("Ready") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
@@ -279,16 +283,14 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		return nil
 	case "clone_job":
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-			if d.Spec.CloneFrom != "" {
-				job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
-				_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-					log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-					return jobForDrupalSiteClone(job, dbodSecret, d)
-				})
-				if err != nil {
-					log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-					return newApplicationError(err, ErrClientK8s)
-				}
+			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return jobForDrupalSiteClone(job, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return newApplicationError(err, ErrClientK8s)
 			}
 		}
 		return nil
@@ -891,7 +893,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 			ServiceAccountName: "drupalsite-operator",
 			InitContainers: []corev1.Container{
 				{
-					Image:           "php-" + d.Spec.CloneFrom + ":" + d.Spec.DrupalVersion,
+					Image:           "php-" + d.Spec.Environment.InitCloneFrom + ":" + d.Spec.DrupalVersion,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
 					Command:         takeBackup("dbSourceBackUp"),
@@ -911,7 +913,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
 						MountPath: "/drupal-data",
 					}},
 				}, {
@@ -920,7 +922,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 					ImagePullPolicy: "Always",
 					Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
 						" oc patch deployment " + d.Name + " -p '{ \"metadata\": {\"annotations\": {\"drupal.cern.ch/admin-custom-edit\":\"replace-datasource-destination\"}}}';" +
-						" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.CloneFrom}},
+						" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.Environment.InitCloneFrom + ";"}},
 				{
 					Image:           "php-" + d.Name + ":" + d.Spec.DrupalVersion,
 					Name:            "db-restore",
@@ -942,7 +944,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
 						MountPath: "/drupal-data",
 					}},
 				},
@@ -952,7 +954,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 				Image:           "quay.io/openshift/origin-cli:4.7.0",
 				Name:            "publish",
 				ImagePullPolicy: "Always",
-				Command:         []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n" + d.Namespace}},
+				Command:         []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n " + d.Namespace}},
 			},
 			Volumes: []corev1.Volume{
 				{
@@ -964,10 +966,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 					},
 				},
 				{
-					Name: "drupal-directory-" + d.Spec.CloneFrom,
+					Name: "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: "pv-claim-" + d.Spec.CloneFrom,
+							ClaimName: "pv-claim-" + d.Spec.Environment.InitCloneFrom,
 						},
 					},
 				}},

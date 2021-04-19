@@ -39,6 +39,18 @@ func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
 		Status: "False",
 	})
 }
+func setCloned(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Cloned",
+		Status: "True",
+	})
+}
+func setNotCloned(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "Cloned",
+		Status: "False",
+	})
+}
 func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
 	return setConditionStatus(drp, "Error", true, err, false)
 }

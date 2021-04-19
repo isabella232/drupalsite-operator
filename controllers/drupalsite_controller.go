@@ -182,6 +182,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// 	update = setNotInstalled(drupalSite) || update
 	// }
 
+	// Check if the site is cloned and mark the condition
+	if cloned := r.isCloneJobCompleted(ctx, drupalSite); cloned {
+		update = setCloned(drupalSite) || update
+	} else {
+		update = setNotCloned(drupalSite) || update
+	}
+
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
 	updateNeeded, typeUpdate, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	if !drupalSite.ConditionTrue("CodeUpdatingFailed") && !drupalSite.ConditionTrue("DBUpdatingFailed") {
@@ -354,6 +361,19 @@ func (r *DrupalSiteReconciler) initEnv() {
 func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
 	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
+	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
+	if err == nil {
+		if found.Status.Succeeded != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// isCloneJobCompleted checks if the clone job is successfully completed
+func (r *DrupalSiteReconciler) isCloneJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	found := &batchv1.Job{}
+	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
 	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
 	if err == nil {
 		if found.Status.Succeeded != 0 {
