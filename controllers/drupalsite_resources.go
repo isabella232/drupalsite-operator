@@ -920,7 +920,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 			},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           "quay.io/openshift/origin-cli:4.7.0",
+				Image:           "quay.io/openshift/origin-cli:latest",
 				Name:            "clone",
 				ImagePullPolicy: "Always",
 				Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
