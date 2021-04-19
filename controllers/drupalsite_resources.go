@@ -916,46 +916,41 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
 						MountPath: "/drupal-data",
 					}},
-				}, {
-					Image:           "quay.io/openshift/origin-cli:4.7.0",
-					Name:            "unpublish-change-datasource-destination",
-					ImagePullPolicy: "Always",
-					Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
-						" oc patch deployment " + d.Name + " -p '{ \"metadata\": {\"annotations\": {\"drupal.cern.ch/admin-custom-edit\":\"replace-datasource-destination\"}}}';" +
-						" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.Environment.InitCloneFrom + ";"}},
-				{
-					Image:           "php-" + d.Name + ":" + d.Spec.DrupalVersion,
-					Name:            "db-restore",
-					ImagePullPolicy: "Always",
-					Command:         restoreBackup("dbSourceBackUp"),
-					Env: []corev1.EnvVar{
-						{
-							Name:  "DRUPAL_SHARED_VOLUME",
-							Value: "/drupal-data",
-						},
-					},
-					EnvFrom: []corev1.EnvFromSource{
-						{
-							SecretRef: &corev1.SecretEnvSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: dbodSecret,
-								},
-							},
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
-						MountPath: "/drupal-data",
-					}},
 				},
 			},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
 				Image:           "quay.io/openshift/origin-cli:4.7.0",
-				Name:            "publish",
+				Name:            "clone",
 				ImagePullPolicy: "Always",
-				Command:         []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n " + d.Namespace}},
-			},
+				Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
+					" oc patch deployment " + d.Name + " -p '{ \"metadata\": {\"annotations\": {\"drupal.cern.ch/admin-custom-edit\":\"replace-datasource-destination\"}}}';" +
+					" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.Environment.InitCloneFrom + ";" +
+					" while [[ $(oc get pods -l app=drupal,drupalSite=" + d.Name + " -o 'jsonpath={..status.conditions[?(@.type==\"Ready\")].status}') != \"True\" ]]; do echo \"waiting for pod\" && sleep 5; done;" +
+					" serverPod=$(oc get pods -n " + d.Namespace + " -l app=drupal,drupalSite=" + d.Name + " --field-selector=status.phase=Running -o custom-columns=POD:.metadata.name --no-headers);" +
+					" echo $serverPod;" +
+					" oc exec $serverPod -c php-fpm -- sh '-c' 'drush sql-drop -y ; `drush sql-connect` < /drupal-data/dbSourceBackUp.sql';" +
+					" oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n " + d.Namespace},
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
+				},
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: dbodSecret,
+							},
+						},
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{{
+					Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
+					MountPath: "/drupal-data",
+				}},
+			}},
 			Volumes: []corev1.Volume{
 				{
 					Name: "drupal-directory-" + d.Name,
