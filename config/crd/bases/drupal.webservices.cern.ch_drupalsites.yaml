@@ -36,9 +36,6 @@ spec:
           spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
-              cloneFrom:
-                description: CloneFrom defines the drupal site to be cloned
-                type: string
               diskSize:
                 description: DiskSize defines the drupal site PVC size
                 type: string
