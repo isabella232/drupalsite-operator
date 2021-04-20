@@ -486,8 +486,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		currentobject.Labels[k] = v
 	}
 
-	shareProcessNamespace := true
-	currentobject.Spec.Template.Spec.ShareProcessNamespace = &shareProcessNamespace
+	currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
 
 	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
 	currentobject.Spec.Selector = &metav1.LabelSelector{
@@ -570,8 +569,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				},
 				{
 					Name:      "nginx-config-volume",
-					MountPath: "/etc/nginx/conf.d/default.conf",
-					SubPath:   "default.conf",
+					MountPath: "/etc/nginx/custom.conf",
+					SubPath:   "custom.conf",
 				},
 				{
 					Name:      "empty-dir",
@@ -886,16 +885,16 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	}
 	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
-	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx-default.conf"
+	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx.conf"
 
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
 	}
 
-	currentConfig := currentobject.Data["default.conf"]
+	currentConfig := currentobject.Data["custom.conf"]
 	currentobject.Data = map[string]string{
-		"default.conf": string(content),
+		"custom.conf": string(content),
 	}
 
 	if !currentobject.CreationTimestamp.IsZero() {
