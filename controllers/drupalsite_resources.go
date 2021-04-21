@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
+	"path"
 	"strconv"
 
 	"github.com/go-logr/logr"
@@ -33,6 +35,7 @@ import (
 
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -162,9 +165,15 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
+		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
+		}
 	} else {
 		if transientErr := r.ensureNoRoute(ctx, drp, log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
+		}
+		if transientErr := r.ensureNoReturnURI(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
 		}
 	}
 	return transientErrs
@@ -182,6 +191,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
 	- route: Route for the drupalsite
+	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
@@ -258,6 +268,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
+	case "oidc_return_uri":
+		OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
+			log.Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+			return newOidcReturnURI(OidcReturnURI, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "site_install_job":
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
@@ -320,6 +341,22 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 		}
 	}
 	if err := r.Delete(ctx, route); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	oidc_return_uri := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: oidc_return_uri.Name, Namespace: oidc_return_uri.Namespace}, oidc_return_uri); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, oidc_return_uri); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
@@ -772,6 +809,24 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 		Port: &routev1.RoutePort{
 			TargetPort: intstr.FromInt(8080),
 		},
+	}
+	return nil
+}
+
+// newOidcReturnURI returns a oidcReturnURI object
+func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	url, err := url.Parse(d.Spec.SiteURL)
+	if err != nil {
+		return err
+	}
+	// This will add * to the last part of the URL, garanteeing all subpaths of the link can be redirected
+	url.Path = path.Join(url.Path, "openid-connect", "*") // TODO: Do we want to put this in a variable for better exposure?
+	returnURI := url.String()
+	currentobject.Spec = authz.OidcReturnURISpec{
+		RedirectURI: returnURI,
 	}
 	return nil
 }
