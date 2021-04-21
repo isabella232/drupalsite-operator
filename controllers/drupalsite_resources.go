@@ -334,16 +334,16 @@ func labelsForDrupalSite(name string) map[string]string {
 // baseImageReferenceToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
 // If yes, the S2I buildconfig will be used; baseImageReferenceToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
-func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite) corev1.ObjectReference {
+func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string) corev1.ObjectReference {
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
+			Name: "site-builder-s2i-" + d.Name + ":" + drupalVersion,
 		}
 	}
 	return corev1.ObjectReference{
 		Kind: "DockerImage",
-		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + d.Spec.DrupalVersion,
+		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + drupalVersion,
 	}
 }
 
@@ -629,9 +629,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + d.Spec.DrupalVersion
+				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d).Name
+				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
 			}
 		}
 	}
@@ -765,7 +765,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           baseImageReferenceToUse(d).Name,
+				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),
