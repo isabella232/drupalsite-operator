@@ -341,9 +341,34 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string
 			Name: "site-builder-s2i-" + d.Name + ":" + drupalVersion,
 		}
 	}
+	return getSiteBuilderImage(d, drupalVersion)
+}
+
+// getSiteBuilderImage returns the site builder/ PHP image to be used depending on the 'ReleaseChannel' variable
+func getSiteBuilderImage(d *webservicesv1a1.DrupalSite, drupalVersion string) corev1.ObjectReference {
+	if ReleaseChannel != "" {
+		return corev1.ObjectReference{
+			Kind: "DockerImage",
+			Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + drupalVersion + "-" + ReleaseChannel,
+		}
+	}
 	return corev1.ObjectReference{
 		Kind: "DockerImage",
 		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + drupalVersion,
+	}
+}
+
+// getNginxImage returns the nginx image to be used depending on the 'ReleaseChannel' variable
+func getNginxImage(d *webservicesv1a1.DrupalSite, drupalVersion string) corev1.ObjectReference {
+	if ReleaseChannel != "" {
+		return corev1.ObjectReference{
+			Kind: "DockerImage",
+			Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion + "-" + ReleaseChannel,
+		}
+	}
+	return corev1.ObjectReference{
+		Kind: "DockerImage",
+		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion,
 	}
 }
 
@@ -478,7 +503,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 	// a wrong image built from a different build, that is left out on the node
 	// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
-        // ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+	// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 	// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
@@ -540,7 +565,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		switch container.Name {
 		case "nginx":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
-                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 8080,
@@ -582,7 +607,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
-                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 9000,
@@ -629,7 +654,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion
+				currentobject.Spec.Template.Spec.Containers[i].Image = getNginxImage(d, drupalVersion).Name
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
 			}
