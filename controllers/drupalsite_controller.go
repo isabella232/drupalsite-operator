@@ -173,11 +173,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the site is installed and mark the condition
-	if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
-		update = setInstalled(drupalSite) || update
-	} else {
-		update = setNotInstalled(drupalSite) || update
-	}
+	// if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
+	update = setInstalled(drupalSite) || update
+	// } else {
+	// 	update = setNotInstalled(drupalSite) || update
+	// }
 
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
 	updateNeeded, typeUpdate, reconcileErr := r.updateNeeded(ctx, drupalSite)
