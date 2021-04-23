@@ -344,7 +344,8 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string
 	return getSiteBuilderImage(d, drupalVersion)
 }
 
-// getSiteBuilderImage returns the site builder/ PHP image to be used depending on the 'ReleaseChannel' variable
+// getSiteBuilderImage returns the site builder/ PHP image to be used depending on the `ReleaseChannel` cmdline arg:
+// If `ReleaseChannel` is set, appends `-${ReleaseChannel}` to the image tag.
 func getSiteBuilderImage(d *webservicesv1a1.DrupalSite, drupalVersion string) corev1.ObjectReference {
 	if ReleaseChannel != "" {
 		return corev1.ObjectReference{
