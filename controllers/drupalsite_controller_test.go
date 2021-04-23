@@ -314,58 +314,6 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
-	Describe("Updating a child object", func() {
-		Context("Without admin annotations", func() {
-			It("Should not be updated successfully", func() {
-				By("By updating service object")
-				svc := corev1.Service{}
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.Labels
-				}, timeout, interval).Should(Not(BeEmpty()))
-				svc.Labels["app"] = "testUpdateLabel"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				time.Sleep(1 * time.Second)
-
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.GetLabels()
-				}, timeout, interval).ShouldNot(HaveKeyWithValue("app", "testUpdateLabel"))
-			})
-		})
-	})
-
-	Describe("Updating a child object", func() {
-		Context("With admin annotations", func() {
-			It("Should be updated successfully", func() {
-				const adminAnnotation = "drupal.cern.ch/admin-custom-edit"
-				By("By updating service object with admin annotation")
-				svc := corev1.Service{}
-				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-				if len(svc.GetAnnotations()) == 0 {
-					svc.Annotations = map[string]string{}
-				}
-				svc.Annotations[adminAnnotation] = "true"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				svc.Labels["app"] = "testUpdateLabel"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.GetLabels()
-				}, timeout, interval).Should(HaveKeyWithValue("app", "testUpdateLabel"))
-			})
-		})
-	})
-
 	Describe("Deleting the drupalsite object", func() {
 		Context("With basic spec", func() {
 			It("Should be deleted successfully", func() {

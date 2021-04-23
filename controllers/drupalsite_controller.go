@@ -226,7 +226,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := r.checkBuildstatusForUpdate(ctx, drupalSite); err != nil {
 			if err.Temporary() {
 				// try to reconcile after a few seconds like half a minute or so
-				return handleTransientErr(err, "%v while building images for the new Drupal version", "CodeUpdatingFailed")
+				return handleTransientErr(err, "%v while building s2i image for the new Drupal version", "CodeUpdatingFailed")
 			} else {
 				err.Wrap("%v: Failed to update version " + drupalSite.Spec.DrupalVersion)
 				r.rollBackCodeUpdate(ctx, drupalSite)
@@ -471,30 +471,17 @@ func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webserv
 
 // UpdateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
 func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, string, reconcileError) {
-	deployment, err := r.getRunningdeployment(ctx, d)
-	if err != nil {
-		return false, "", newApplicationError(err, ErrClientK8s)
-	}
-	// If the deployment has a different image tag, then update needed
-	// NOTE: a more robust check could be done with Drush inside the pod
-	if len(deployment.Spec.Template.Spec.Containers) > 0 {
-		image := deployment.Spec.Template.Spec.Containers[0].Image
-		if len(image) < 2 {
-			return false, "", newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
+	// Check for an update, only when the site is installed and ready to prevent checks during an installation/ upgrade
+	if d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
+		deployment, err := r.getRunningdeployment(ctx, d)
+		if err != nil {
+			return false, "", newApplicationError(err, ErrClientK8s)
 		}
 
 		// Check if image is different, check if current site is ready and installed
 		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
 			return true, "CodeUpdate", nil
 		}
-	}
-	// If drush updb-status needs update, then a database update needed
-	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
-	if err != nil {
-		return false, "", newApplicationError(err, ErrPodExec)
-	}
-	if sout != "" {
-		return true, "DBUpdate", nil
 	}
 	return false, "", nil
 }
@@ -511,28 +498,17 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 }
 
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
-	// Check status of the PHP buildconfig
-	// TODO: check if the build is in error if the s2i build isn't ready yet (maybe it self-heals)
-	status, err := r.getBuildStatus(ctx, "php", d)
-	switch {
-	case err != nil:
-		return newApplicationError(err, ErrClientK8s)
-	case status == buildv1.BuildPhaseFailed || status == buildv1.BuildPhaseError:
-		return newApplicationError(nil, ErrBuildFailed)
-	case status != buildv1.BuildPhaseComplete:
-		return newApplicationError(err, ErrTemporary)
-	}
-	// Progress only when build is successfull
-
-	// Check status of the Nginx buildconfig
-	status, err = r.getBuildStatus(ctx, "nginx", d)
-	switch {
-	case err != nil:
-		return newApplicationError(err, ErrClientK8s)
-	case status == "Failed" || status == "Error":
-		return newApplicationError(nil, ErrBuildFailed)
-	case status != buildv1.BuildPhaseComplete:
-		return newApplicationError(err, ErrTemporary)
+	// Check status of the S2i buildconfig if the extraConfigRepo field is set
+	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
+		status, err := r.getBuildStatus(ctx, "site-builder-s2i-", d)
+		switch {
+		case err != nil:
+			return newApplicationError(err, ErrClientK8s)
+		case status == buildv1.BuildPhaseFailed || status == buildv1.BuildPhaseError:
+			return newApplicationError(nil, ErrBuildFailed)
+		case status != buildv1.BuildPhaseComplete:
+			return newApplicationError(err, ErrTemporary)
+		}
 	}
 	return nil
 }

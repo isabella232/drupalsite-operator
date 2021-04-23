@@ -252,7 +252,11 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "deploy_drupal":
-		if d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed") {
+		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+		err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
+
+		// Check if a deployment exists & if any of the given conditions satisfy
+		if err == nil && (d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed")) {
 			return nil
 		}
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
@@ -473,17 +477,13 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "site-builder"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec.LookupPolicy.Local = true
 	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "site-builder"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec.LookupPolicy.Local = true
 	return nil
 }
 
@@ -491,50 +491,44 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "site-builder"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec = buildv1.BuildConfigSpec{
-		CommonSpec: buildv1.CommonSpec{
-			Resources:                 BuildResources,
-			CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-			Source: buildv1.BuildSource{
-				Git: &buildv1.GitBuildSource{
-					// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
-					Ref: "master",
-					URI: d.Spec.Environment.ExtraConfigRepo,
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "site-builder"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec = buildv1.BuildConfigSpec{
+			CommonSpec: buildv1.CommonSpec{
+				Resources:                 BuildResources,
+				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
+				Source: buildv1.BuildSource{
+					Git: &buildv1.GitBuildSource{
+						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+						Ref: "master",
+						URI: d.Spec.Environment.ExtraConfigRepo,
+					},
 				},
-			},
-			Strategy: buildv1.BuildStrategy{
-				SourceStrategy: &buildv1.SourceBuildStrategy{
-					From: corev1.ObjectReference{
-						Kind: "DockerImage",
-						Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(d.Spec.DrupalVersion),
+				Strategy: buildv1.BuildStrategy{
+					SourceStrategy: &buildv1.SourceBuildStrategy{
+						From: corev1.ObjectReference{
+							Kind: "DockerImage",
+							Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(d.Spec.DrupalVersion),
+						},
+					},
+				},
+				Output: buildv1.BuildOutput{
+					To: &corev1.ObjectReference{
+						Kind: "ImageStreamTag",
+						Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(d.Spec.DrupalVersion),
 					},
 				},
 			},
-			Output: buildv1.BuildOutput{
-				To: &corev1.ObjectReference{
-					Kind: "ImageStreamTag",
-					Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(d.Spec.DrupalVersion),
+			Triggers: []buildv1.BuildTriggerPolicy{
+				{
+					Type: buildv1.ConfigChangeBuildTriggerType,
 				},
 			},
-		},
-		Triggers: []buildv1.BuildTriggerPolicy{
-			{
-				Type: buildv1.ConfigChangeBuildTriggerType,
-			},
-		},
+		}
 	}
 	return nil
 }
@@ -589,206 +583,202 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			"nginx-configmap-version": "1",
 		}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "drupal-logs"}}
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
-	// a wrong image built from a different build, that is left out on the node
-	// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
-	// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-	// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
 
-	currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
+		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
+		// a wrong image built from a different build, that is left out on the node
+		// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
+		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
 
-	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
-	currentobject.Spec.Selector = &metav1.LabelSelector{
-		MatchLabels: ls,
-	}
-	currentobject.Spec.Template.ObjectMeta.Labels = ls
+		currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
 
-	if _, bool := d.Annotations["nodeSelectorLabel"]; bool {
-		if _, bool = d.Annotations["nodeSelectorValue"]; bool {
-			currentobject.Spec.Template.Spec.NodeSelector = map[string]string{
-				d.Annotations["nodeSelectorLabel"]: d.Annotations["nodeSelectorValue"],
+		currentobject.Spec.Replicas = pointer.Int32Ptr(1)
+		currentobject.Spec.Selector = &metav1.LabelSelector{
+			MatchLabels: ls,
+		}
+		currentobject.Spec.Template.ObjectMeta.Labels = ls
+
+		if _, bool := d.Annotations["nodeSelectorLabel"]; bool {
+			if _, bool = d.Annotations["nodeSelectorValue"]; bool {
+				currentobject.Spec.Template.Spec.NodeSelector = map[string]string{
+					d.Annotations["nodeSelectorLabel"]: d.Annotations["nodeSelectorValue"],
+				}
 			}
 		}
-	}
 
-	currentobject.Spec.Template.Spec.Volumes = []corev1.Volume{
-		{
-			Name: "drupal-directory-" + d.Name,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: "pv-claim-" + d.Name,
-				},
-			}},
-		{
-			Name: "php-config-volume",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "php-fpm-" + d.Name,
+		currentobject.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{
+				Name: "drupal-directory-" + d.Name,
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: "pv-claim-" + d.Name,
 					},
-				},
-			},
-		},
-		{
-			Name: "nginx-config-volume",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "nginx-" + d.Name,
-					},
-				},
-			},
-		},
-		{
-			Name: "site-settings-php",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "site-settings-" + d.Name,
-					},
-				},
-			},
-		},
-		{
-			Name:         "empty-dir",
-			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
-		},
-		{
-			Name: "webdav-volume",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: "webdav-secret-" + d.Name,
-				},
-			},
-		},
-	}
-
-	for i, container := range currentobject.Spec.Template.Spec.Containers {
-		switch container.Name {
-		case "nginx":
-			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
-			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
-			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
-				ContainerPort: 8080,
-				Name:          "nginx",
-				Protocol:      "TCP",
-			}}
-			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
-				{
-					Name:  "DRUPAL_SHARED_VOLUME",
-					Value: "/drupal-data",
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
-				{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
-				},
-				{
-					Name:      "nginx-config-volume",
-					MountPath: "/etc/nginx/custom.conf",
-					SubPath:   "custom.conf",
-					ReadOnly:  true,
-				},
-				{
-					Name:      "empty-dir",
-					MountPath: "/var/run/",
-				},
-				{
-					Name:      "webdav-volume",
-					MountPath: "/etc/nginx/webdav",
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
-
-		case "php-fpm":
-			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
-			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
-			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
-			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
-				ContainerPort: 9000,
-				Name:          "php-fpm",
-				Protocol:      "TCP",
-			}}
-			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
-				{
-					Name:  "DRUPAL_SHARED_VOLUME",
-					Value: "/drupal-data",
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
-				{
-					SecretRef: &corev1.SecretEnvSource{
+				}},
+			{
+				Name: "php-config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: databaseSecret,
+							Name: "php-fpm-" + d.Name,
 						},
 					},
 				},
-				{
-					SecretRef: &corev1.SecretEnvSource{
+			},
+			{
+				Name: "nginx-config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: oidcSecretName, //This is always set the same way
+							Name: "nginx-" + d.Name,
 						},
 					},
 				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
-				{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
+			},
+			{
+				Name: "site-settings-php",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "site-settings-" + d.Name,
+						},
+					},
 				},
-				{
-					Name:      "php-config-volume",
-					MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
-					SubPath:   "zz-docker.conf",
-					ReadOnly:  true,
+			},
+			{
+				Name:         "empty-dir",
+				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+			},
+			{
+				Name: "webdav-volume",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "webdav-secret-" + d.Name,
+					},
 				},
-				{
-					Name:      "empty-dir",
-					MountPath: "/var/run/",
-				},
-				{
-					Name:      "site-settings-php",
-					MountPath: "/app/web/sites/default/settings.php",
-					SubPath:   "settings.php",
-					ReadOnly:  true,
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
-
-		case "drupal-logs":
-			currentobject.Spec.Template.Spec.Containers[i].Name = "drupal-logs"
-			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"sh", "-c", "touch /drupal-data/drupal.log;" + " tail -f /drupal-data/drupal.log"}
-			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
-			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
-				ContainerPort: 8081,
-				Name:          "drupal-logs",
-				Protocol:      "TCP",
-			}}
-			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
-				{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].Resources = drupallogsResources
+			},
 		}
+
+		for i, container := range currentobject.Spec.Template.Spec.Containers {
+			switch container.Name {
+			case "nginx":
+				currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
+				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+					ContainerPort: 8080,
+					Name:          "nginx",
+					Protocol:      "TCP",
+				}}
+				currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "nginx-config-volume",
+						MountPath: "/etc/nginx/custom.conf",
+						SubPath:   "custom.conf",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
+					{
+						Name:      "webdav-volume",
+						MountPath: "/etc/nginx/webdav",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
+
+			case "php-fpm":
+				currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
+				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+					ContainerPort: 9000,
+					Name:          "php-fpm",
+					Protocol:      "TCP",
+				}}
+				currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: databaseSecret,
+							},
+						},
+					},
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oidcSecretName, //This is always set the same way
+							},
+						},
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "php-config-volume",
+						MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
+						SubPath:   "zz-docker.conf",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
+
+			case "drupal-logs":
+				currentobject.Spec.Template.Spec.Containers[i].Name = "drupal-logs"
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"sh", "-c", "touch /drupal-data/drupal.log;" + " tail -f /drupal-data/drupal.log"}
+				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+					ContainerPort: 8081,
+					Name:          "drupal-logs",
+					Protocol:      "TCP",
+				}}
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].Resources = drupallogsResources
+			}
+		}
+
 	}
 
 	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
@@ -853,18 +843,12 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 				},
 			},
 		}
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
 	}
 	return nil
 }
@@ -873,33 +857,27 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec.Selector = ls
+		currentobject.Spec.Ports = []corev1.ServicePort{
+			{
+				TargetPort: intstr.FromInt(8080),
+				Name:       "nginx",
+				Port:       80,
+				Protocol:   "TCP",
+			},
+			{
+				TargetPort: intstr.FromInt(8081),
+				Name:       "webdav",
+				Port:       81,
+				Protocol:   "TCP",
+			}}
 	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec.Selector = ls
-	currentobject.Spec.Ports = []corev1.ServicePort{
-		{
-			TargetPort: intstr.FromInt(8080),
-			Name:       "nginx",
-			Port:       80,
-			Protocol:   "TCP",
-		},
-		{
-			TargetPort: intstr.FromInt(8081),
-			Name:       "webdav",
-			Port:       81,
-			Protocol:   "TCP",
-		}}
 	return nil
 }
 
@@ -907,36 +885,28 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	if len(currentobject.Annotations) < 1 {
 		currentobject.Annotations = map[string]string{}
-	}
-	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
-		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
+		if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+			currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
+		}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
 
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec = routev1.RouteSpec{
-		Host: d.Spec.SiteURL,
-		To: routev1.RouteTargetReference{
-			Kind:   "Service",
-			Name:   d.Name,
-			Weight: pointer.Int32Ptr(100),
-		},
-		Port: &routev1.RoutePort{
-			TargetPort: intstr.FromInt(8080),
-		},
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec = routev1.RouteSpec{
+			Host: d.Spec.SiteURL,
+			To: routev1.RouteTargetReference{
+				Kind:   "Service",
+				Name:   d.Name,
+				Weight: pointer.Int32Ptr(100),
+			},
+			Port: &routev1.RoutePort{
+				TargetPort: intstr.FromInt(8080),
+			},
+		}
 	}
 	return nil
 }
@@ -1066,14 +1036,10 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, databaseSecret string, d 
 				},
 			}},
 		}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls["app"] = "drush"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
+		ls["app"] = "drush"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
 	}
 	return nil
 }
@@ -1179,40 +1145,31 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 // updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if currentobject.Annotations == nil {
-		currentobject.Annotations = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "php"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
-
 	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/php-fpm.conf"
-
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading PHP-FPM configMap failed: %w", err), ErrFilesystemIO)
 	}
 
-	// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
-	currentConfig := currentobject.Data["zz-docker.conf"]
-	currentobject.Data = map[string]string{
-		"zz-docker.conf": string(content),
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Annotations = map[string]string{}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "php"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
+		// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
+		currentobject.Data = map[string]string{
+			"zz-docker.conf": string(content),
+		}
 	}
 
 	if !currentobject.CreationTimestamp.IsZero() {
+		currentConfig := currentobject.Data["zz-docker.conf"]
 		if currentConfig != string(content) {
 			// Roll out a new deployment
 			deploy := &appsv1.Deployment{}
@@ -1233,38 +1190,29 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 // updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if currentobject.Annotations == nil {
-		currentobject.Annotations = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "nginx"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
-
 	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx.conf"
-
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
 	}
 
-	currentConfig := currentobject.Data["custom.conf"]
-	currentobject.Data = map[string]string{
-		"custom.conf": string(content),
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Annotations = map[string]string{}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "nginx"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
+		currentobject.Data = map[string]string{
+			"custom.conf": string(content),
+		}
 	}
 	if !currentobject.CreationTimestamp.IsZero() {
+		currentConfig := currentobject.Data["custom.conf"]
 		if currentConfig != string(content) {
 			// Roll out a new deployment
 			deploy := &appsv1.Deployment{}
