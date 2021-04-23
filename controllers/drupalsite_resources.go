@@ -890,13 +890,12 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 			Labels: ls,
 		}
 		currentobject.Spec.Template.Spec = corev1.PodSpec{
-			ServiceAccountName: "drupalsite-operator",
 			InitContainers: []corev1.Container{
 				{
-					Image:           "php-" + d.Spec.Environment.InitCloneFrom + ":" + d.Spec.DrupalVersion,
+					Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
-					Command:         takeBackup("dbSourceBackUp"),
+					Command:         []string{"sh", "/operations/database-backup.sh"},
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DRUPAL_SHARED_VOLUME",
@@ -907,7 +906,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 						{
 							SecretRef: &corev1.SecretEnvSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: dbodSecret,
+									Name: "dbcredentials-" + d.Spec.InitCloneFrom,
 								},
 							},
 						},
@@ -920,21 +919,14 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 			},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           "quay.io/openshift/origin-cli:latest",
+				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
-				Command: []string{"sh", "-c", "oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":false}}' -n" + d.Namespace + ";" +
-					" oc patch deployment " + d.Name + " -p '{ \"metadata\": {\"annotations\": {\"drupal.cern.ch/admin-custom-edit\":\"replace-datasource-destination\"}}}';" +
-					" oc set volume deployment/" + d.Name + " --add --overwrite --name drupal-directory-" + d.Name + " --type=persistentVolumeClaim --claim-name=pv-claim-" + d.Spec.Environment.InitCloneFrom + ";" +
-					" while [[ $(oc get pods -l app=drupal,drupalSite=" + d.Name + " -o 'jsonpath={..status.conditions[?(@.type==\"Ready\")].status}') != \"True\" ]]; do echo \"waiting for pod\" && sleep 5; done;" +
-					" serverPod=$(oc get pods -n " + d.Namespace + " -l app=drupal,drupalSite=" + d.Name + " --field-selector=status.phase=Running -o custom-columns=POD:.metadata.name --no-headers);" +
-					" echo $serverPod;" +
-					" oc exec $serverPod -c php-fpm -- sh '-c' 'drush sql-drop -y ; `drush sql-connect` < /drupal-data/dbSourceBackUp.sql';" +
-					" oc patch drupalsites.drupal.webservices.cern.ch/" + d.Name + " --type=merge -p '{\"spec\": {\"publish\":true}}' -n " + d.Namespace},
+				Command:         []string{"sh", "-c", "/operations/clone.sh ; /operations/database-restore.sh"},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
-						Value: "/drupal-data",
+						Value: "/drupal-data-source",
 					},
 				},
 				EnvFrom: []corev1.EnvFromSource{
@@ -946,10 +938,15 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 						},
 					},
 				},
-				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
-					MountPath: "/drupal-data",
-				}},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
+						MountPath: "/drupal-data-source",
+					},
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					}},
 			}},
 			Volumes: []corev1.Volume{
 				{
