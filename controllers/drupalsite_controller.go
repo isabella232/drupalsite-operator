@@ -473,26 +473,6 @@ func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webs
 	return deployment, err
 }
 
-// checkGivenImageIsInNginxImageStreamTagItems fetches the running nginx imagestream tag items for a given tag and checks if the given image is part of it or not
-func (r *DrupalSiteReconciler) isGivenImageInNginxImageStreamTagItems(ctx context.Context, d *webservicesv1a1.DrupalSite, givenImage string) (bool, error) {
-	imageStream := &imagev1.ImageStream{}
-	err := r.Get(ctx, types.NamespacedName{Name: "nginx-" + d.Name, Namespace: d.Namespace}, imageStream)
-	if err != nil || len(imageStream.Status.Tags) > 0 {
-		tagList := imageStream.Status.Tags
-		for t := range tagList {
-			if tagList[t].Tag == d.Spec.DrupalVersion {
-				for i := range tagList[t].Items {
-					if tagList[t].Items[i].DockerImageReference == givenImage {
-						return true, nil
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-	return false, newApplicationError(err, ErrClientK8s)
-}
-
 // didRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
 func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, error) {
 	pod, err := r.getRunningPod(ctx, d)
@@ -500,7 +480,7 @@ func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webserv
 		return false, ErrClientK8s
 	}
 	if pod.Status.Phase != corev1.PodRunning || pod.Annotations["drupalVersion"] != d.Spec.DrupalVersion {
-		return false, errors.New("Pod did not roll out successfully")
+		return false, errors.New("pod did not roll out successfully")
 	}
 	return true, nil
 }
@@ -619,7 +599,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	}
 
 	rollout, err := r.didRollOutSucceed(ctx, d)
-	if rollout != true || err != nil {
+	if !rollout || err != nil {
 		return newApplicationError(err, ErrRollBack)
 	}
 
@@ -640,8 +620,6 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 	return nil
 }
 
-// CODE BELOW WILL GO soon -------------
-
 // getenvOrDie checks for the given variable in the environment, if not exists
 func getenvOrDie(name string, log logr.Logger) string {
 	e := os.Getenv(name)
@@ -656,7 +634,7 @@ func getenvOrDie(name string, log logr.Logger) string {
 func downloadFile(url string, fileName string, log logr.Logger) {
 	_, err := exec.Command("wget", url, "-O", fileName).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
+		log.Error(err, "error downloading config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -665,7 +643,7 @@ func downloadFile(url string, fileName string, log logr.Logger) {
 func untar(tarball, target string, log logr.Logger) {
 	_, err := exec.Command("tar", "-xf", tarball, "-C", target).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
+		log.Error(err, "error downloading config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -674,13 +652,14 @@ func untar(tarball, target string, log logr.Logger) {
 func renameConfigDirectory(path string, log logr.Logger) {
 	files, err := ioutil.ReadDir(path)
 	if err != nil || len(files) < 0 {
-		log.Error(err, "Error creating config files during initEnv")
+		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
 	directoryName := files[0].Name()
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-critical", "/tmp/qos-critical", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-eco", "/tmp/qos-eco", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-standard", "/tmp/qos-standard", log)
+	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/sitebuilder", "/tmp/sitebuilder", log)
 	removeFileIfExists("/tmp/drupal-runtime", log)
 }
 
@@ -689,6 +668,7 @@ func createConfigDirectory(configPath string, log logr.Logger) {
 	removeFileIfExists("/tmp/qos-critical", log)
 	removeFileIfExists("/tmp/qos-eco", log)
 	removeFileIfExists("/tmp/qos-standard", log)
+	removeFileIfExists("/tmp/sitebuilder", log)
 	removeFileIfExists("/tmp/drupal-runtime", log)
 	createDir("/tmp/drupal-runtime", log)
 }
@@ -697,7 +677,7 @@ func createConfigDirectory(configPath string, log logr.Logger) {
 func removeFileIfExists(path string, log logr.Logger) {
 	_, err := exec.Command("rm", "-rf", path).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error cleaning up old config files during initEnv"))
+		log.Error(err, "error cleaning up old config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -706,7 +686,7 @@ func removeFileIfExists(path string, log logr.Logger) {
 func moveFile(from string, to string, log logr.Logger) {
 	_, err := exec.Command("mv", from, to).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error moving config files during initEnv"))
+		log.Error(err, "error moving config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -715,7 +695,7 @@ func moveFile(from string, to string, log logr.Logger) {
 func createDir(path string, log logr.Logger) {
 	_, err := exec.Command("mkdir", "-p", path).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error creating config files during initEnv"))
+		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
 }

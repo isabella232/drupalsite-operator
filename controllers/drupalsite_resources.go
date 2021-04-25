@@ -1178,7 +1178,6 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	}
 	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
-	//configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx-default.conf"
 	configPath := "/tmp/sitebuilder/settings.php"
 
 	content, err := ioutil.ReadFile(configPath)
