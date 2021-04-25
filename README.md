@@ -23,4 +23,4 @@ Required environment variables:
  env var | example | description
  --- | --- | ---
 `DEFAULT_DOMAIN`  | `webtest.cern.ch`           | Route's Host field
-`RUNTIME_REPO` | `https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master` | Allows to select the images that will be used by the operator, if `@feature-branch` will use the images set on the feature branch (Can be used commit hash as well)
+`RUNTIME_REPO` | `https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master` | Specify the git repo and commit that the operator will use to populate configmaps for nginx/php/drupal. `@<COMMIT_SHA>` or any git refspec can be specified, and the operator will use the the configuration specified there
