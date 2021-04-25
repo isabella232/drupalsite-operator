@@ -822,7 +822,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 	if err != nil {
 		return err
 	}
-	// This will add * to the last part of the URL, garanteeing all subpaths of the link can be redirected
+	// This will append `/openid-connect/*` to the URL, guaranteeing all subpaths of the link can be redirected
 	url.Path = path.Join(url.Path, "openid-connect", "*") // TODO: Do we want to put this in a variable for better exposure?
 	returnURI := url.String()
 	currentobject.Spec = authz.OidcReturnURISpec{
