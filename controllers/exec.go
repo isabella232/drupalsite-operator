@@ -106,8 +106,6 @@ func execToPodThroughAPI(containerName, podName, namespace string, stdin io.Read
 		TTY:       false,
 	}, parameterCodec)
 
-	fmt.Println("Request URL:", req.URL().String())
-
 	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
 	if err != nil {
 		return "", "", fmt.Errorf("error while creating Executor: %v", err)

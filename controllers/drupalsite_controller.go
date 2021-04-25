@@ -282,7 +282,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		// Run updb
-		fmt.Println(runUpDBCommand())
 		_, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, runUpDBCommand()...)
 		if err != nil {
 			err = r.rollBackDBUpdate(ctx, drupalSite, backupFileName)
@@ -498,7 +497,6 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 		if len(image) < 2 {
 			return false, "", newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
 		}
-		fmt.Println(deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"])
 
 		// Check if image is different, check if current site is ready and installed
 		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
