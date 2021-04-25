@@ -332,20 +332,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "cm_settings":
-		dbodSecretName := r.getDBODProvisionedSecret(ctx, d)
-		if len(dbodSecretName) == 0 {
-			return nil
-		}
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "site-settings-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			dbCred := r.getSecretDataDecoded(ctx, dbodSecretName, d.Namespace, []string{
-				"dbHost",
-				"dbName",
-				"dbPassword",
-				"dbPort",
-				"dbUser",
-			})
-			return updateConfigMapForSiteSettings(ctx, cm, d, dbCred)
+			return updateConfigMapForSiteSettings(ctx, cm, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -659,6 +648,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "nginx-config-volume",
 					MountPath: "/etc/nginx/custom.conf",
 					SubPath:   "custom.conf",
+					ReadOnly:  true,
 				},
 				{
 					Name:      "empty-dir",
@@ -708,6 +698,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "php-config-volume",
 					MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
 					SubPath:   "zz-docker.conf",
+					ReadOnly:  true,
 				},
 				{
 					Name:      "empty-dir",
@@ -717,6 +708,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "site-settings-php",
 					MountPath: "/app/web/sites/default/settings.php",
 					SubPath:   "settings.php",
+					ReadOnly:  true,
 				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
@@ -1159,7 +1151,7 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 }
 
 // updateConfigMapForSiteSettings ensures a configmap with settings.php is present. Else configmap object is updated and a new rollout is triggered
-func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, dbCred map[string]string) error {
+func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 	}
