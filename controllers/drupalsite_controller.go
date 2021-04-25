@@ -109,6 +109,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&batchv1.Job{}).
 		Owns(&dbodv1a1.DBODRegistration{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
 

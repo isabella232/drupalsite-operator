@@ -45,7 +45,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
-	"mvdan.cc/sh/v3/shell"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -717,6 +716,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				{
 					Name:      "site-settings-php",
 					MountPath: "/app/web/sites/default/settings.php",
+					SubPath:   "settings.php",
 				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
@@ -1187,14 +1187,8 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 		return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
 	}
 
-	// alt pkg: https://pkg.go.dev/github.com/buildkite/interpolate
-	// but this one has 3.5k stars on github
-	contentStr, err := shell.Expand(string(content), func(key string) string { return dbCred[key] })
-	if err != nil {
-		return newApplicationError(fmt.Errorf("failed to interpolate DB credentials in settings.php: %s", err), ErrPermanent)
-	}
 	currentobject.Data = map[string]string{
-		"settings.php": contentStr,
+		"settings.php": string(content),
 	}
 
 	return nil
