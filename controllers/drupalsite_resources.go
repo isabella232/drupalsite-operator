@@ -145,6 +145,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
+	}
 	if r.isDBODProvisioned(ctx, drp) {
 		if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
