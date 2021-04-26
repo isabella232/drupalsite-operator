@@ -823,8 +823,8 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 		return err
 	}
 	// This will append `/openid-connect/*` to the URL, guaranteeing all subpaths of the link can be redirected
-	url.Path = path.Join(url.Path, "openid-connect", "*") // TODO: Do we want to put this in a variable for better exposure?
-	returnURI := url.String()
+	url.Path = path.Join(url.Path, "openid-connect")
+	returnURI := "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
 	currentobject.Spec = authz.OidcReturnURISpec{
 		RedirectURI: returnURI,
 	}
