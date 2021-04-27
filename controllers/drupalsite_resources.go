@@ -922,7 +922,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
-				Command:         []string{"sh", "-c", "/operations/clone.sh ; /operations/database-restore.sh"},
+				Command:         []string{"sh", "/operations/clone.sh"},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
