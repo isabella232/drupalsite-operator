@@ -982,30 +982,22 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
 func siteInstallJobForDrupalSite() []string {
 	// return []string{"sh", "-c", "echo"}
-	return []string{"sh", "-c",
-		"drush site-install -y --config-dir=../config/sync --account-name=admin --account-pass=pass --account-mail=admin@example.com",
-	}
+	return []string{"sh", "/operations/site-install.sh"}
 }
 
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
 func enableSiteMaintenanceModeCommandForDrupalSite() []string {
-	return []string{"sh", "-c",
-		"drush state:set system.maintenance_mode 1 --input-format=integer",
-	}
+	return []string{"sh", "-c", "sh /operations/enable-maintenance-mode.sh 2>/dev/null"}
 }
 
 // disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to disable maintenance mode
 func disableSiteMaintenanceModeCommandForDrupalSite() []string {
-	return []string{"sh", "-c",
-		"drush state:set system.maintenance_mode 0 --input-format=integer && drush cache:rebuild 2>/dev/null",
-	}
+	return []string{"sh", "-c", "sh /operations/disable-maintenance-mode.sh 2>/dev/null"}
 }
 
 // checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
-	return []string{"sh", "-c",
-		"drush updatedb-status --format=json 2>/dev/null | jq '. | length'",
-	}
+	return []string{"sh", "-c", "sh /operations/check-updb-status.sh 2>/dev/null"}
 }
 
 //checkSiteMaitenanceStatus outputs the command needed to check if a site is in maintenance mode or not
@@ -1015,18 +1007,15 @@ func checkSiteMaitenanceStatus() []string {
 
 // runUpDBCommand outputs the command needed to update the database in drupal
 func runUpDBCommand() []string {
-	return []string{"sh", "-c",
-		"drush updatedb -y 2>/dev/null || echo \"error\" >&2 "}
+	return []string{"sh", "-c", "sh /operations/run-updb.sh 2>/dev/null || echo \"error\" >&2 "}
 }
 
 // takeBackup outputs the command need to take the database backup to a given filename
 func takeBackup(filename string) []string {
-	return []string{"sh", "-c",
-		"drush sql-dump > /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
+	return []string{"sh", "-c", "sh /operations/database-backup.sh -f " + filename + " 2>/dev/null"}
 }
 
 // restoreBackup outputs the command need to restore the database backup from a given filename
 func restoreBackup(filename string) []string {
-	return []string{"sh", "-c",
-		"drush sql-drop -y ; `drush sql-connect` < /drupal-data/" + filename + ".sql 2>/dev/null | jq '. | length'"}
+	return []string{"sh", "-c", "sh /operations/database-restore.sh -f " + filename + "2>/dev/null"}
 }

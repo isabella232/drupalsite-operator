@@ -272,7 +272,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		// Take backup
-		backupFileName := "db_backup_update_rollback"
+		backupFileName := "db_backup_update_rollback.sql"
 		if _, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, takeBackup(backupFileName)...); err != nil {
 			// setConditionStatus(drupalSite, "DBUpdatingFailed", true, newApplicationError(err, ErrPodExec), false)
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
