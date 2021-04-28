@@ -453,6 +453,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
+	drupallogsResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
 	phpfpmResources, err := resourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
@@ -466,7 +470,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			"php-configmap-version":   "1",
 			"nginx-configmap-version": "1",
 		}
-		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}}
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "drupal-logs"}}
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -478,7 +482,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 	// a wrong image built from a different build, that is left out on the node
 	// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
-        // ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+	// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 	// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
@@ -540,7 +544,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		switch container.Name {
 		case "nginx":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
-                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 8080,
@@ -582,7 +586,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
-                        // Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
 				ContainerPort: 9000,
@@ -620,6 +624,43 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
+
+		case "drupal-logs":
+			currentobject.Spec.Template.Spec.Containers[i].Name = "drupal-logs"
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"sh", "-c", "touch /drupal-data/drupal.log;" + " tail -f /drupal-data/drupal.log"}
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+				ContainerPort: 8081,
+				Name:          "drupal-logs",
+				Protocol:      "TCP",
+			}}
+			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
+				{
+					Name:  "DRUPAL_SHARED_VOLUME",
+					Value: "/drupal-data",
+				},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
+				{
+					SecretRef: &corev1.SecretEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: dbodSecret,
+						},
+					},
+				},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "drupal-directory-" + d.Name,
+					MountPath: "/drupal-data",
+				},
+				{
+					Name:      "empty-dir",
+					MountPath: "/var/run/",
+				},
+			}
+			currentobject.Spec.Template.Spec.Containers[i].Resources = drupallogsResources
 		}
 
 	}
@@ -631,6 +672,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			case "nginx":
 				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion
 			case "php-fpm":
+				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
+			case "drupal-logs":
 				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
 			}
 		}
