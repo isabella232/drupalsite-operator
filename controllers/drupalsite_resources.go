@@ -982,7 +982,7 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
 func siteInstallJobForDrupalSite() []string {
 	// return []string{"sh", "-c", "echo"}
-	return []string{"sh", "/operations/site-install.sh"}
+	return []string{"/operations/site-install.sh"}
 }
 
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
