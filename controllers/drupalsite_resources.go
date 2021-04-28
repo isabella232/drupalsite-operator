@@ -151,23 +151,25 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if drp.Spec.InitCloneFrom == "" {
-			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+		switch {
+		case drp.Spec.InitCloneFrom == "":
+			if drp.Spec.InitCloneFrom == "" {
+				if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+					transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+				}
 			}
-		}
-	}
-	if r.isDBODProvisioned(ctx, drp) {
-		if drp.Spec.InitCloneFrom != "" {
-			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
-				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+		case drp.Spec.InitCloneFrom != "":
+			if drp.Spec.InitCloneFrom != "" {
+				if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+					transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+				}
 			}
 		}
 	}
 
 	// 4. Ingress
 
-	if (drp.ConditionTrue("Installed") || drp.ConditionTrue("Cloned")) && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
@@ -895,7 +897,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 					Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
-					Command:         []string{"sh", "/operations/database-backup.sh"},
+					Command:         []string{"/operations/database-backup.sh"},
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DRUPAL_SHARED_VOLUME",
@@ -922,7 +924,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
-				Command:         []string{"sh", "/operations/clone.sh"},
+				Command:         []string{"/operations/clone.sh"},
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",

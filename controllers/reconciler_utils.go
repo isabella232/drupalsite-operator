@@ -27,27 +27,15 @@ func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
 	return setConditionStatus(drp, "Ready", false, transientErr, false)
 }
-func setInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
+func setInitialized(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Installed",
+		Type:   "Initialized",
 		Status: "True",
 	})
 }
-func setNotInstalled(drp *webservicesv1a1.DrupalSite) (update bool) {
+func setNotInitialized(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Installed",
-		Status: "False",
-	})
-}
-func setCloned(drp *webservicesv1a1.DrupalSite) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Cloned",
-		Status: "True",
-	})
-}
-func setNotCloned(drp *webservicesv1a1.DrupalSite) (update bool) {
-	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "Cloned",
+		Type:   "Initialized",
 		Status: "False",
 	})
 }

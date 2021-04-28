@@ -175,18 +175,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = setNotReady(drupalSite, nil) || update
 	}
 
-	// Check if the site is installed and mark the condition
-	// if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
-	update = setInstalled(drupalSite) || update
-	// } else {
-	// 	update = setNotInstalled(drupalSite) || update
-	// }
-
-	// Check if the site is cloned and mark the condition
-	if cloned := r.isCloneJobCompleted(ctx, drupalSite); cloned {
-		update = setCloned(drupalSite) || update
+	// Check if the site is installed or cloned and mark the condition
+	installed := r.isInstallJobCompleted(ctx, drupalSite)
+	cloned := r.isCloneJobCompleted(ctx, drupalSite)
+	if installed || cloned {
+		update = setInitialized(drupalSite) || update
 	} else {
-		update = setNotCloned(drupalSite) || update
+		update = setNotInitialized(drupalSite) || update
 	}
 
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
@@ -507,7 +502,7 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 		fmt.Println(deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"])
 
 		// Check if image is different, check if current site is ready and installed
-		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
+		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
 			return true, "CodeUpdate", nil
 		}
 	}
