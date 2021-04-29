@@ -27,7 +27,7 @@ Databases are provisioned with the DBOD operator on an administrator-defined poo
 split into `DBODClasses` that define QoS.
 
 Drupal distributions are defined for each website by injecting extra composer dependencies (Drupal modules)
-on top of a standard [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/composer-drupal-project),
+on top of a standard [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution),
 using the [composer merge plugin](https://github.com/wikimedia/composer-merge-plugin) (replacing existing modules is disabled).
 The extra configuration is picked from a gitlab repo provided by the user: `DrupalSite.environment.extraConfigsRepo`.
 A source-to-image build then creates the final "sitebuilder" image.

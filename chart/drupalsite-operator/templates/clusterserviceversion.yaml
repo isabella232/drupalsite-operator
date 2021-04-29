@@ -53,7 +53,7 @@ spec:
       name: drupalsites.drupal.webservices.cern.ch
       resources: []
       specDescriptors:
-        - description: Which version of the [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/composer-drupal-project) to start from
+        - description: Which version of the [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) to start from
           displayName: Drupal version
           path: drupalVersion
           x-descriptors:
