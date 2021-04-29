@@ -453,7 +453,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	drupallogsResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+	drupallogsResources, err := resourceRequestLimit("1Mi", "1m", "2Mi", "5m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
