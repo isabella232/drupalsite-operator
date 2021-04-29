@@ -635,34 +635,14 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				Name:          "drupal-logs",
 				Protocol:      "TCP",
 			}}
-			currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
-				{
-					Name:  "DRUPAL_SHARED_VOLUME",
-					Value: "/drupal-data",
-				},
-			}
-			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
-				{
-					SecretRef: &corev1.SecretEnvSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: dbodSecret,
-						},
-					},
-				},
-			}
 			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
 				{
 					Name:      "drupal-directory-" + d.Name,
 					MountPath: "/drupal-data",
 				},
-				{
-					Name:      "empty-dir",
-					MountPath: "/var/run/",
-				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = drupallogsResources
 		}
-
 	}
 
 	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
