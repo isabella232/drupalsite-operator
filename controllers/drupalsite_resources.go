@@ -97,9 +97,15 @@ func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservices
 		return corev1.Pod{}, err
 	}
 	if len(podList.Items) == 0 {
-		return corev1.Pod{}, errors.New("can't find pod with these labels")
+		return corev1.Pod{}, errors.New("Can't find pod with these labels")
 	}
-	return podList.Items[0], nil
+	for _, v := range podList.Items {
+		if v.Status.Phase == corev1.PodRunning && v.Annotations["drupalVersion"] == d.Spec.DrupalVersion {
+			return v, nil
+		}
+	}
+	// iterate through the list and return the first pod that has the status condition ready
+	return corev1.Pod{}, errors.New("Can't find a pod that is running")
 }
 
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
@@ -256,6 +262,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
 
 		// Check if a deployment exists & if any of the given conditions satisfy
+		// Add comment
 		if err == nil && (d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed")) {
 			return nil
 		}
@@ -1325,4 +1332,10 @@ func encryptBasicAuthPassword(password string) (string, error) {
 		return "", newApplicationError(fmt.Errorf("encrypting password failed: %w", err), ErrFunctionDomain)
 	}
 	return string(encryptedPassword), nil
+}
+
+// checkIfSiteIsInitialized outputs the command to check if a site is initialized or not
+func checkIfSiteIsInitialized() []string {
+	return []string{"sh", "-c",
+		"drush status bootstrap | grep -q Successful"}
 }

@@ -179,12 +179,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the site is installed or cloned and mark the condition
-	installed := r.isInstallJobCompleted(ctx, drupalSite)
-	cloned := r.isCloneJobCompleted(ctx, drupalSite)
-	if installed || cloned {
-		update = setInitialized(drupalSite) || update
-	} else {
-		update = setNotInitialized(drupalSite) || update
+	if !drupalSite.ConditionTrue("Initialized") {
+		installed := r.isDrupalSiteInitialized(ctx, drupalSite)
+		cloned := r.isCloneJobCompleted(ctx, drupalSite)
+		if installed || cloned {
+			update = setInitialized(drupalSite) || update
+		} else {
+			update = setNotInitialized(drupalSite) || update
+		}
 	}
 
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
@@ -391,6 +393,16 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 	return false
 }
 
+// isDrupalSiteInitialized checks if the drupal site is initialized by running drush status command in the PHP pod
+func (r *DrupalSiteReconciler) isDrupalSiteInitialized(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	if r.isDrupalSiteReady(ctx, d) {
+		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkIfSiteIsInitialized()...); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
 func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	database := &dbodv1a1.Database{}
@@ -471,8 +483,8 @@ func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webserv
 
 // UpdateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
 func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, string, reconcileError) {
-	// Check for an update, only when the site is installed and ready to prevent checks during an installation/ upgrade
-	if d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
+	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
+	if d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
 		deployment, err := r.getRunningdeployment(ctx, d)
 		if err != nil {
 			return false, "", newApplicationError(err, ErrClientK8s)

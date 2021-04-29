@@ -179,7 +179,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
@@ -472,7 +472,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
