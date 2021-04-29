@@ -785,7 +785,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
 			Labels: ls,
 		}
-		currentobject.Spec.BackoffLimit = pointer.Int32Ptr(3)
+		currentobject.Spec.BackoffLimit = pointer.Int32Ptr(0)
 		currentobject.Spec.Template.Spec = corev1.PodSpec{
 			InitContainers: []corev1.Container{{
 				Image:           "bash",
@@ -987,17 +987,17 @@ func siteInstallJobForDrupalSite() []string {
 
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
 func enableSiteMaintenanceModeCommandForDrupalSite() []string {
-	return []string{"sh", "-c", "sh /operations/enable-maintenance-mode.sh 2>/dev/null"}
+	return []string{"/operations/enable-maintenance-mode.sh"}
 }
 
 // disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to disable maintenance mode
 func disableSiteMaintenanceModeCommandForDrupalSite() []string {
-	return []string{"sh", "-c", "sh /operations/disable-maintenance-mode.sh 2>/dev/null"}
+	return []string{"/operations/disable-maintenance-mode.sh"}
 }
 
 // checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
-	return []string{"sh", "-c", "sh /operations/check-updb-status.sh 2>/dev/null"}
+	return []string{"/operations/check-updb-status.sh"}
 }
 
 //checkSiteMaitenanceStatus outputs the command needed to check if a site is in maintenance mode or not
@@ -1007,15 +1007,15 @@ func checkSiteMaitenanceStatus() []string {
 
 // runUpDBCommand outputs the command needed to update the database in drupal
 func runUpDBCommand() []string {
-	return []string{"sh", "-c", "sh /operations/run-updb.sh 2>/dev/null || echo \"error\" >&2 "}
+	return []string{"/operations/run-updb.sh"}
 }
 
 // takeBackup outputs the command need to take the database backup to a given filename
 func takeBackup(filename string) []string {
-	return []string{"sh", "-c", "sh /operations/database-backup.sh -f " + filename + " 2>/dev/null"}
+	return []string{"/operations/database-backup.sh", "-f", filename}
 }
 
 // restoreBackup outputs the command need to restore the database backup from a given filename
 func restoreBackup(filename string) []string {
-	return []string{"sh", "-c", "sh /operations/database-restore.sh -f " + filename + "2>/dev/null"}
+	return []string{"/operations/database-restore.sh", "-f", filename}
 }
