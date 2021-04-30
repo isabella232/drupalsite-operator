@@ -42,7 +42,6 @@ import (
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
-
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
@@ -110,6 +109,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = (&DrupalSiteReconciler{
 		Client: k8sManager.GetClient(),
+		Scheme: k8sManager.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())

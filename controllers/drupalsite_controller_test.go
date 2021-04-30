@@ -129,28 +129,11 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 
-				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				//By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				By("Expecting the drupal deployment to have at least 2 containers")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
-						return false
-					}
-					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-
-				By("Expecting the drush job to have the EnvFrom secret field set correctly")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
-					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
-						return false
-					}
-					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
 				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
@@ -478,28 +461,10 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 
-				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				By("Expecting the drupal deployment to have at least 2 containers")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
-						return false
-					}
-					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-
-				By("Expecting the drush job to have the EnvFrom secret field set correctly")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
-					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
-						return false
-					}
-					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
 				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
