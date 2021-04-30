@@ -1045,7 +1045,8 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 	return nil
 }
 
-// updateConfigMapForPHPFPM ensures a configMaps object to configure PHP, if not present. Else configmap object is updated and a new rollout is triggered
+// updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
+// If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -1098,7 +1099,8 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 	return nil
 }
 
-// updateConfigMapForNginx ensures a configmap with the Nginx settings is present. Else configmap object is updated and a new rollout is triggered
+// updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
+// If the file contents change, it rolls out a new deployment.
 func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -1131,7 +1133,6 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	currentobject.Data = map[string]string{
 		"custom.conf": string(content),
 	}
-
 	if !currentobject.CreationTimestamp.IsZero() {
 		if currentConfig != string(content) {
 			// Roll out a new deployment
@@ -1150,39 +1151,33 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	return nil
 }
 
-// updateConfigMapForSiteSettings ensures a configmap with settings.php is present. Else configmap object is updated and a new rollout is triggered
+// updateConfigMapForSiteSettings modifies the configmap to include the file settings.php
 func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if currentobject.Annotations == nil {
-		currentobject.Annotations = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
+		if currentobject.Labels == nil {
+			currentobject.Labels = map[string]string{}
+		}
+		if currentobject.Annotations == nil {
+			currentobject.Annotations = map[string]string{}
+		}
+		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
+		configPath := "/tmp/sitebuilder/settings.php"
+
+		content, err := ioutil.ReadFile(configPath)
+		if err != nil {
+			return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
+		}
+		currentobject.Data = map[string]string{
+			"settings.php": string(content),
+		}
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
-
-	configPath := "/tmp/sitebuilder/settings.php"
-
-	content, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
-	}
-
-	currentobject.Data = map[string]string{
-		"settings.php": string(content),
-	}
-
 	return nil
 }
 
@@ -1222,11 +1217,6 @@ func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 // checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
 	return []string{"/operations/check-updb-status.sh"}
-}
-
-//checkSiteMaitenanceStatus outputs the command needed to check if a site is in maintenance mode or not
-func checkSiteMaitenanceStatus() []string {
-	return []string{"sh", "-c", "drush state:get system.maintenance_mode | grep -q '1'; if [[ $? -eq 0 ]] ; then echo 'true'; else echo 'false'; fi"}
 }
 
 // runUpDBCommand outputs the command needed to update the database in drupal

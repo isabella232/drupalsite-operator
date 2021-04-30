@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -42,7 +41,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -72,8 +70,6 @@ var (
 	// ReleaseChannel refers to the release channel latest/ stable to be used for the images. If not set, no release channel keyword would be appended to the images
 	ReleaseChannel string
 )
-
-type strFlagList []string
 
 // DrupalSiteReconciler reconciles a DrupalSite object
 type DrupalSiteReconciler struct {
@@ -542,7 +538,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 	// Update deployment with the new version
 	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
 		})
 		if err != nil {
@@ -571,7 +567,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	// Restore the server deployment
 	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.LastRunningDrupalVersion)
 		})
 		if err != nil {
