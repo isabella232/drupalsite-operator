@@ -184,18 +184,19 @@ func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 
 // ------ POTENTIALLY UNUSED FUNCTIONS -------
 
-// getSecretDataDecoded fetches the given secret and decodes the data for the given string
+// getSecretDataDecoded fetches the given secret and decodes the data for the given string.
+// Returns nil in case the secret isn't found or the data can't be base64-decoded.
 func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	data := make(map[string]string, len(keys))
 	if err != nil {
-		return data
+		return nil
 	}
+	data := make(map[string]string, len(keys))
 	for _, key := range keys {
 		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
 		if err != nil {
-			return data
+			return nil
 		}
 		data[key] = string(val)
 	}
