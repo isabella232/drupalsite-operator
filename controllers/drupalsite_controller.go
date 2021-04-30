@@ -407,24 +407,6 @@ func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *
 	return dbodCR.Status.DbCredentialsSecret
 }
 
-// getSecretDataDecoded fetches the given secret and decodes the data for the given string
-func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	data := make(map[string]string, len(keys))
-	if err != nil {
-		return data
-	}
-	for _, key := range keys {
-		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
-		if err != nil {
-			return data
-		}
-		data[key] = string(val)
-	}
-	return data
-}
-
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	// finalizer: dependentResources
