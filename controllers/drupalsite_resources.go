@@ -606,7 +606,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				{
 					SecretRef: &corev1.SecretEnvSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "oidc-client-secret", //This is always set the same way
+							Name: oidcSecretName, //This is always set the same way
 						},
 					},
 				},
@@ -794,7 +794,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 					{
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "oidc-client-secret", //This is always set the same way
+								Name: oidcSecretName, //This is always set the same way
 							},
 						},
 					},
