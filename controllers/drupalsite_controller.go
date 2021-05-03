@@ -53,6 +53,7 @@ const (
 	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
 	productionEnvironment = "production"
 	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
+	oidcSecretName        = "oidc-client-secret"
 	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
 	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
 )
@@ -425,7 +426,6 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 	if drp.Spec.SiteURL == "" {
 		if drp.Spec.Environment.Name == productionEnvironment {
 			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
-
 		}
 		drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 	}

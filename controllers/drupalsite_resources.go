@@ -616,6 +616,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 						},
 					},
 				},
+				{
+					SecretRef: &corev1.SecretEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: oidcSecretName, //This is always set the same way
+						},
+					},
+				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
 				{
@@ -813,6 +820,13 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: dbodSecret,
+							},
+						},
+					},
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oidcSecretName, //This is always set the same way
 							},
 						},
 					},
