@@ -67,6 +67,8 @@ var (
 	ImageRecipesRepoRef string
 	// DefaultDomain is used in the Route's Host field
 	DefaultDomain string
+	// ReleaseChannel refers to the release channel latest/ stable to be used for the images. If not set, no release channel keyword would be appended to the images
+	ReleaseChannel string
 )
 
 type strFlagList []string

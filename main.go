@@ -67,6 +67,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	// Check for the release channel name
+	flag.StringVar(&controllers.ReleaseChannel, "release-channel", "", "The release channel i.e 'latest' or 'stable' to be used for pulling images. If not set, no release channel keyword would be appended to the images")
 	opts := zap.Options{
 		Development: true,
 	}

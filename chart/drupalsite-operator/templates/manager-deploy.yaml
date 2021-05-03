@@ -23,6 +23,9 @@ spec:
       containers:
       - args:
         - --leader-elect
+         {{- if .Values.drupalsiteOperator.releaseChannel }}
+        - --release-channel={{ .Values.drupalsiteOperator.releaseChannel }}
+        {{- end }}
         command:
         - /manager
         image: {{ .Values.image | quote }}

@@ -331,6 +331,15 @@ func labelsForDrupalSite(name string) map[string]string {
 	return map[string]string{"drupalSite": name}
 }
 
+// releasedImageTag is the image tag to use, depending on the `ReleaseChannel` cmdline arg:
+// If `ReleaseChannel` is set, appends `-${ReleaseChannel}` to the Drupal version.
+func releasedImageTag(drupalVersion string) string {
+	if ReleaseChannel != "" {
+		return drupalVersion + "-" + ReleaseChannel
+	}
+	return drupalVersion
+}
+
 // baseImageReferenceToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
 // If yes, the S2I buildconfig will be used; baseImageReferenceToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
@@ -338,12 +347,12 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + d.Name + ":" + drupalVersion,
+			Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(drupalVersion),
 		}
 	}
 	return corev1.ObjectReference{
 		Kind: "DockerImage",
-		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + drupalVersion,
+		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(drupalVersion),
 	}
 }
 
@@ -398,14 +407,14 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 				SourceStrategy: &buildv1.SourceBuildStrategy{
 					From: corev1.ObjectReference{
 						Kind: "DockerImage",
-						Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + d.Spec.DrupalVersion,
+						Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(d.Spec.DrupalVersion),
 					},
 				},
 			},
 			Output: buildv1.BuildOutput{
 				To: &corev1.ObjectReference{
 					Kind: "ImageStreamTag",
-					Name: "site-builder-s2i-" + d.Name + ":" + d.Spec.DrupalVersion,
+					Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(d.Spec.DrupalVersion),
 				},
 			},
 		},
@@ -650,7 +659,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + drupalVersion
+				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + releasedImageTag(drupalVersion)
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
 			case "drupal-logs":
