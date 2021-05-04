@@ -151,9 +151,9 @@ spec:
                   - type
                   type: object
                 type: array
-              lastRunningDrupalVersion:
-                description: LastRunningDrupalVersion stores the `drupalVersion` string
-                  during the upgrade process to alow erollback operations
+              failsafeDrupalVersion:
+                description: FailsafeDrupalVersion stores the `drupalVersion` string
+                  during the upgrade process to allow rollback operations
                 minLength: 1
                 type: string
             type: object

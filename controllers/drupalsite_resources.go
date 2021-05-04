@@ -72,7 +72,7 @@ var (
 //	log.Info("EXEC", "stdout", sout, "stderr", serr)
 // ````
 func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
-	pod, err := r.getRunningPod(ctx, d)
+	pod, err := r.getRunningPod(ctx, d, d.Spec.DrupalVersion)
 	if err != nil {
 		return "", "", err
 	}
@@ -80,13 +80,13 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 }
 
 // getRunningPod fetches the list of the running pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservicesv1a1.DrupalSite) (corev1.Pod, error) {
+func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
 	})
 	if err != nil {
-		return corev1.Pod{}, err
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 	}
 	options := client.ListOptions{
 		LabelSelector: podLabels,
@@ -94,18 +94,22 @@ func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservices
 	}
 	err = r.List(ctx, &podList, &options)
 	if err != nil {
-		return corev1.Pod{}, err
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 	}
 	if len(podList.Items) == 0 {
-		return corev1.Pod{}, errors.New("Can't find pod with these labels")
+		return corev1.Pod{}, newApplicationError(err, errors.New("Can't find pod with these labels"))
 	}
 	for _, v := range podList.Items {
-		if v.Status.Phase == corev1.PodRunning && v.Annotations["drupalVersion"] == d.Spec.DrupalVersion {
-			return v, nil
+		if v.Annotations["drupalVersion"] == drupalVersion {
+			if v.Status.Phase == corev1.PodRunning {
+				return v, nil
+			} else {
+				return v, newApplicationError(err, ErrPodNotRunning)
+			}
 		}
 	}
 	// iterate through the list and return the first pod that has the status condition ready
-	return corev1.Pod{}, errors.New("Can't find a pod that is running")
+	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }
 
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
@@ -180,7 +184,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+	if drp.ConditionTrue("Initialized") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
 		}
@@ -262,8 +266,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
 
 		// Check if a deployment exists & if any of the given conditions satisfy
-		// Add comment
-		if err == nil && (d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed")) {
+		// In scenarios where, the deployment is deleted during a failed upgrade, this check is needed to bring it back
+		if err == nil && (d.Annotations["updateInProgress"] == "true" || d.ConditionTrue("CodeUpdateFailed") || d.ConditionTrue("DBUpdatesFailed")) {
 			return nil
 		}
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
@@ -789,7 +793,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 
 	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
-	if !annotExists || d.Status.LastRunningDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
+	if !annotExists || d.Status.FailsafeDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
@@ -894,9 +898,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
 		currentobject.Annotations = map[string]string{}
-		if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
-			currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
-		}
 		ls := labelsForDrupalSite(d.Name)
 		ls["app"] = "drupal"
 
@@ -904,7 +905,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 			currentobject.Labels[k] = v
 		}
 		currentobject.Spec = routev1.RouteSpec{
-			Host: d.Spec.SiteURL,
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   d.Name,
@@ -915,6 +915,10 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 			},
 		}
 	}
+	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
+	}
+	currentobject.Spec.Host = d.Spec.SiteURL
 	return nil
 }
 
@@ -1336,6 +1340,10 @@ func encryptBasicAuthPassword(password string) (string, error) {
 
 // checkIfSiteIsInitialized outputs the command to check if a site is initialized or not
 func checkIfSiteIsInitialized() []string {
-	return []string{"sh", "-c",
-		"drush status bootstrap | grep -q Successful"}
+	return []string{"/operations/check-if-installed.sh"}
+}
+
+// cacheReload outputs the command to reload cache on the drupalSite
+func cacheReload() []string {
+	return []string{"/operations/clear-cache.sh"}
 }

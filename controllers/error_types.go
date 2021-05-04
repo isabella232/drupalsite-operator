@@ -22,6 +22,7 @@ var (
 	ErrDeploymentUpdateFailed = errors.New("DeploymentUpdateError")
 	ErrDBUpdateFailed         = errors.New("DBUpdateError")
 	ErrRollBack               = errors.New("RollbackError")
+	ErrPodNotRunning          = errors.New("PodNotRunning")
 )
 
 type reconcileError interface {
@@ -81,6 +82,8 @@ func (e *applicationError) Temporary() bool {
 	case ErrBuildFailed:
 		return false
 	case ErrRollBack:
+		return false
+	case ErrDeploymentUpdateFailed:
 		return false
 	default:
 		return true
