@@ -4,7 +4,7 @@ Deploys the OKD4 configuration specific to the Drupal use case.
 
 ## Architecture
 
-![architecture diagram](./drupal-design.svg)
+![architecture diagram](./drupal-architecture-full.svg)
 
 The Drupal component provides APIs to define Drupal sites:
 - DrupalSite
