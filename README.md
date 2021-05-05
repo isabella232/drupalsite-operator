@@ -4,7 +4,7 @@ Kubernetes operator that controls the main API of the Drupal service: the Drupal
 
 For an introduction to the Operator pattern and how we use it, take a look at our presentation at Kubecon EU 2021!
 
-### ["Building a Kubernetes infrastructure for CERN's Content Management Systems"](https://zenodo.org/record/4730874)
+### [Building a Kubernetes infrastructure for CERN's Content Management Systems](https://zenodo.org/record/4730874)
 
 This [paper](https://zenodo.org/record/4730874) describes the use case served with the `drupalsite-operator`.
 Flip through it to get some context!
