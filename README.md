@@ -14,7 +14,7 @@ Flip through it to get some context!
 The Drupal service is designed around the concept of the DrupalSite.
 The deployment looks like this:
 
-![architecture diagram](docs/drupal-architecture-full.svg)
+![architecture diagram](docs/drupal-architecture-full.png)
 
 ![images diagram](docs/drupal-images.svg)
 
