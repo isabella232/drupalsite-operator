@@ -185,6 +185,16 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
 		}
 	}
+
+	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
+		}
+	} else {
+		if transientErr := r.ensureNoRoute(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
+		}
+	}
 	return transientErrs
 }
 
@@ -281,6 +291,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+		}
+		return nil
+	case "webdav_route":
+		webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
+			log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
+			return routeForWebDAV(webdav_route, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -803,7 +823,13 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 		Name:       "nginx",
 		Port:       80,
 		Protocol:   "TCP",
-	}}
+	},
+		{
+			TargetPort: intstr.FromInt(8081),
+			Name:       "webdav",
+			Port:       81,
+			Protocol:   "TCP",
+		}}
 	return nil
 }
 
@@ -845,6 +871,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	return nil
 }
 
+<<<<<<< HEAD
 // newOidcReturnURI returns a oidcReturnURI object
 func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -859,6 +886,42 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 	returnURI := "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
 	currentobject.Spec = authz.OidcReturnURISpec{
 		RedirectURI: returnURI,
+=======
+// routeForWebDAV returns a route object
+func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	if len(currentobject.Annotations) < 1 {
+		currentobject.Annotations = map[string]string{}
+	}
+	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = routev1.RouteSpec{
+		Host: "webdav-" + d.Spec.SiteURL,
+		To: routev1.RouteTargetReference{
+			Kind:   "Service",
+			Name:   d.Name,
+			Weight: pointer.Int32Ptr(100),
+		},
+		Port: &routev1.RoutePort{
+			TargetPort: intstr.FromInt(8081),
+		},
+>>>>>>> 7912f02 (Add service port and route for webdav)
 	}
 	return nil
 }
