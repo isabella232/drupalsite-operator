@@ -16,5 +16,14 @@ resources:
 
 # Operator-specific configuration
 drupalsiteOperator:
-  defaultDomain: "web.cern.ch"
-  drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
+  # Default domain to expose DrupalSites that don't specify a `siteUrl`
+  defaultDomain: "webtest.cern.ch"
+  # Repo and git refspec from which the operator fetches (at startup) configuration for provisioned sites.
+  # Currently this includes the source of the Nginx, PHP-FPM and settings.php configmaps for each QoS class
+  drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master"
+  # If releaseChannel is specified, the operator will append its value to image tags for server deployments.
+  # The final image tag is: `<drupalSite.spec.drupalVersion>-<releaseChannel>`
+  # If it is omitted, the image tag is: `<drupalSite.spec.drupalVersion>`
+  # Meaningful values depend on what image tags are available in the image registry (which is currently hardcoded to `gitlab-registry.cern.ch/drupal/paas/drupal-runtime/`):
+  # "stable" | "latest" | <none>
+  #releaseChannel: "stable"
