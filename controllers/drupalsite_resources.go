@@ -897,7 +897,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 					Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
-					Command:         []string{"/operations/database-backup.sh"},
+					Command:         takeBackup("dbBackUp.sql"),
 					Env: []corev1.EnvVar{
 						{
 							Name:  "DRUPAL_SHARED_VOLUME",
@@ -924,7 +924,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
-				Command:         []string{"/operations/clone.sh"},
+				Command:         cloneSource("dbBackUp.sql"),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
@@ -1141,4 +1141,9 @@ func takeBackup(filename string) []string {
 // restoreBackup outputs the command need to restore the database backup from a given filename
 func restoreBackup(filename string) []string {
 	return []string{"/operations/database-restore.sh", "-f", filename}
+}
+
+// cloneSource outputs the command need to clone a drupal site
+func cloneSource(filename string) []string {
+	return []string{"/operations/clone.sh", "-f", filename}
 }
