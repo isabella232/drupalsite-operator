@@ -3,10 +3,10 @@ kind: DrupalSite
 metadata:
   name: drupalsite-sample
 spec:
-  publish: false
-  drupalVersion: "8.9.13"
+  publish: true
+  drupalVersion: "8.9.14"
   environment:
-    name: "dev"
+    name: "production"
     qosClass: "standard"
     dbodClass: "test" 
   diskSize: "1Gi"

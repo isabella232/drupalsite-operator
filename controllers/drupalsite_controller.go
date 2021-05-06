@@ -424,10 +424,12 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		update = true
 	}
 	if drp.Spec.SiteURL == "" {
-		if drp.Spec.Environment.Name == productionEnvironment {
+		switch drp.Spec.Environment.Name {
+		case productionEnvironment:
 			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
+		default:
+			drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 		}
-		drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 	}
 	return
 }
