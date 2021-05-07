@@ -347,7 +347,7 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 }
 
 func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	oidc_return_uri := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+	oidc_return_uri := &authz.OidcReturnURI{}
 	if err := r.Get(ctx, types.NamespacedName{Name: oidc_return_uri.Name, Namespace: oidc_return_uri.Namespace}, oidc_return_uri); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
