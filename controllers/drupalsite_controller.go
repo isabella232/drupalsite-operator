@@ -54,7 +54,8 @@ const (
 	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName        = "oidc-client-secret"
 	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
-	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
+	REQUEUE_INTERVAL      = time.Duration(20 * time.Second)
+	webdavDefaultPassword = "password"
 )
 
 var (
@@ -107,6 +108,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
 		Complete(r)
 }
 
@@ -439,6 +441,9 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		default:
 			drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 		}
+	}
+	if drp.Spec.WebDAVPassword == "" {
+		drp.Spec.WebDAVPassword = webdavDefaultPassword
 	}
 	return
 }

@@ -97,6 +97,10 @@ spec:
                   is configured per cluster (typically `web.cern.ch`)
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
+              webDAVPassword:
+                description: WebDAVPassword defines the password for WebDAV file access
+                  Defaults to generated encoded value
+                type: string
             required:
             - diskSize
             - drupalVersion
