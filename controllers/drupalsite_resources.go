@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -72,32 +71,32 @@ var (
 //	log.Info("EXEC", "stdout", sout, "stderr", serr)
 // ````
 func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
-	pod, err := r.getRunningPod(ctx, d, d.Spec.DrupalVersion)
+	pod, err := r.getRunningPodForVersion(ctx, d, d.Spec.DrupalVersion)
 	if err != nil {
 		return "", "", err
 	}
 	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
 }
 
-// getRunningPod fetches the list of the running pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getRunningPod(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
+// getRunningPodForVersion fetches the list of the running pods for the current deployment and returns the first one from the list
+func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
 	})
 	if err != nil {
-		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
 	}
 	options := client.ListOptions{
 		LabelSelector: podLabels,
 		Namespace:     d.Namespace,
 	}
 	err = r.List(ctx, &podList, &options)
-	if err != nil {
+	switch {
+	case err != nil:
 		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
-	}
-	if len(podList.Items) == 0 {
-		return corev1.Pod{}, newApplicationError(err, errors.New("Can't find pod with these labels"))
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
 	}
 	for _, v := range podList.Items {
 		if v.Annotations["drupalVersion"] == drupalVersion {
@@ -918,6 +917,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
+	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
 	currentobject.Spec.Host = d.Spec.SiteURL
 	return nil
 }

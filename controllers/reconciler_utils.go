@@ -213,7 +213,7 @@ func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getPod(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
+func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},

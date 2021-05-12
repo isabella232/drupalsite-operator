@@ -700,8 +700,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					// The condition for UpdateNeeded would be set to Unknown and the reason would be ExecError
-					return cr.Status.Conditions.GetCondition("UpdateNeeded").Status != corev1.ConditionStatus(metav1.ConditionFalse)
+					return cr.ConditionTrue("CodeUpdateFailed")
 				}, timeout, interval).Should(BeTrue())
 
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest
