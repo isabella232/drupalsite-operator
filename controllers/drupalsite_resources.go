@@ -75,7 +75,7 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 	if err != nil {
 		return "", "", err
 	}
-	fmt.Println(pod.Name)
+
 	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
 }
 
@@ -154,14 +154,21 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+		switch {
+		case drp.Spec.InitCloneFrom == "":
+			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
+			}
+		case drp.Spec.InitCloneFrom != "":
+			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+			}
 		}
 	}
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Installed") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
@@ -183,6 +190,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 ensureResourceX ensure the requested resource is created, with the following valid values
 	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush site-install
+	- clone_job: Kubernetes Job for cloning a drupal site
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- bc_s2i: BuildConfig for S2I sitebuilder
@@ -285,6 +293,19 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
 				return jobForDrupalSiteDrush(job, dbodSecret, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
+		}
+		return nil
+	case "clone_job":
+		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return jobForDrupalSiteClone(job, dbodSecret, d)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
@@ -912,6 +933,104 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 	return nil
 }
 
+// jobForDrupalSiteClone returns a job object thats clones a drupalsite
+func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
+	ls := labelsForDrupalSite(d.Name)
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
+			Labels: ls,
+		}
+		currentobject.Spec.Template.Spec = corev1.PodSpec{
+			InitContainers: []corev1.Container{
+				{
+					Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
+					Name:            "db-backup",
+					ImagePullPolicy: "Always",
+					Command:         takeBackup("dbBackUp.sql"),
+					Env: []corev1.EnvVar{
+						{
+							Name:  "DRUPAL_SHARED_VOLUME",
+							Value: "/drupal-data",
+						},
+					},
+					EnvFrom: []corev1.EnvFromSource{
+						{
+							SecretRef: &corev1.SecretEnvSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: "dbcredentials-" + d.Spec.InitCloneFrom,
+								},
+							},
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
+						MountPath: "/drupal-data",
+					}},
+				},
+			},
+			RestartPolicy: "Never",
+			Containers: []corev1.Container{{
+				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
+				Name:            "clone",
+				ImagePullPolicy: "Always",
+				Command:         cloneSource("dbBackUp.sql"),
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data-source",
+					},
+				},
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: dbodSecret,
+							},
+						},
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
+						MountPath: "/drupal-data-source",
+					},
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					}},
+			}},
+			Volumes: []corev1.Volume{
+				{
+					Name: "drupal-directory-" + d.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "drupal-directory-" + d.Spec.Environment.InitCloneFrom,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Spec.Environment.InitCloneFrom,
+						},
+					},
+				}},
+		}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls["app"] = "clone"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
+}
+
 // updateConfigMapForPHPFPM ensures a configMaps object to configure PHP, if not present. Else configmap object is updated and a new rollout is triggered
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -1073,4 +1192,9 @@ func takeBackup(filename string) []string {
 // restoreBackup outputs the command need to restore the database backup from a given filename
 func restoreBackup(filename string) []string {
 	return []string{"/operations/database-restore.sh", "-f", filename}
+}
+
+// cloneSource outputs the command need to clone a drupal site
+func cloneSource(filename string) []string {
+	return []string{"/operations/clone.sh", "-f", filename}
 }

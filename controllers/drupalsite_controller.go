@@ -175,12 +175,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = setNotReady(drupalSite, nil) || update
 	}
 
-	// Check if the site is installed and mark the condition
-	// if installed := r.isInstallJobCompleted(ctx, drupalSite); installed {
-	update = setInstalled(drupalSite) || update
-	// } else {
-	// 	update = setNotInstalled(drupalSite) || update
-	// }
+	// Check if the site is installed or cloned and mark the condition
+	installed := r.isInstallJobCompleted(ctx, drupalSite)
+	cloned := r.isCloneJobCompleted(ctx, drupalSite)
+	if installed || cloned {
+		update = setInitialized(drupalSite) || update
+	} else {
+		update = setNotInitialized(drupalSite) || update
+	}
 
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
 	updateNeeded, typeUpdate, reconcileErr := r.updateNeeded(ctx, drupalSite)
@@ -363,6 +365,17 @@ func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *web
 	return false
 }
 
+// isCloneJobCompleted checks if the clone job is successfully completed
+func (r *DrupalSiteReconciler) isCloneJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	cloneJob := &batchv1.Job{}
+	err := r.Get(ctx, types.NamespacedName{Name: "clone-" + d.Name, Namespace: d.Namespace}, cloneJob)
+	if err != nil {
+		return false
+	}
+	// business logic, ie check "Succeeded"
+	return cloneJob.Status.Succeeded != 0
+}
+
 // isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
 func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
@@ -489,7 +502,7 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 		fmt.Println(deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"])
 
 		// Check if image is different, check if current site is ready and installed
-		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Installed") {
+		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
 			return true, "CodeUpdate", nil
 		}
 	}

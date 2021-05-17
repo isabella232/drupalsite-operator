@@ -75,6 +75,10 @@ type Environment struct {
 	// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
 	// +optional
 	DBODClass `json:"dbodClass,omitempty"`
+	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production).
+	// Immutable.
+	// +optional
+	InitCloneFrom string `json:"initCloneFrom"`
 }
 
 // QoSClass specifies the website's performance and availability requirements

@@ -201,7 +201,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Installed", Status: "True"})
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
 					return k8sClient.Status().Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
@@ -564,7 +564,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Installed", Status: "True"})
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
 					return k8sClient.Status().Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
