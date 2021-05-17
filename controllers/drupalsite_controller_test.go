@@ -32,7 +32,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -100,7 +99,7 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Get(ctx, key, &cr)
 				}, timeout, interval).Should(Succeed())
 				trueVar := true
-				expectedOwnerReference := v1.OwnerReference{
+				expectedOwnerReference := metav1.OwnerReference{
 					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSite",
 					Name:       Name,
@@ -117,7 +116,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -130,68 +129,51 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 
-				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				//By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				By("Expecting the drupal deployment to have at least 2 containers")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
-						return false
-					}
-					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-
-				By("Expecting the drush job to have the EnvFrom secret field set correctly")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
-					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
-						return false
-					}
-					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
 				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
 				By("Expecting PHP_FPM configmaps created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx configMap creation
 				By("Expecting Nginx configmaps created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drupal service
 				By("Expecting Drupal service created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
 					return svc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check drupal persistentVolumeClaim
 				By("Expecting drupal persistentVolumeClaim created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
 					return pvc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drupal deployments
 				By("Expecting Drupal deployments created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drush job
 				By("Expecting Drush job created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -208,7 +190,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Route
 				// Route is supposed to be created, but since the 'ReadyReplicas' status in deployment can't be made persistent with the reconcile loop, route won't be created
 				By("Expecting Route to be created since publish is true")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
@@ -237,7 +219,7 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Get(ctx, key, &cr)
 				}, timeout, interval).Should(Succeed())
 				trueVar := true
-				expectedOwnerReference := v1.OwnerReference{
+				expectedOwnerReference := metav1.OwnerReference{
 					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSite",
 					Name:       key.Name,
@@ -257,7 +239,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return k8sClient.Delete(ctx, &configmap)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -268,7 +250,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return k8sClient.Delete(ctx, &configmap)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -279,7 +261,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
 					return k8sClient.Delete(ctx, &svc)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
 					return svc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -290,7 +272,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
 					return k8sClient.Delete(ctx, &pvc)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
 					return pvc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -301,7 +283,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
 					return k8sClient.Delete(ctx, &deploy)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -312,7 +294,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return k8sClient.Delete(ctx, &job)
 				}, timeout, interval).Should(Succeed())
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -324,7 +306,7 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return k8sClient.Delete(ctx, &route)
 				}, timeout, interval).Should(Not(Succeed()))
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
@@ -447,7 +429,7 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Get(ctx, key, &cr)
 				}, timeout, interval).Should(Succeed())
 				trueVar := true
-				expectedOwnerReference := v1.OwnerReference{
+				expectedOwnerReference := metav1.OwnerReference{
 					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSite",
 					Name:       key.Name,
@@ -466,7 +448,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check DBOD resource creation
 				By("Expecting DBOD resource created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -479,82 +461,64 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 
-				By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				By("Expecting the drupal deployment to have at least 2 containers")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
-					if len(deploy.Spec.Template.Spec.Containers) < 2 || len(deploy.Spec.Template.Spec.Containers[0].EnvFrom) == 0 || len(deploy.Spec.Template.Spec.Containers[1].EnvFrom) == 0 {
-						return false
-					}
-					if deploy.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" && deploy.Spec.Template.Spec.Containers[1].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
-				}, timeout, interval).Should(BeTrue())
-
-				By("Expecting the drush job to have the EnvFrom secret field set correctly")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
-					if len(job.Spec.Template.Spec.Containers) == 0 || len(job.Spec.Template.Spec.Containers[0].EnvFrom) == 0 {
-						return false
-					}
-					if job.Spec.Template.Spec.Containers[0].EnvFrom[0].SecretRef.Name == "test" {
-						return true
-					}
-					return false
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
 				}, timeout, interval).Should(BeTrue())
 
 				// Check PHP-FPM configMap creation
 				By("Expecting PHP_FPM configmaps created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Nginx configMap creation
 				By("Expecting Nginx configmaps created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drupal service
 				By("Expecting Drupal service created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
 					return svc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check drupal persistentVolumeClaim
 				By("Expecting drupal persistentVolumeClaim created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
 					return pvc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drupal deployments
 				By("Expecting Drupal deployments created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
 					return deploy.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check sitebuilder-s2i imageStream
 				By("Expecting sitebuilder-s2i imageStream created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + key.Name, Namespace: key.Namespace}, &is)
 					return is.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Drush job
 				By("Expecting Drush job created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check S2I buildConfig
 				By("Expecting S2I buildConfig created")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -614,7 +578,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				trueVar := true
-				expectedOwnerReference := v1.OwnerReference{
+				expectedOwnerReference := metav1.OwnerReference{
 					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
 					Kind:       "DrupalSite",
 					Name:       key.Name,
@@ -630,7 +594,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				By("Expecting new S2I buildConfig to be updated")
-				Eventually(func() []v1.OwnerReference {
+				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "site-builder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -640,7 +604,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
 					// The condition for UpdateNeeded would be set to Unknown and the reason would be ExecError
-					return cr.Status.Conditions.GetCondition("UpdateNeeded").Status != corev1.ConditionStatus(v1.ConditionFalse)
+					return cr.Status.Conditions.GetCondition("UpdateNeeded").Status != corev1.ConditionStatus(metav1.ConditionFalse)
 				}, timeout, interval).Should(BeTrue())
 
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest

@@ -75,7 +75,6 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 	if err != nil {
 		return "", "", err
 	}
-
 	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
 }
 
@@ -145,6 +144,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
+	}
 	if r.isDBODProvisioned(ctx, drp) {
 		if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
@@ -198,6 +200,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
+	- cm_settings: ConfigMap for `settings.php`
 	- route: Route for the drupalsite
 	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
@@ -207,7 +210,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "is_s2i":
 		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
-			log.Info("Ensuring Resource", "Kind", is.TypeMeta.Kind, "Resource.Namespace", is.Namespace, "Resource.Name", is.Name)
 			return imageStreamForDrupalSiteBuilderS2I(is, d)
 		})
 		if err != nil {
@@ -219,7 +221,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
-			log.Info("Ensuring Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
 			return buildConfigForDrupalSiteBuilderS2I(bc, d)
 		})
 		if err != nil {
@@ -234,7 +235,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-				log.Info("Ensuring Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
 				return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
 			})
 			if err != nil {
@@ -246,7 +246,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "svc_nginx":
 		svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, svc, func() error {
-			log.Info("Ensuring Resource", "Kind", svc.TypeMeta.Kind, "Resource.Namespace", svc.Namespace, "Resource.Name", svc.Name)
 			return serviceForDrupalSite(svc, d)
 		})
 		if err != nil {
@@ -257,7 +256,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "pvc_drupal":
 		pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "pv-claim-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, pvc, func() error {
-			log.Info("Ensuring Resource", "Kind", pvc.TypeMeta.Kind, "Resource.Namespace", pvc.Namespace, "Resource.Name", pvc.Name)
 			return persistentVolumeClaimForDrupalSite(pvc, d)
 		})
 		if err != nil {
@@ -268,7 +266,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "route":
 		route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
-			log.Info("Ensuring Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
 			return routeForDrupalSite(route, d)
 		})
 		if err != nil {
@@ -288,16 +285,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "site_install_job":
-		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
-			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return jobForDrupalSiteDrush(job, dbodSecret, d)
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return newApplicationError(err, ErrClientK8s)
-			}
+		dbodSecretName := r.getDBODProvisionedSecret(ctx, d)
+		if len(dbodSecretName) == 0 {
+			return nil
+		}
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+			return jobForDrupalSiteDrush(job, dbodSecretName, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
 	case "clone_job":
@@ -316,7 +314,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "cm_php":
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
 		})
 		if err != nil {
@@ -327,8 +324,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "cm_nginx":
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			log.Info("Ensuring Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return updateConfigMapForNginx(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "cm_settings":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "site-settings-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			return updateConfigMapForSiteSettings(ctx, cm, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -338,7 +344,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "dbod_cr":
 		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
-			log.Info("Ensuring Resource", "Kind", dbod.TypeMeta.Kind, "Resource.Namespace", dbod.Namespace, "Resource.Name", dbod.Name)
 			return dbodForDrupalSite(dbod, d)
 		})
 		if err != nil {
@@ -602,6 +607,16 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 			},
 		},
 		{
+			Name: "site-settings-php",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "site-settings-" + d.Name,
+					},
+				},
+			},
+		},
+		{
 			Name:         "empty-dir",
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		},
@@ -624,15 +639,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Value: "/drupal-data",
 				},
 			}
-			currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
-				{
-					SecretRef: &corev1.SecretEnvSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: dbodSecret,
-						},
-					},
-				},
-			}
 			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
 				{
 					Name:      "drupal-directory-" + d.Name,
@@ -642,6 +648,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "nginx-config-volume",
 					MountPath: "/etc/nginx/custom.conf",
 					SubPath:   "custom.conf",
+					ReadOnly:  true,
 				},
 				{
 					Name:      "empty-dir",
@@ -691,10 +698,17 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 					Name:      "php-config-volume",
 					MountPath: "/usr/local/etc/php-fpm.d/zz-docker.conf",
 					SubPath:   "zz-docker.conf",
+					ReadOnly:  true,
 				},
 				{
 					Name:      "empty-dir",
 					MountPath: "/var/run/",
+				},
+				{
+					Name:      "site-settings-php",
+					MountPath: "/app/web/sites/default/settings.php",
+					SubPath:   "settings.php",
+					ReadOnly:  true,
 				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
@@ -1031,7 +1045,8 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 	return nil
 }
 
-// updateConfigMapForPHPFPM ensures a configMaps object to configure PHP, if not present. Else configmap object is updated and a new rollout is triggered
+// updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
+// If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -1072,19 +1087,20 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 			deploy := &appsv1.Deployment{}
 			err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
 			if err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
+				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
 			}
 			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"])
 			deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"] = strconv.Itoa(currentVersion + 1)
 			if err := c.Update(ctx, deploy); err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
+				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
 			}
 		}
 	}
 	return nil
 }
 
-// updateConfigMapForNginx ensures a job object thats runs drush, if not present. Else configmap object is updated and a new rollout is triggered
+// updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
+// If the file contents change, it rolls out a new deployment.
 func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -1117,21 +1133,50 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	currentobject.Data = map[string]string{
 		"custom.conf": string(content),
 	}
-
 	if !currentobject.CreationTimestamp.IsZero() {
 		if currentConfig != string(content) {
 			// Roll out a new deployment
 			deploy := &appsv1.Deployment{}
 			err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
 			if err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
+				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
 			}
 			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"])
 			deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"] = strconv.Itoa(currentVersion + 1)
 			if err := c.Update(ctx, deploy); err != nil {
-				return newApplicationError(fmt.Errorf("Failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
+				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
 			}
 		}
+	}
+	return nil
+}
+
+// updateConfigMapForSiteSettings modifies the configmap to include the file settings.php
+func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		if currentobject.Labels == nil {
+			currentobject.Labels = map[string]string{}
+		}
+		if currentobject.Annotations == nil {
+			currentobject.Annotations = map[string]string{}
+		}
+		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
+		configPath := "/tmp/sitebuilder/settings.php"
+
+		content, err := ioutil.ReadFile(configPath)
+		if err != nil {
+			return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
+		}
+		currentobject.Data = map[string]string{
+			"settings.php": string(content),
+		}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "nginx"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
@@ -1172,11 +1217,6 @@ func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 // checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
 	return []string{"/operations/check-updb-status.sh"}
-}
-
-//checkSiteMaitenanceStatus outputs the command needed to check if a site is in maintenance mode or not
-func checkSiteMaitenanceStatus() []string {
-	return []string{"sh", "-c", "drush state:get system.maintenance_mode | grep -q '1'; if [[ $? -eq 0 ]] ; then echo 'true'; else echo 'false'; fi"}
 }
 
 // runUpDBCommand outputs the command needed to update the database in drupal

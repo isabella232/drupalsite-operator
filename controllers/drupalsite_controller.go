@@ -41,7 +41,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -71,8 +70,6 @@ var (
 	// ReleaseChannel refers to the release channel latest/ stable to be used for the images. If not set, no release channel keyword would be appended to the images
 	ReleaseChannel string
 )
-
-type strFlagList []string
 
 // DrupalSiteReconciler reconciles a DrupalSite object
 type DrupalSiteReconciler struct {
@@ -108,6 +105,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&batchv1.Job{}).
 		Owns(&dbodv1a1.DBODRegistration{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
 
@@ -281,7 +279,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		// Run updb
-		fmt.Println(runUpDBCommand())
 		_, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, runUpDBCommand()...)
 		if err != nil {
 			err = r.rollBackDBUpdate(ctx, drupalSite, backupFileName)
@@ -398,12 +395,12 @@ func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webserv
 func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
 	// TODO maybe change this during update
 	// TODO instead of checking checking status to fetch the DbCredentialsSecret, use the 'registrationLabels` to filter and get the name of the secret
-	dbodCR := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-	err1 := r.Get(ctx, types.NamespacedName{Name: dbodCR.Name, Namespace: dbodCR.Namespace}, dbodCR)
-	if err1 == nil {
-		return dbodCR.Status.DbCredentialsSecret
+	dbodCR := &dbodv1a1.DBODRegistration{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, dbodCR)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return dbodCR.Status.DbCredentialsSecret
 }
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
@@ -454,26 +451,6 @@ func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webs
 	return deployment, err
 }
 
-// checkGivenImageIsInNginxImageStreamTagItems fetches the running nginx imagestream tag items for a given tag and checks if the given image is part of it or not
-func (r *DrupalSiteReconciler) isGivenImageInNginxImageStreamTagItems(ctx context.Context, d *webservicesv1a1.DrupalSite, givenImage string) (bool, error) {
-	imageStream := &imagev1.ImageStream{}
-	err := r.Get(ctx, types.NamespacedName{Name: "nginx-" + d.Name, Namespace: d.Namespace}, imageStream)
-	if err != nil || len(imageStream.Status.Tags) > 0 {
-		tagList := imageStream.Status.Tags
-		for t := range tagList {
-			if tagList[t].Tag == d.Spec.DrupalVersion {
-				for i := range tagList[t].Items {
-					if tagList[t].Items[i].DockerImageReference == givenImage {
-						return true, nil
-					}
-				}
-			}
-		}
-		return false, nil
-	}
-	return false, newApplicationError(err, ErrClientK8s)
-}
-
 // didRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
 func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, error) {
 	pod, err := r.getRunningPod(ctx, d)
@@ -481,7 +458,7 @@ func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webserv
 		return false, ErrClientK8s
 	}
 	if pod.Status.Phase != corev1.PodRunning || pod.Annotations["drupalVersion"] != d.Spec.DrupalVersion {
-		return false, errors.New("Pod did not roll out successfully")
+		return false, errors.New("pod did not roll out successfully")
 	}
 	return true, nil
 }
@@ -499,7 +476,6 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 		if len(image) < 2 {
 			return false, "", newApplicationError(errors.New("server deployment image doesn't have a version tag"), ErrInvalidSpec)
 		}
-		fmt.Println(deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"])
 
 		// Check if image is different, check if current site is ready and installed
 		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
@@ -562,7 +538,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 	// Update deployment with the new version
 	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
 		})
 		if err != nil {
@@ -591,7 +567,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	// Restore the server deployment
 	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.LastRunningDrupalVersion)
 		})
 		if err != nil {
@@ -600,7 +576,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	}
 
 	rollout, err := r.didRollOutSucceed(ctx, d)
-	if rollout != true || err != nil {
+	if !rollout || err != nil {
 		return newApplicationError(err, ErrRollBack)
 	}
 
@@ -621,8 +597,6 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 	return nil
 }
 
-// CODE BELOW WILL GO soon -------------
-
 // getenvOrDie checks for the given variable in the environment, if not exists
 func getenvOrDie(name string, log logr.Logger) string {
 	e := os.Getenv(name)
@@ -637,7 +611,7 @@ func getenvOrDie(name string, log logr.Logger) string {
 func downloadFile(url string, fileName string, log logr.Logger) {
 	_, err := exec.Command("wget", url, "-O", fileName).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
+		log.Error(err, "error downloading config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -646,7 +620,7 @@ func downloadFile(url string, fileName string, log logr.Logger) {
 func untar(tarball, target string, log logr.Logger) {
 	_, err := exec.Command("tar", "-xf", tarball, "-C", target).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error downloading config files during initEnv"))
+		log.Error(err, "error downloading config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -655,13 +629,14 @@ func untar(tarball, target string, log logr.Logger) {
 func renameConfigDirectory(path string, log logr.Logger) {
 	files, err := ioutil.ReadDir(path)
 	if err != nil || len(files) < 0 {
-		log.Error(err, "Error creating config files during initEnv")
+		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
 	directoryName := files[0].Name()
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-critical", "/tmp/qos-critical", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-eco", "/tmp/qos-eco", log)
 	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-standard", "/tmp/qos-standard", log)
+	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/sitebuilder", "/tmp/sitebuilder", log)
 	removeFileIfExists("/tmp/drupal-runtime", log)
 }
 
@@ -670,6 +645,7 @@ func createConfigDirectory(configPath string, log logr.Logger) {
 	removeFileIfExists("/tmp/qos-critical", log)
 	removeFileIfExists("/tmp/qos-eco", log)
 	removeFileIfExists("/tmp/qos-standard", log)
+	removeFileIfExists("/tmp/sitebuilder", log)
 	removeFileIfExists("/tmp/drupal-runtime", log)
 	createDir("/tmp/drupal-runtime", log)
 }
@@ -678,7 +654,7 @@ func createConfigDirectory(configPath string, log logr.Logger) {
 func removeFileIfExists(path string, log logr.Logger) {
 	_, err := exec.Command("rm", "-rf", path).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error cleaning up old config files during initEnv"))
+		log.Error(err, "error cleaning up old config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -687,7 +663,7 @@ func removeFileIfExists(path string, log logr.Logger) {
 func moveFile(from string, to string, log logr.Logger) {
 	_, err := exec.Command("mv", from, to).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error moving config files during initEnv"))
+		log.Error(err, "error moving config files during initEnv")
 		os.Exit(1)
 	}
 }
@@ -696,7 +672,7 @@ func moveFile(from string, to string, log logr.Logger) {
 func createDir(path string, log logr.Logger) {
 	_, err := exec.Command("mkdir", "-p", path).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error creating config files during initEnv"))
+		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
 }

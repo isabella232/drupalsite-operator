@@ -18,9 +18,9 @@ package controllers
 import (
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -29,6 +29,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -111,6 +112,9 @@ func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource stri
 	buildLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + "-" + nameVersionHash(drp)},
 	})
+	if err != nil {
+		return "", newApplicationError(err, ErrFunctionDomain)
+	}
 	options := client.ListOptions{
 		LabelSelector: buildLabels,
 		Namespace:     drp.Namespace,
@@ -130,15 +134,6 @@ func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource stri
 func nameVersionHash(drp *webservicesv1a1.DrupalSite) string {
 	hash := md5.Sum([]byte(drp.Name + drp.Spec.DrupalVersion))
 	return hex.EncodeToString(hash[0:7])
-}
-
-func (i *strFlagList) String() string {
-	return strings.Join(*i, ",")
-}
-
-func (i *strFlagList) Set(value string) error {
-	*i = append(*i, value)
-	return nil
 }
 
 // resourceList is a k8s API object representing the given amount of memory and CPU resources
@@ -173,6 +168,8 @@ func resourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.Resourc
 	}, nil
 }
 
+// ------ POTENTIALLY UNUSED FUNCTIONS -------
+
 // resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
 func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 	lims, err := resourceList(memLim, cpuLim)
@@ -180,4 +177,23 @@ func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 		return corev1.ResourceRequirements{}, err
 	}
 	return corev1.ResourceRequirements{Limits: lims}, nil
+}
+
+// getSecretDataDecoded fetches the given secret and decodes the data for the given string.
+// Returns nil in case the secret isn't found or the data can't be base64-decoded.
+func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
+	if err != nil {
+		return nil
+	}
+	data := make(map[string]string, len(keys))
+	for _, key := range keys {
+		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
+		if err != nil {
+			return nil
+		}
+		data[key] = string(val)
+	}
+	return data
 }
