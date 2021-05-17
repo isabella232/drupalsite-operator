@@ -153,16 +153,12 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if r.isDBODProvisioned(ctx, drp) {
 		switch {
 		case drp.Spec.InitCloneFrom == "":
-			if drp.Spec.InitCloneFrom == "" {
-				if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-					transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
-				}
+			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
 		case drp.Spec.InitCloneFrom != "":
-			if drp.Spec.InitCloneFrom != "" {
-				if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
-					transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
-				}
+			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
 			}
 		}
 	}

@@ -367,15 +367,13 @@ func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *web
 
 // isCloneJobCompleted checks if the clone job is successfully completed
 func (r *DrupalSiteReconciler) isCloneJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	found := &batchv1.Job{}
-	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
-	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
-	if err == nil {
-		if found.Status.Succeeded != 0 {
-			return true
-		}
+	cloneJob := &batchv1.Job{}
+	err := r.Get(ctx, types.NamespacedName{Name: "clone-" + d.Name, Namespace: d.Namespace}, cloneJob)
+	if err != nil {
+		return false
 	}
-	return false
+	// business logic, ie check "Succeeded"
+	return cloneJob.Status.Succeeded != 0
 }
 
 // isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
