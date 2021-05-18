@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -54,8 +56,7 @@ const (
 	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName        = "oidc-client-secret"
 	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
-	REQUEUE_INTERVAL      = time.Duration(20 * time.Second)
-	webdavDefaultPassword = "password"
+	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
 )
 
 var (
@@ -443,7 +444,8 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		}
 	}
 	if drp.Spec.WebDAVPassword == "" {
-		drp.Spec.WebDAVPassword = webdavDefaultPassword
+
+		drp.Spec.WebDAVPassword = generateWebDAVpassword()
 	}
 	return
 }
@@ -679,4 +681,10 @@ func createDir(path string, log logr.Logger) {
 		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
+}
+
+// generateWebDAVpassword generates the password for WebDAV
+func generateWebDAVpassword() string {
+	hash := md5.Sum([]byte(time.Now().String()))
+	return hex.EncodeToString(hash[:])[0:10]
 }
