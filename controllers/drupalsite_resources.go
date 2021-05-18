@@ -25,7 +25,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/url"
-	"os"
 	"os/exec"
 	"path"
 	"strconv"
@@ -245,7 +244,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		webdav_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "webdav-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_secret, func() error {
 			log.Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
-			return secretForWebDAV(webdav_secret, d, log)
+			return secretForWebDAV(webdav_secret, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
@@ -811,13 +810,17 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 }
 
 // secretForWebDAV returns a Secret object
-func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite, log logr.Logger) error {
+func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Type = "kubernetes.io/basic-auth"
 	}
+	encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.WebDAVPassword)
+	if err != nil {
+		return err
+	}
 	currentobject.StringData = map[string]string{
-		"password": "admin:" + encryptBasicAuthPassword(d.Spec.WebDAVPassword, log),
+		"password": "admin:" + encryptedBasicAuthPassword,
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -1368,11 +1371,10 @@ func cloneSource(filename string) []string {
 }
 
 // encryptBasicAuthPassword encrypts a password for basic authentication
-func encryptBasicAuthPassword(password string, log logr.Logger) string {
+func encryptBasicAuthPassword(password string) (string, error) {
 	encryptedPassword, err := exec.Command("openssl", "passwd", "-apr1", password).Output()
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Error encrypting password"))
-		os.Exit(1)
+		return "", newApplicationError(fmt.Errorf("encrypting password failed: %w", err), ErrFunctionDomain)
 	}
-	return string(encryptedPassword)
+	return string(encryptedPassword), nil
 }
