@@ -56,7 +56,7 @@ type DrupalSiteSpec struct {
 	// WebDAVPassword defines the password for WebDAV file access
 	// Defaults to generated encoded value
 	// +optional
-	WebDAVPassword string `json:"webDAVPassword"`
+	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 }
 
 // Environment defines the environment field in DrupalSite
