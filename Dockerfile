@@ -29,6 +29,7 @@ FROM busybox as binaries
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /usr/bin/openssl /usr/bin/openssl
 
 # The operator requires binaries like wget, tar, rm, mkdir to download and organize the configuration files.
 # Since distroless image doesn't have these, we are copying them from busybox
