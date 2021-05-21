@@ -99,3 +99,9 @@ rules:
   - routes
   verbs:
   - '*'
+- apiGroups:
+  - webservices.cern.ch
+  resources:
+  - oidcreturnuris
+  verbs:
+  - '*'
