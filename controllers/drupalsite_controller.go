@@ -94,7 +94,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databases,verbs=*
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databaseclasses,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=webservices.cern.ch,resources=oidcreturnuris,verbs=*
-// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=*;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
