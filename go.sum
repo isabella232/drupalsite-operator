@@ -313,6 +313,12 @@ github.com/onsi/gomega v1.10.2/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1y
 github.com/openshift/api v0.0.0-20210127195806-54e5e88cf848 h1:bGRCsb8QqwjWlwSv2AamE/T6AoN1FMm5Lowo74I3HFg=
 github.com/openshift/api v0.0.0-20210127195806-54e5e88cf848/go.mod h1:Si/I9UGeRR3qzg01YWPmtlr0GeGk2fnuggXJRmjAZ6U=
 github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
+github.com/openshift/api v0.0.0-20201126092428-04abbec6c099 h1:eYQ1Q974bnkOegqZu3IaWQeVA3btAPcDmlfPcHvb7u0=
+github.com/openshift/api v0.0.0-20201126092428-04abbec6c099/go.mod h1:RDvBcRQMGLa3aNuDuejVBbTEQj/2i14NXdpOLqbNBvM=
+github.com/openshift/api v0.0.0-20210127195806-54e5e88cf848 h1:bGRCsb8QqwjWlwSv2AamE/T6AoN1FMm5Lowo74I3HFg=
+github.com/openshift/api v0.0.0-20210127195806-54e5e88cf848/go.mod h1:Si/I9UGeRR3qzg01YWPmtlr0GeGk2fnuggXJRmjAZ6U=
+github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
+github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/operator-framework/operator-lib v0.1.0 h1:7Qy6v2ZccvCeFLWEkrGnN+U+DkaeIWp0gAZaBM9T3DI=
 github.com/operator-framework/operator-lib v0.1.0/go.mod h1:HLw61JTIEeq0YLeVf4dwYx/zt4DmLGZUVWI1y3Lf5Hg=
 github.com/pborman/uuid v1.2.0/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=

@@ -56,6 +56,15 @@ rules:
   - watch
   - create
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites

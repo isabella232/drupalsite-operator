@@ -25,6 +25,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/url"
+	"os/exec"
 	"path"
 	"strconv"
 
@@ -135,6 +136,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "dbod_cr", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for DBOD resource"))
 	}
+	if transientErr := r.ensureResourceX(ctx, drp, "webdav_secret", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Secret"))
+	}
 
 	// 3. Serving layer
 
@@ -171,6 +175,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	// 4. Ingress
 
 	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") && drp.Spec.Publish {
+		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
+		}
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
@@ -178,6 +185,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
 	} else {
+		if transientErr := r.ensureNoWebDAVRoute(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the WebDAV Route"))
+		}
 		if transientErr := r.ensureNoRoute(ctx, drp, log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
 		}
@@ -204,6 +214,8 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- route: Route for the drupalsite
 	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
+	- webdav_secret: Secret with credential for WebDAV
+	- webdav_route: Route for WebDAV
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -225,6 +237,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", bc.TypeMeta.Kind, "Resource.Namespace", bc.Namespace, "Resource.Name", bc.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "webdav_secret":
+		webdav_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "webdav-secret-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_secret, func() error {
+			log.Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
+			return secretForWebDAV(webdav_secret, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -281,6 +304,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+		}
+		return nil
+	case "webdav_route":
+		webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
+			log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
+			return routeForWebDAV(webdav_route, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -367,6 +400,22 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 		}
 	}
 	if err := r.Delete(ctx, route); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: webdav_route.Name, Namespace: webdav_route.Namespace}, webdav_route); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, webdav_route); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
@@ -617,6 +666,14 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			Name:         "empty-dir",
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		},
+		{
+			Name: "webdav-volume",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: "webdav-secret-" + d.Name,
+				},
+			},
+		},
 	}
 
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
@@ -650,6 +707,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				{
 					Name:      "empty-dir",
 					MountPath: "/var/run/",
+				},
+				{
+					Name:      "webdav-volume",
+					MountPath: "/etc/nginx/webdav",
 				},
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
@@ -748,6 +809,34 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	return nil
 }
 
+// secretForWebDAV returns a Secret object
+func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Type = "kubernetes.io/basic-auth"
+	}
+	encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.WebDAVPassword)
+	if err != nil {
+		return err
+	}
+	currentobject.StringData = map[string]string{
+		"password": "admin:" + encryptedBasicAuthPassword,
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
+}
+
 // persistentVolumeClaimForDrupalSite returns a PVC object
 func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeClaim, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
@@ -798,12 +887,19 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 		currentobject.Labels[k] = v
 	}
 	currentobject.Spec.Selector = ls
-	currentobject.Spec.Ports = []corev1.ServicePort{{
-		TargetPort: intstr.FromInt(8080),
-		Name:       "nginx",
-		Port:       80,
-		Protocol:   "TCP",
-	}}
+	currentobject.Spec.Ports = []corev1.ServicePort{
+		{
+			TargetPort: intstr.FromInt(8080),
+			Name:       "nginx",
+			Port:       80,
+			Protocol:   "TCP",
+		},
+		{
+			TargetPort: intstr.FromInt(8081),
+			Name:       "webdav",
+			Port:       81,
+			Protocol:   "TCP",
+		}}
 	return nil
 }
 
@@ -859,6 +955,44 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 	returnURI := "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
 	currentobject.Spec = authz.OidcReturnURISpec{
 		RedirectURI: returnURI,
+	}
+	return nil
+}
+
+// routeForWebDAV returns a route object
+func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+	if len(currentobject.Annotations) < 1 {
+		currentobject.Annotations = map[string]string{}
+	}
+	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
+		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Spec = routev1.RouteSpec{
+		Host: "webdav-" + d.Spec.SiteURL,
+		To: routev1.RouteTargetReference{
+			Kind:   "Service",
+			Name:   d.Name,
+			Weight: pointer.Int32Ptr(100),
+		},
+		Port: &routev1.RoutePort{
+			TargetPort: intstr.FromInt(8081),
+		},
 	}
 	return nil
 }
@@ -1234,4 +1368,13 @@ func restoreBackup(filename string) []string {
 // cloneSource outputs the command need to clone a drupal site
 func cloneSource(filename string) []string {
 	return []string{"/operations/clone.sh", "-f", filename}
+}
+
+// encryptBasicAuthPassword encrypts a password for basic authentication
+func encryptBasicAuthPassword(password string) (string, error) {
+	encryptedPassword, err := exec.Command("openssl", "passwd", "-apr1", password).Output()
+	if err != nil {
+		return "", newApplicationError(fmt.Errorf("encrypting password failed: %w", err), ErrFunctionDomain)
+	}
+	return string(encryptedPassword), nil
 }

@@ -48,6 +48,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - "*"
+- apiGroups:
   - dbod.cern.ch
   resources:
   - databaseclasses

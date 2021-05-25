@@ -52,6 +52,11 @@ type DrupalSiteSpec struct {
 	// DiskSize defines the drupal site PVC size
 	// +kubebuilder:validation:Required
 	DiskSize string `json:"diskSize"`
+
+	// WebDAVPassword defines the password for WebDAV file access
+	// Defaults to generated encoded value
+	// +optional
+	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 }
 
 // Environment defines the environment field in DrupalSite

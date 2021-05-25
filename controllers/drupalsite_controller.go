@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -92,6 +94,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databases,verbs=*
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databaseclasses,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=webservices.cern.ch,resources=oidcreturnuris,verbs=*
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=*;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -107,6 +110,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Secret{}).
 		Complete(r)
 }
 
@@ -440,6 +444,9 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 			drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
 		}
 	}
+	if drp.Spec.WebDAVPassword == "" {
+		drp.Spec.WebDAVPassword = generateWebDAVpassword()
+	}
 	return
 }
 
@@ -674,4 +681,10 @@ func createDir(path string, log logr.Logger) {
 		log.Error(err, "error creating config files during initEnv")
 		os.Exit(1)
 	}
+}
+
+// generateWebDAVpassword generates the password for WebDAV
+func generateWebDAVpassword() string {
+	hash := md5.Sum([]byte(time.Now().String()))
+	return hex.EncodeToString(hash[:])[0:10]
 }
