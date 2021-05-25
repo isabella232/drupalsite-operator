@@ -21,19 +21,14 @@ COPY controllers/ controllers/
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
 
-# Use busybox image to copy required binaries
-FROM busybox as binaries
-
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# The operator requires binaries like wget, tar, rm, mkdir to download and organize the configuration files.
+# Since distroless image doesn't have these, we use Alpine or busybox
+FROM alpine:3.13
 WORKDIR /
 COPY --from=builder /workspace/manager .
-COPY --from=builder /usr/bin/openssl /bin/
 
-# The operator requires binaries like wget, tar, rm, mkdir to download and organize the configuration files.
-# Since distroless image doesn't have these, we are copying them from busybox
-COPY --from=binaries /bin /bin
+# Pkg used for WebDAV password generation
+RUN apk add --no-cache openssl
+
 USER 65532:65532
-
 ENTRYPOINT ["/manager"]
