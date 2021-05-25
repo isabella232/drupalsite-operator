@@ -72,9 +72,9 @@ type Environment struct {
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:validation:Required
 	QoSClass `json:"qosClass"`
-	// DatabClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
-	// +optional
-	DatabaseClass `json:"databaseClass,omitempty"`
+	// DatabClass requests a specific kind of DBOD resources for the website.
+	// +kubebuilder:validation:Required
+	DatabaseClass `json:"databaseClass"`
 	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production).
 	// Immutable.
 	// +optional
