@@ -94,6 +94,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databases,verbs=*
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databaseclasses,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=webservices.cern.ch,resources=oidcreturnuris,verbs=*
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -444,7 +445,6 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		}
 	}
 	if drp.Spec.WebDAVPassword == "" {
-
 		drp.Spec.WebDAVPassword = generateWebDAVpassword()
 	}
 	return
