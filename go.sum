@@ -395,6 +395,10 @@ github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210312144809-29eb48685cf7 h1:uNsaE6zOE11C6U+Q8QgUragUhp19cEfxm++E026sTg0=
 gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210312144809-29eb48685cf7/go.mod h1:puUnn3MDKHTUdDbVitOG+nYgrnm8R9VdzJNrQafEhFU=
+gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210321184819-acdd701c4361 h1:kyDOXqNjJuMlxZgEKLptzLnKOENJH3o2MX7Fd+xTcLY=
+gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210321184819-acdd701c4361/go.mod h1:a9wAHBnr+zb1AuW7a7a84R+fjN7+ddMS/uriPjI0Q/c=
+gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210525082629-c9e903df3b0e h1:bCwJ1f7OGD9B6+Sjf6GvPpD2wCe7t5ZmvYixhq9Cua0=
+gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210525082629-c9e903df3b0e/go.mod h1:dH9v6hJXpQMQ6sS1bnuPQgR5pVJxuza3+CroRXmvLjY=
 gitlab.cern.ch/paas-tools/operators/authz-operator v0.0.0-20210512233547-21c01c7dd5e5 h1:7fNTPflj33RuP+Fh2Wi/VUSqlHXMtI6WJ3+g+TlEho8=
 gitlab.cern.ch/paas-tools/operators/authz-operator v0.0.0-20210512233547-21c01c7dd5e5/go.mod h1:VI4d+Lf0/rdk8dlIEp1BY8pTR8SuH7sq6S36ZheNZtI=
 go.etcd.io/bbolt v1.3.2/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=

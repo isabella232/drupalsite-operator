@@ -31,7 +31,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
-	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
+	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -89,8 +89,8 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=persistentvolumeclaims;services,verbs=*
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=*
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
-// +kubebuilder:rbac:groups=dbod.cern,resources=dbodregistrations,verbs=*
-// +kubebuilder:rbac:groups=dbod.cern,resources=dbodclasses,verbs=get;list;watch;
+// +kubebuilder:rbac:groups=dbod.cern.ch,resources=databases,verbs=*
+// +kubebuilder:rbac:groups=dbod.cern.ch,resources=databaseclasses,verbs=get;list;watch;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -104,7 +104,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&corev1.Service{}).
 		Owns(&batchv1.Job{}).
-		Owns(&dbodv1a1.DBODRegistration{}).
+		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
@@ -388,19 +388,17 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
 func (r *DrupalSiteReconciler) isDBODProvisioned(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	return len(r.getDBODProvisionedSecret(ctx, d)) > 0
+	database := &dbodv1a1.Database{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, database)
+	if err != nil {
+		return false
+	}
+	return len(database.Status.DbodInstance) > 0
 }
 
-// getDBODProvisionedSecret fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
-func (r *DrupalSiteReconciler) getDBODProvisionedSecret(ctx context.Context, d *webservicesv1a1.DrupalSite) string {
-	// TODO maybe change this during update
-	// TODO instead of checking checking status to fetch the DbCredentialsSecret, use the 'registrationLabels` to filter and get the name of the secret
-	dbodCR := &dbodv1a1.DBODRegistration{}
-	err := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, dbodCR)
-	if err != nil {
-		return ""
-	}
-	return dbodCR.Status.DbCredentialsSecret
+// databaseSecretName fetches the secret name of the DBOD provisioned secret by checking the status of DBOD custom resource
+func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
+	return "dbcredentials-" + d.Name
 }
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
@@ -536,7 +534,7 @@ func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d 
 func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 
 	// Update deployment with the new version
-	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
@@ -565,7 +563,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 // If successful, it returns a permanent error to block any update retries.
 func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Restore the server deployment
-	if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.LastRunningDrupalVersion)

@@ -33,7 +33,7 @@ import (
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 
-	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
+	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -232,10 +232,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if d.ConditionTrue("UpdateNeeded") || d.ConditionTrue("CodeUpdatingFailed") || d.ConditionTrue("DBUpdatingFailed") {
 			return nil
 		}
-		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-				return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
+				return deploymentForDrupalSite(deploy, databaseSecret, d, d.Spec.DrupalVersion)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
@@ -285,13 +285,13 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "site_install_job":
-		dbodSecretName := r.getDBODProvisionedSecret(ctx, d)
-		if len(dbodSecretName) == 0 {
+		databaseSecretName := databaseSecretName(d)
+		if len(databaseSecretName) == 0 {
 			return nil
 		}
 		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-			return jobForDrupalSiteDrush(job, dbodSecretName, d)
+			return jobForDrupalSiteDrush(job, databaseSecretName, d)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
@@ -299,11 +299,11 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "clone_job":
-		if dbodSecret := r.getDBODProvisionedSecret(ctx, d); len(dbodSecret) != 0 {
+		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
-				return jobForDrupalSiteClone(job, dbodSecret, d)
+				return jobForDrupalSiteClone(job, databaseSecret, d)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
@@ -342,7 +342,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "dbod_cr":
-		dbod := &dbodv1a1.DBODRegistration{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+		dbod := &dbodv1a1.Database{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
 			return dbodForDrupalSite(dbod, d)
 		})
@@ -491,7 +491,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 }
 
 // dbodForDrupalSite returns a DBOD resource for the the Drupal Site
-func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv1a1.DrupalSite) error {
+func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 	}
@@ -508,11 +508,11 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 		currentobject.Labels[k] = v
 	}
 	dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
-	currentobject.Spec = dbodv1a1.DBODRegistrationSpec{
-		DbodClass: string(d.Spec.Environment.DBODClass),
-		DbName:    hex.EncodeToString(dbID[1:10]),
-		DbUser:    hex.EncodeToString(dbID[1:10]),
-		RegistrationLabels: map[string]string{
+	currentobject.Spec = dbodv1a1.DatabaseSpec{
+		DatabaseClass: string(d.Spec.Environment.DBODClass),
+		DbName:        hex.EncodeToString(dbID[1:10]),
+		DbUser:        hex.EncodeToString(dbID[1:10]),
+		ExtraLabels: map[string]string{
 			"drupalSite": d.Name,
 		},
 	}
@@ -520,7 +520,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.DBODRegistration, d *webservicesv
 }
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
 	nginxResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
@@ -677,7 +677,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, dbodSecret string
 				{
 					SecretRef: &corev1.SecretEnvSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: dbodSecret,
+							Name: databaseSecret,
 						},
 					},
 				},
@@ -867,7 +867,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 }
 
 // jobForDrupalSiteDrush returns a job object thats runs drush
-func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
+func jobForDrupalSiteDrush(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -909,7 +909,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 					{
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: dbodSecret,
+								Name: databaseSecret,
 							},
 						},
 					},
@@ -948,7 +948,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, dbodSecret string, d *web
 }
 
 // jobForDrupalSiteClone returns a job object thats clones a drupalsite
-func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *webservicesv1a1.DrupalSite) error {
+func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
@@ -1000,7 +1000,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, dbodSecret string, d *web
 					{
 						SecretRef: &corev1.SecretEnvSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: dbodSecret,
+								Name: databaseSecret,
 							},
 						},
 					},
