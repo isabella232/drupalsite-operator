@@ -494,27 +494,24 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
+		dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
+		currentobject.Spec = dbodv1a1.DatabaseSpec{
+			DatabaseClass: string(d.Spec.Environment.DatabaseClass),
+			DbName:        hex.EncodeToString(dbID[1:10]),
+			DbUser:        hex.EncodeToString(dbID[1:10]),
+			ExtraLabels: map[string]string{
+				"drupalSite": d.Name,
+			},
+		}
 	}
+	// Enforce only the drupalsite labels on the resource on every iteration
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "dbod"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
-	}
-	dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
-	currentobject.Spec = dbodv1a1.DatabaseSpec{
-		DatabaseClass: string(d.Spec.Environment.DatabaseClass),
-		DbName:        hex.EncodeToString(dbID[1:10]),
-		DbUser:        hex.EncodeToString(dbID[1:10]),
-		ExtraLabels: map[string]string{
-			"drupalSite": d.Name,
-		},
 	}
 	return nil
 }
