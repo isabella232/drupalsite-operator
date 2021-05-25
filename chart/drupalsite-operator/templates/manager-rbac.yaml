@@ -103,6 +103,12 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - webservices.cern.ch
+  resources:
+  - oidcreturnuris
+  verbs:
+  - '*'
 ---
 apiVersion: v1
 kind: ServiceAccount
