@@ -46,8 +46,8 @@ spec:
               environment:
                 description: Environment defines the drupal site environments
                 properties:
-                  dbodClass:
-                    description: DBODClass requests a specific kind of DBOD resources
+                  databaseClass:
+                    description: DatabClass requests a specific kind of DBOD resources
                       for the website. If omitted, it is derived from QoSClass.
                     type: string
                   extraConfigRepo:

@@ -98,7 +98,7 @@ rules:
 - apiGroups:
   - dbod.cern
   resources:
-  - dbodclasses
+  - databaseclasses
   verbs:
   - get
   - list

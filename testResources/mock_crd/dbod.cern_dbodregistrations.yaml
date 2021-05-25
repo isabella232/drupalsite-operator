@@ -33,8 +33,8 @@ spec:
             description: Spec defines the desired state of DBODRegistration
             type: object
             properties:
-              dbodClass:
-                description: 'Name of the required DB Quality of Service level (consult the `DBODClass`es supported by the cluster)'
+              databaseClass:
+                description: 'Name of the required DB Quality of Service level (consult the `DatabaseClass`es supported by the cluster)'
                 type: string
               dbodInstanceName:
                 description: '[exceptional] Request to create the new DB on a specific DBOD instance'

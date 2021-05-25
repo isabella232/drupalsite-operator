@@ -8,4 +8,4 @@ spec:
   environment:
     name: "dev"
     extraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
-    dbodClass: "test"
+    databaseClass: "test"

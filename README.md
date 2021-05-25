@@ -47,7 +47,7 @@ spec:
     # Name of the DrupalSite (in the same namespace) to clone
     initCloneFrom: "myproductionsite"
     qosClass: "standard"
-    dbodClass: "test"
+    databaseClass: "test"
   diskSize: "1Gi"
 ```
 

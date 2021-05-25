@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	QoSStandard  QoSClass  = "standard"
-	DBODStandard DBODClass = "standard"
-	DBODSSD      DBODClass = "ssd"
+	QoSStandard  QoSClass      = "standard"
+	DBODStandard DatabaseClass = "standard"
+	DBODSSD      DatabaseClass = "ssd"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
@@ -72,9 +72,9 @@ type Environment struct {
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:validation:Required
 	QoSClass `json:"qosClass"`
-	// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
+	// DatabClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
 	// +optional
-	DBODClass `json:"dbodClass,omitempty"`
+	DatabaseClass `json:"databaseClass,omitempty"`
 	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production).
 	// Immutable.
 	// +optional
@@ -84,8 +84,8 @@ type Environment struct {
 // QoSClass specifies the website's performance and availability requirements
 type QoSClass string
 
-// DBODClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
-type DBODClass string
+// DatabaseClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
+type DatabaseClass string
 
 // ImageOverride lets the website admin bypass the operator's buildconfigs and inject custom images.
 // Envisioned primarily for the sitebuilder, this could allow an advanced developer to deploy their own

@@ -79,7 +79,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Environment: drupalwebservicesv1alpha1.Environment{
 					Name:      "dev",
 					QoSClass:  "standard",
-					DBODClass: "test",
+					DatabaseClass: "test",
 				},
 			},
 		}

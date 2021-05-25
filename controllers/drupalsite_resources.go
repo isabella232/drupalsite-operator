@@ -509,7 +509,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 	}
 	dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
 	currentobject.Spec = dbodv1a1.DatabaseSpec{
-		DatabaseClass: string(d.Spec.Environment.DBODClass),
+		DatabaseClass: string(d.Spec.Environment.DatabaseClass),
 		DbName:        hex.EncodeToString(dbID[1:10]),
 		DbUser:        hex.EncodeToString(dbID[1:10]),
 		ExtraLabels: map[string]string{
