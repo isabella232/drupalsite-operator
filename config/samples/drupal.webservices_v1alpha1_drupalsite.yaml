@@ -8,5 +8,5 @@ spec:
   environment:
     name: "production"
     qosClass: "standard"
-    dbodClass: "test" 
+    databaseClass: "test" 
   diskSize: "1Gi"

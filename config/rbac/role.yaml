@@ -48,17 +48,17 @@ rules:
   - list
   - watch
 - apiGroups:
-  - dbod.cern
+  - dbod.cern.ch
   resources:
-  - dbodclasses
+  - databaseclasses
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - dbod.cern
+  - dbod.cern.ch
   resources:
-  - dbodregistrations
+  - databases
   verbs:
   - '*'
 - apiGroups:

@@ -46,9 +46,9 @@ spec:
               environment:
                 description: Environment defines the drupal site environments
                 properties:
-                  dbodClass:
-                    description: DBODClass requests a specific kind of DBOD resources
-                      for the website. If omitted, it is derived from QoSClass.
+                  databaseClass:
+                    description: DatabClass requests a specific kind of DBOD resources
+                      for the website.
                     type: string
                   extraConfigRepo:
                     description: 'ExtraConfigRepo passes on the git url with advanced
@@ -84,6 +84,7 @@ spec:
                     - standard
                     type: string
                 required:
+                - databaseClass
                 - name
                 - qosClass
                 type: object

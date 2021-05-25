@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.10.2
 	github.com/openshift/api v0.0.0-20210127195806-54e5e88cf848
 	github.com/operator-framework/operator-lib v0.1.0
-	gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210312144809-29eb48685cf7
+	gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210525082629-c9e903df3b0e
 	gitlab.cern.ch/paas-tools/operators/authz-operator v0.0.0-20210512233547-21c01c7dd5e5
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2

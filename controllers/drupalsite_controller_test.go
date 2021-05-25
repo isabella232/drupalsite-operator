@@ -26,7 +26,7 @@ import (
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
-	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/go/api/v1alpha1"
+	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -77,9 +77,9 @@ var _ = Describe("DrupalSite controller", func() {
 				DrupalVersion: "8.9.13",
 				DiskSize:      "10Gi",
 				Environment: drupalwebservicesv1alpha1.Environment{
-					Name:      "dev",
-					QoSClass:  "standard",
-					DBODClass: "test",
+					Name:          "dev",
+					QoSClass:      "standard",
+					DatabaseClass: "test",
 				},
 			},
 		}
@@ -111,21 +111,21 @@ var _ = Describe("DrupalSite controller", func() {
 				pvc := corev1.PersistentVolumeClaim{}
 				job := batchv1.Job{}
 				deploy := appsv1.Deployment{}
-				dbod := dbodv1a1.DBODRegistration{}
+				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
 
 				// Check DBOD resource creation
-				By("Expecting DBOD resource created")
+				By("Expecting Database resource created")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
-				By("Updating secret name in DBOD resource status")
+				By("Updating DBOD instance in Database resource status")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
-					dbod.Status.DbCredentialsSecret = "test"
+					dbod.Status.DbodInstance = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 
@@ -443,21 +443,21 @@ var _ = Describe("DrupalSite controller", func() {
 				deploy := appsv1.Deployment{}
 				is := imagev1.ImageStream{}
 				bc := buildv1.BuildConfig{}
-				dbod := dbodv1a1.DBODRegistration{}
+				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
 
 				// Check DBOD resource creation
-				By("Expecting DBOD resource created")
+				By("Expecting Database resource created")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
 					return dbod.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update DBOD resource status field
-				By("Updating secret name in DBOD resource status")
+				By("Updating the DBOD instance in Database resource status")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
-					dbod.Status.DbCredentialsSecret = "test"
+					dbod.Status.DbodInstance = "test"
 					return k8sClient.Status().Update(ctx, &dbod)
 				}, timeout, interval).Should(Succeed())
 

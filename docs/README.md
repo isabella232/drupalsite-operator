@@ -9,7 +9,7 @@ Deploys the OKD4 configuration specific to the Drupal use case.
 The Drupal component provides APIs to define Drupal sites:
 - DrupalSite
 - DBODRegistration
-- DBODClass
+- DatabaseClass
 
 and consists of 2 operators:
 - [drupalSite operator](https://gitlab.cern.ch/drupal/paas/drupalsite-operator)
@@ -24,7 +24,7 @@ a server deployment, and a customized Drupal distribution.
 The DB lives on DBOD.
 
 Databases are provisioned with the DBOD operator on an administrator-defined pool of premade DBOD instances,
-split into `DBODClasses` that define QoS.
+split into `DatabaseClasses` that define QoS.
 
 Drupal distributions are defined for each website by injecting extra composer dependencies (Drupal modules)
 on top of a standard [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution),
