@@ -167,7 +167,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		requeueFlag = nonfatalErr
 	}
 
-	// Init. Check if finalizer is set. If not, set it, validate and update CR status
+	// 1. Init: Check if finalizer is set. If not, set it, validate and update CR status
 
 	if update := ensureSpecFinalizer(drupalSite, log); update {
 		log.Info("Initializing DrupalSite Spec")
@@ -191,9 +191,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Check if the site is installed or cloned and mark the condition
 	if !drupalSite.ConditionTrue("Initialized") {
-		installed := r.isDrupalSiteInitialized(ctx, drupalSite)
-		cloned := r.isCloneJobCompleted(ctx, drupalSite)
-		if installed || cloned {
+		if r.isDrupalSiteInstalled(ctx, drupalSite) || r.isCloneJobCompleted(ctx, drupalSite) {
 			update = setInitialized(drupalSite) || update
 		} else {
 			update = setNotInitialized(drupalSite) || update
@@ -226,7 +224,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	updateCR := false
 	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
 	updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
@@ -235,13 +232,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		case reconcileErr != nil:
 			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed", "")
 		case updateNeeded:
-			updateCR = setUpdateInProgress(drupalSite) || updateCR
+			if setUpdateInProgress(drupalSite) {
+				return r.updateCRorFailReconcile(ctx, log, drupalSite)
+			}
 		}
-	}
-
-	// Update the CR if it is set
-	if updateCR {
-		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
@@ -373,10 +367,10 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 	return false
 }
 
-// isDrupalSiteInitialized checks if the drupal site is initialized by running drush status command in the PHP pod
-func (r *DrupalSiteReconciler) isDrupalSiteInitialized(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+// isDrupalSiteInstalled checks if the drupal site is initialized by running drush status command in the PHP pod
+func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	if r.isDrupalSiteReady(ctx, d) {
-		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkIfSiteIsInitialized()...); err != nil {
+		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkIfSiteIsInstalled()...); err != nil {
 			return false
 		}
 		return true

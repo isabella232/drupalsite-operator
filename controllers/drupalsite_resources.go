@@ -1338,8 +1338,8 @@ func encryptBasicAuthPassword(password string) (string, error) {
 	return string(encryptedPassword), nil
 }
 
-// checkIfSiteIsInitialized outputs the command to check if a site is initialized or not
-func checkIfSiteIsInitialized() []string {
+// checkIfSiteIsInstalled outputs the command to check if a site is initialized or not
+func checkIfSiteIsInstalled() []string {
 	return []string{"/operations/check-if-installed.sh"}
 }
 
