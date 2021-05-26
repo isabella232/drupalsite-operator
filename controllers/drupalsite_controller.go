@@ -26,7 +26,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -56,8 +55,6 @@ const (
 	productionEnvironment = "production"
 	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName        = "oidc-client-secret"
-	// REQUEUE_INTERVAL is the standard waiting period when the controller decides to requeue itself after a transient condition has occurred
-	REQUEUE_INTERVAL = time.Duration(20 * time.Second)
 )
 
 var (
@@ -119,7 +116,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
 	log.Info("Reconciling request")
-	requeueFlag := false
+	var requeueFlag error
 
 	// Fetch the DrupalSite instance
 	drupalSite := &webservicesv1a1.DrupalSite{}
@@ -152,7 +149,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		if transientErr.Temporary() {
 			log.Error(transientErr, fmt.Sprintf(logstrFmt, transientErr.Unwrap()))
-			return reconcile.Result{Requeue: true, RequeueAfter: REQUEUE_INTERVAL}, nil
+			// emitting error because the controller can count it in the error metrics,
+			// which we can monitor to notice transient problems affecting the entire infrastructure
+			return reconcile.Result{}, err
 		}
 		log.Error(transientErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		return reconcile.Result{}, nil
@@ -163,7 +162,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		} else {
 			log.Error(nonfatalErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		}
-		requeueFlag = true
+		// emitting error because the controller can count it in the error metrics,
+		// which we can monitor to notice transient problems affecting the entire infrastructure
+		requeueFlag = nonfatalErr
 	}
 
 	// Init. Check if finalizer is set. If not, set it, validate and update CR status
@@ -290,7 +291,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
 			r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
-		return ctrl.Result{Requeue: true, RequeueAfter: REQUEUE_INTERVAL}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Update the FailsafeDrupalVersion during the first instantiation and after a successful update
@@ -299,10 +300,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	if requeueFlag {
-		return ctrl.Result{Requeue: true, RequeueAfter: REQUEUE_INTERVAL}, nil
-	}
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, requeueFlag
 }
 
 // business logic
