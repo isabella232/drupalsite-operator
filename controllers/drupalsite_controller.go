@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
@@ -42,7 +43,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -280,7 +280,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 
-		return ctrl.Result{Requeue: true}, nil
+	// 4. Check DBOD has been provisioned and reconcile if needed
+	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
+		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
+			r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// Update the FailsafeDrupalVersion during the first instantiation and after a successful update
@@ -289,6 +294,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
+	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
+	// Ref https://gitlab.cern.ch/paas-tools/operators/authz-operator/-/merge_requests/76#note_4501887
 	return ctrl.Result{}, requeueFlag
 }
 
@@ -434,18 +441,22 @@ func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webs
 }
 
 // didVersionRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
-func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (requeue bool, err reconcileError) {
 	pod, err := r.getPodForVersion(ctx, d, d.Spec.DrupalVersion)
 	if err != nil && err.Temporary() {
-		return newApplicationError(err, ErrClientK8s)
+		return false, newApplicationError(err, ErrClientK8s)
 	}
 	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
-		return newApplicationError(errors.New("Pod did not roll out successfully"), ErrDeploymentUpdateFailed)
+		return false, newApplicationError(errors.New("Pod did not roll out successfully"), ErrDeploymentUpdateFailed)
 	}
 	if pod.Status.Phase == corev1.PodPending {
-		return newApplicationError(errors.New("Pod not running"), ErrPodNotRunning)
+		currentTime := time.Now()
+		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < 3 {
+			return true, nil
+		}
+		return false, newApplicationError(errors.New("Pod failed to start after grace period"), ErrDeploymentUpdateFailed)
 	}
-	return nil
+	return false, nil
 }
 
 // UpdateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
@@ -522,14 +533,19 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 		return false, false, err, "%v while deploying the updated Drupal images of version"
 	}
 
-	// Check the result of deployment update using controllerruntime.CreateOrUpdate
+	// Check the result of deployment update using ctrl.CreateOrUpdate
 	// If unchanged proceed to check if deployment succeeded, else reconcile
 	if result == controllerutil.OperationResultNone {
 		// Check if deployment has rolled out
-		err := r.didVersionRollOutSucceed(ctx, d)
-		if err != nil {
+		requeue, err := r.didVersionRollOutSucceed(ctx, d)
+		switch {
+		case requeue:
+			// Waiting for pod to start
+			return false, true, nil, ""
+		case err != nil:
 			if err.Temporary() {
-				return false, false, err, "%v while checking if rollout succeeded"
+				// Temporary error while checking for version roll out
+				return false, true, nil, ""
 			} else {
 				err.Wrap("%v: Failed to update version " + d.Spec.DrupalVersion)
 				r.rollBackCodeUpdate(ctx, d)
@@ -619,7 +635,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	// Restore the server deployment
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.FailsafeDrupalVersion)
 		})
 		if err != nil {

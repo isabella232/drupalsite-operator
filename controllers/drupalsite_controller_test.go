@@ -703,6 +703,14 @@ var _ = Describe("DrupalSite controller", func() {
 					return cr.ConditionTrue("CodeUpdateFailed")
 				}, timeout, interval).Should(BeTrue())
 
+				// Check if the drupalSiteObject has 'updateInProgress' annotation unset
+				By("Expecting 'updateInProgress' annotation unset on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					_, set := cr.Annotations["updateInProgress"]
+					return set
+				}, timeout, interval).Should(BeFalse())
+
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest
 			})
 		})
