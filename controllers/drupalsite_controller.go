@@ -280,11 +280,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 
-	// 4. Check DBOD has been provisioned and reconcile if needed
-	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
-		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
-			r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -395,12 +390,6 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
-	// finalizer: dependentResources
-	// 1. check if such resources exist
-	//   - delete them
-	//   - reconcile
-	// 1. if not, delete the finalizer key manually and let Kubernetes delete the resource cleanly
-	// TODO
 	log.Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
 	return r.updateCRorFailReconcile(ctx, log, drp)
@@ -444,8 +433,8 @@ func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webs
 	return deployment, err
 }
 
-// didRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
-func (r *DrupalSiteReconciler) didRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+// didVersionRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
+func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	pod, err := r.getPodForVersion(ctx, d, d.Spec.DrupalVersion)
 	if err != nil && err.Temporary() {
 		return newApplicationError(err, ErrClientK8s)
@@ -537,7 +526,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 	// If unchanged proceed to check if deployment succeeded, else reconcile
 	if result == controllerutil.OperationResultNone {
 		// Check if deployment has rolled out
-		err := r.didRollOutSucceed(ctx, d)
+		err := r.didVersionRollOutSucceed(ctx, d)
 		if err != nil {
 			if err.Temporary() {
 				return false, false, err, "%v while checking if rollout succeeded"
@@ -613,7 +602,7 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 			return true
 		}
 	}
-	// Check if update succeeded
+	// DB update successful, remove conditions
 	if d.ConditionTrue("DBUpdatesPending") {
 		d.Status.Conditions.RemoveCondition("DBUpdatesPending")
 		if d.ConditionTrue("DBUpdatesFailed") {
