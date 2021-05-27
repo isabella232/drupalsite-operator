@@ -814,25 +814,21 @@ func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Type = "kubernetes.io/basic-auth"
-	}
-	encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.WebDAVPassword)
-	if err != nil {
-		return err
-	}
-	currentobject.StringData = map[string]string{
-		"password": "admin:" + encryptedBasicAuthPassword,
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
+		encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.WebDAVPassword)
+		if err != nil {
+			return err
+		}
+		currentobject.StringData = map[string]string{
+			"password": "admin:" + encryptedBasicAuthPassword,
+		}
+		if currentobject.Labels == nil {
+			currentobject.Labels = map[string]string{}
+		}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
 	}
 	return nil
 }
@@ -944,37 +940,30 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-	}
-	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	if len(currentobject.Annotations) < 1 {
 		currentobject.Annotations = map[string]string{}
+		ls := labelsForDrupalSite(d.Name)
+		ls["app"] = "drupal"
+
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec = routev1.RouteSpec{
+			To: routev1.RouteTargetReference{
+				Kind:   "Service",
+				Name:   d.Name,
+				Weight: pointer.Int32Ptr(100),
+			},
+			Port: &routev1.RoutePort{
+				TargetPort: intstr.FromInt(8081),
+			},
+		}
 	}
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	currentobject.Spec = routev1.RouteSpec{
-		Host: "webdav-" + d.Spec.SiteURL,
-		To: routev1.RouteTargetReference{
-			Kind:   "Service",
-			Name:   d.Name,
-			Weight: pointer.Int32Ptr(100),
-		},
-		Port: &routev1.RoutePort{
-			TargetPort: intstr.FromInt(8081),
-		},
-	}
+	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
+	currentobject.Spec.Host = "webdav-" + d.Spec.SiteURL
 	return nil
 }
 
@@ -1141,14 +1130,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				}},
 		}
-	}
-	if len(currentobject.GetAnnotations()[adminAnnotation]) > 0 {
-		// Do nothing
-		return nil
-	}
-	ls["app"] = "clone"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
+		ls["app"] = "clone"
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
 	}
 	return nil
 }
