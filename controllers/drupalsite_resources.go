@@ -486,13 +486,15 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string
 func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "site-builder"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 		currentobject.Spec.LookupPolicy.Local = true
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "site-builder"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
@@ -501,12 +503,6 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "site-builder"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 		currentobject.Spec = buildv1.BuildConfigSpec{
 			CommonSpec: buildv1.CommonSpec{
 				Resources:                 BuildResources,
@@ -539,6 +535,14 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 				},
 			},
 		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "site-builder"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
@@ -584,6 +588,15 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		return newApplicationError(err, ErrFunctionDomain)
 	}
 
+	ls := labelsForDrupalSite(d.Name)
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Annotations = map[string]string{}
@@ -593,18 +606,12 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			"nginx-configmap-version": "1",
 		}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "drupal-logs"}}
-		currentobject.Labels = map[string]string{}
 
 		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 		// a wrong image built from a different build, that is left out on the node
 		// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 
 		currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
 
@@ -821,14 +828,14 @@ func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite
 		currentobject.StringData = map[string]string{
 			"password": "admin:" + encryptedBasicAuthPassword,
 		}
-		if currentobject.Labels == nil {
-			currentobject.Labels = map[string]string{}
-		}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
@@ -849,26 +856,31 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 				},
 			},
 		}
+	}
+	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
 
 // serviceForDrupalSite returns a service object for Nginx
 func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 		currentobject.Spec.Selector = ls
 		currentobject.Spec.Ports = []corev1.ServicePort{
 			{
@@ -891,14 +903,6 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		currentobject.Annotations = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 		currentobject.Spec = routev1.RouteSpec{
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
@@ -910,6 +914,19 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 			},
 		}
 	}
+
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
@@ -940,14 +957,6 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		currentobject.Annotations = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
 		currentobject.Spec = routev1.RouteSpec{
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
@@ -959,6 +968,19 @@ func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite)
 			},
 		}
 	}
+
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
@@ -1149,20 +1171,25 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		currentobject.Annotations = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "php"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
-		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 		// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
 		currentobject.Data = map[string]string{
 			"zz-docker.conf": string(content),
 		}
 	}
+
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "php"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 	if !currentobject.CreationTimestamp.IsZero() {
 		currentConfig := currentobject.Data["zz-docker.conf"]
@@ -1194,19 +1221,25 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Labels = map[string]string{}
-		currentobject.Annotations = map[string]string{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "nginx"
-		for k, v := range ls {
-			currentobject.Labels[k] = v
-		}
-		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 		currentobject.Data = map[string]string{
 			"custom.conf": string(content),
 		}
 	}
+
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "nginx"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
 	if !currentobject.CreationTimestamp.IsZero() {
 		currentConfig := currentobject.Data["custom.conf"]
 		if currentConfig != string(content) {
@@ -1230,13 +1263,6 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		if currentobject.Labels == nil {
-			currentobject.Labels = map[string]string{}
-		}
-		if currentobject.Annotations == nil {
-			currentobject.Annotations = map[string]string{}
-		}
-		currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 		configPath := "/tmp/sitebuilder/settings.php"
 
@@ -1247,12 +1273,22 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 		currentobject.Data = map[string]string{
 			"settings.php": string(content),
 		}
+
+	}
+
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
+
 	return nil
 }
 

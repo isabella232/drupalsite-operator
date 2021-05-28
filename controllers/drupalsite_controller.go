@@ -256,7 +256,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, log)
 		switch {
 		case err != nil:
-			return handleTransientErr(err, errorMessage, "CodeUpdateFailed")
+			if err.Temporary() {
+				return ctrl.Result{}, err
+			} else {
+				return handleTransientErr(err, errorMessage, "CodeUpdateFailed")
+			}
 		case update:
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		case requeue:
@@ -452,7 +456,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 	if pod.Status.Phase == corev1.PodPending {
 		currentTime := time.Now()
 		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < 3 {
-			return true, nil
+			return true, newApplicationError(errors.New("Waiting for pod to start"), ErrPodNotRunning)
 		}
 		return false, newApplicationError(errors.New("Pod failed to start after grace period"), ErrDeploymentUpdateFailed)
 	}
@@ -539,19 +543,23 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 		// Check if deployment has rolled out
 		requeue, err := r.didVersionRollOutSucceed(ctx, d)
 		switch {
-		case requeue:
-			// Waiting for pod to start
-			return false, true, nil, ""
 		case err != nil:
 			if err.Temporary() {
 				// Temporary error while checking for version roll out
-				return false, true, nil, ""
+				return false, false, err, "Temporary error while checking for version roll out"
+				// return false, true, nil, ""
 			} else {
 				err.Wrap("%v: Failed to update version " + d.Spec.DrupalVersion)
-				r.rollBackCodeUpdate(ctx, d)
+				rollBackErr := r.rollBackCodeUpdate(ctx, d)
+				if rollBackErr != nil {
+					return false, false, rollBackErr, "Error while rolling back version"
+				}
 				setConditionStatus(d, "CodeUpdateFailed", true, err, false)
 				return true, false, nil, ""
 			}
+		case requeue:
+			// Waiting for pod to start
+			return false, true, nil, ""
 		}
 	} else {
 		// If result doesn't return "unchanged" reconcile

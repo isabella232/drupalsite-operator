@@ -268,8 +268,8 @@ var _ = Describe("DrupalSite controller", func() {
 
 				pod := corev1.Pod{
 					TypeMeta: metav1.TypeMeta{
-						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
-						Kind:       "DrupalSite",
+						APIVersion: "v1",
+						Kind:       "Pod",
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        key.Name,
@@ -279,8 +279,8 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
-							Image: "busybox",
-							Name:  "busybox",
+							Image: "test-image",
+							Name:  "test-image",
 						}},
 					},
 				}
@@ -665,8 +665,8 @@ var _ = Describe("DrupalSite controller", func() {
 
 				pod := corev1.Pod{
 					TypeMeta: metav1.TypeMeta{
-						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
-						Kind:       "DrupalSite",
+						APIVersion: "v1",
+						Kind:       "Pod",
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        key.Name,
