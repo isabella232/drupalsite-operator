@@ -86,6 +86,39 @@ func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType status.Co
 	return drp.Status.Conditions.SetCondition(condition())
 }
 
+// setUpdateInProgress sets the 'updateInProgress' annotation on the drupalSite object
+func setUpdateInProgress(drp *webservicesv1a1.DrupalSite) bool {
+	if len(drp.Annotations) == 0 {
+		drp.Annotations = map[string]string{}
+	}
+	if drp.Annotations["updateInProgress"] == "true" {
+		return false
+	}
+	drp.Annotations["updateInProgress"] = "true"
+	return true
+}
+
+// unsetUpdateInProgress removes the 'updateInProgress' annotation on the drupalSite object
+func unsetUpdateInProgress(drp *webservicesv1a1.DrupalSite) bool {
+	if len(drp.Annotations) != 0 {
+		_, isSet := drp.Annotations["updateInProgress"]
+		if isSet {
+			delete(drp.Annotations, "updateInProgress")
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+// setDBUpdatesPending sets the 'DBUpdatesPending' status on the drupalSite object
+func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.SetCondition(status.Condition{
+		Type:   "DBUpdatesPending",
+		Status: "True",
+	})
+}
+
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
 func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
@@ -110,7 +143,7 @@ func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context
 func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource string, drp *webservicesv1a1.DrupalSite) (buildv1.BuildPhase, error) {
 	buildList := &buildv1.BuildList{}
 	buildLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + "-" + nameVersionHash(drp)},
+		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + nameVersionHash(drp)},
 	})
 	if err != nil {
 		return "", newApplicationError(err, ErrFunctionDomain)
@@ -177,6 +210,35 @@ func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 		return corev1.ResourceRequirements{}, err
 	}
 	return corev1.ResourceRequirements{Limits: lims}, nil
+}
+
+// getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
+func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
+	})
+	if err != nil {
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &podList, &options)
+	switch {
+	case err != nil:
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
+	}
+	for _, v := range podList.Items {
+		if v.Annotations["drupalVersion"] == drupalVersion {
+			return v, nil
+		}
+	}
+	// iterate through the list and return the first pod that has the status condition ready
+	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }
 
 // getSecretDataDecoded fetches the given secret and decodes the data for the given string.

@@ -99,19 +99,19 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - dbod.cern
-  resources:
-  - dbodregistrations
-  verbs:
-  - '*'
-- apiGroups:
-  - dbod.cern
+  - dbod.cern.ch
   resources:
   - databaseclasses
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - dbod.cern.ch
+  resources:
+  - databases
+  verbs:
+  - '*'
 - apiGroups:
   - webservices.cern.ch
   resources:

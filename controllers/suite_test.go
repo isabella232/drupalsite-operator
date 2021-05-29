@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -96,6 +97,9 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = imagev1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = authz.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	cfg, err := testEnv.Start()

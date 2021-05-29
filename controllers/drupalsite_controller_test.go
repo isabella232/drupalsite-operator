@@ -179,7 +179,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
@@ -188,12 +188,11 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				// Route is supposed to be created, but since the 'ReadyReplicas' status in deployment can't be made persistent with the reconcile loop, route won't be created
 				By("Expecting Route to be created since publish is true")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Switch "publish: false"
 				Eventually(func() error {
@@ -206,6 +205,108 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 				}, timeout, interval).Should(Not(Succeed()))
+			})
+		})
+	})
+
+	Describe("Update the basic drupalsite object", func() {
+		Context("With a different drupal Version", func() {
+			It("Should be updated successfully", func() {
+				key = types.NamespacedName{
+					Name:      Name,
+					Namespace: Namespace,
+				}
+				newVersion := "8.9.13-new"
+
+				// Create drupalSite object
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				By("Expecting drupalSite object created")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				deploy := appsv1.Deployment{}
+
+				// Update deployment status fields to allow update to proceed
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Update drupalSite custom resource status fields to allow update to proceed
+				By("Updating 'initialized' status fields in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Updating the version")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.DrupalVersion = newVersion
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the drupalSiteObject has 'updateInProgress' annotation set
+				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return cr.Annotations["updateInProgress"] == "true"
+				}, timeout, interval).Should(BeTrue())
+
+				// Check the annotation on the deployment
+				By("Expecting the new drupal Version on the pod annotation")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &deploy)
+					return deploy.Spec.Template.ObjectMeta.Annotations["drupalVersion"] == newVersion
+				}, timeout, interval).Should(BeTrue())
+
+				pod := corev1.Pod{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "v1",
+						Kind:       "Pod",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        key.Name,
+						Namespace:   key.Namespace,
+						Labels:      map[string]string{"drupalSite": cr.Name, "app": "drupal"},
+						Annotations: map[string]string{"drupalVersion": cr.Spec.DrupalVersion},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Image: "test-image",
+							Name:  "test-image",
+						}},
+					},
+				}
+
+				// Create a pod to simulate a error in the update process
+				By("Expecting a new pod with required labels to be created")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// Set the pod status phase to 'Failed' to simulate a error in the update process
+				By("Expecting a new pod status to be updated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &pod)
+					pod.Status.Phase = corev1.PodFailed
+					return k8sClient.Status().Update(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the drupalSiteObject has 'codeUpdateFailed' status set
+				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return cr.ConditionTrue("CodeUpdateFailed")
+				}, timeout, interval).Should(BeTrue())
+
+				// Further tests need to be implemented, if we can bypass ExecErr with envtest
 			})
 		})
 	})
@@ -314,58 +415,6 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
-	Describe("Updating a child object", func() {
-		Context("Without admin annotations", func() {
-			It("Should not be updated successfully", func() {
-				By("By updating service object")
-				svc := corev1.Service{}
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.Labels
-				}, timeout, interval).Should(Not(BeEmpty()))
-				svc.Labels["app"] = "testUpdateLabel"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				time.Sleep(1 * time.Second)
-
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.GetLabels()
-				}, timeout, interval).ShouldNot(HaveKeyWithValue("app", "testUpdateLabel"))
-			})
-		})
-	})
-
-	Describe("Updating a child object", func() {
-		Context("With admin annotations", func() {
-			It("Should be updated successfully", func() {
-				const adminAnnotation = "drupal.cern.ch/admin-custom-edit"
-				By("By updating service object with admin annotation")
-				svc := corev1.Service{}
-				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-				if len(svc.GetAnnotations()) == 0 {
-					svc.Annotations = map[string]string{}
-				}
-				svc.Annotations[adminAnnotation] = "true"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				svc.Labels["app"] = "testUpdateLabel"
-				Eventually(func() error {
-					return k8sClient.Update(ctx, &svc)
-				}, timeout, interval).Should(Succeed())
-
-				Eventually(func() map[string]string {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
-					return svc.GetLabels()
-				}, timeout, interval).Should(HaveKeyWithValue("app", "testUpdateLabel"))
-			})
-		})
-	})
-
 	Describe("Deleting the drupalsite object", func() {
 		Context("With basic spec", func() {
 			It("Should be deleted successfully", func() {
@@ -405,6 +454,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
+							DatabaseClass:   "test",
 							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 					},
@@ -524,7 +574,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'installed' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
@@ -548,26 +598,6 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:      Name + "-advanced",
 					Namespace: "advanced",
 				}
-				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
-						Kind:       "DrupalSite",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      key.Name,
-						Namespace: key.Namespace,
-					},
-					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish:       false,
-						DrupalVersion: "8.9.13",
-						DiskSize:      "10Gi",
-						Environment: drupalwebservicesv1alpha1.Environment{
-							Name:            "dev",
-							QoSClass:        "standard",
-							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
-						},
-					},
-				}
 				newVersion := "8.9.13-new"
 
 				// Create drupalSite object
@@ -586,10 +616,30 @@ var _ = Describe("DrupalSite controller", func() {
 					Controller: &trueVar,
 				}
 				bc := buildv1.BuildConfig{}
+				deploy := appsv1.Deployment{}
+
+				// Update deployment status fields to allow update to proceed
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Update drupalSite custom resource status fields to allow update to proceed
+				By("Updating 'initialized' status fields in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
 				By("Updating the version")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					drupalSiteObject.Spec.DrupalVersion = newVersion
+					cr.Spec.DrupalVersion = newVersion
 					return k8sClient.Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
@@ -599,13 +649,67 @@ var _ = Describe("DrupalSite controller", func() {
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check if the drupalSiteObject status has UpdateNeeded set
-				By("Expecting 'UpdateNeeded' set on the drupalSiteObject")
+				// Check if the drupalSiteObject has 'updateInProgress' annotation set
+				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					// The condition for UpdateNeeded would be set to Unknown and the reason would be ExecError
-					return cr.Status.Conditions.GetCondition("UpdateNeeded").Status != corev1.ConditionStatus(metav1.ConditionFalse)
+					return cr.Annotations["updateInProgress"] == "true"
 				}, timeout, interval).Should(BeTrue())
+
+				// Check the annotation on the deployment
+				By("Expecting the new drupal Version on the pod annotation")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &deploy)
+					return deploy.Spec.Template.ObjectMeta.Annotations["drupalVersion"] == newVersion
+				}, timeout, interval).Should(BeTrue())
+
+				pod := corev1.Pod{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "v1",
+						Kind:       "Pod",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        key.Name,
+						Namespace:   key.Namespace,
+						Labels:      map[string]string{"drupalSite": cr.Name, "app": "drupal"},
+						Annotations: map[string]string{"drupalVersion": cr.Spec.DrupalVersion},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Image: "test-image",
+							Name:  "test-image",
+						}},
+					},
+				}
+
+				// Since there is no deployment controller for creating pods. Create a pod manually to simulate a error in the update process
+				By("Expecting a new pod with required labels to be created")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// Set the pod status phase to 'Failed' to simulate a error in the update process
+				By("Expecting a new pod status to be updated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &pod)
+					pod.Status.Phase = corev1.PodFailed
+					return k8sClient.Status().Update(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the drupalSiteObject has 'codeUpdateFailed' status set
+				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return cr.ConditionTrue("CodeUpdateFailed")
+				}, timeout, interval).Should(BeTrue())
+
+				// Check if the drupalSiteObject has 'updateInProgress' annotation unset
+				By("Expecting 'updateInProgress' annotation unset on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					_, set := cr.Annotations["updateInProgress"]
+					return set
+				}, timeout, interval).Should(BeFalse())
 
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest
 			})
@@ -635,6 +739,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
+							DatabaseClass:   "test",
 							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 					},
