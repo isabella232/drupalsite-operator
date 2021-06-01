@@ -78,7 +78,7 @@ This reference is useful to run the operator locally.
 argument | example | description
 --- | --- | ---
 `sitebuilder-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder | The sitebuilder source image name
-`nginx-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx | The nginx sourcec image name
+`nginx-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx | The nginx source image name
 
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 
