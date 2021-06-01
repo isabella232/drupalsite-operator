@@ -40,7 +40,9 @@ spec:
   # And for `environment.name == "production"`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
   siteUrl: mysite.webtest.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
-  drupalVersion: "8.9.14"
+  version:
+    name: "v8.9-1"
+    releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   environment:
     # Non-production environments can be specified to test changes starting from the current state of another DrupalSite
     name: "dev"
@@ -70,6 +72,13 @@ This reference is useful to run the operator locally.
  --- | --- | ---
 `DEFAULT_DOMAIN`  | `webtest.cern.ch`           | Route's Host field
 `RUNTIME_REPO` | `https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master` | Specify the git repo and commit that the operator will use to populate configmaps for nginx/php/drupal. `@<COMMIT_SHA>` or any git refspec can be specified, and the operator will use the the configuration specified there
+
+#### cmdline arguments
+
+argument | example | description
+--- | --- | ---
+`sitebuilder-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder | The sitebuilder source image name
+`nginx-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx | The nginx sourcec image name
 
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 

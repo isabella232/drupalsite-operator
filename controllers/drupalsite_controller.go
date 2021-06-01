@@ -67,6 +67,10 @@ var (
 	ImageRecipesRepoRef string
 	// DefaultDomain is used in the Route's Host field
 	DefaultDomain string
+	// SiteBuilderImage refers to the sitebuilder image name
+	SiteBuilderImage string
+	// NginxImage refers to the nginx image name
+	NginxImage string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object

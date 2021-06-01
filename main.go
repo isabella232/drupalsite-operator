@@ -69,6 +69,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&controllers.SiteBuilderImage, "sitebuilder-image", "", "The sitebuilder source image name.")
+	flag.StringVar(&controllers.NginxImage, "nginx-image", "", "The nginx source image name.")
 	opts := zap.Options{
 		Development: true,
 	}

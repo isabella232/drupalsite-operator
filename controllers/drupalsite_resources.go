@@ -475,7 +475,7 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, releaseID string) co
 	}
 	return corev1.ObjectReference{
 		Kind: "DockerImage",
-		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releaseID,
+		Name: SiteBuilderImage + ":" + releaseID,
 	}
 }
 
@@ -515,7 +515,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 					SourceStrategy: &buildv1.SourceBuildStrategy{
 						From: corev1.ObjectReference{
 							Kind: "DockerImage",
-							Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releaseID(d),
+							Name: baseImageReferenceToUse(d, releaseID(d)).Name,
 						},
 					},
 				},
@@ -800,7 +800,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + releaseID
+				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, releaseID).Name
 			case "drupal-logs":
