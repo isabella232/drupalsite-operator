@@ -67,8 +67,6 @@ var (
 	ImageRecipesRepoRef string
 	// DefaultDomain is used in the Route's Host field
 	DefaultDomain string
-	// ReleaseChannel refers to the release channel latest/ stable to be used for the images. If not set, no release channel keyword would be appended to the images
-	ReleaseChannel string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -180,8 +178,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// 2. Check all conditions and update if needed
-
 	update := false
+
+	// Set Current version
+	if drupalSite.Status.ReleaseID.Current != releaseID(drupalSite) {
+		drupalSite.Status.ReleaseID.Current = releaseID(drupalSite)
+		update = true || update
+	}
+
 	// Check if the drupal site is ready to serve requests
 	if siteReady := r.isDrupalSiteReady(ctx, drupalSite); siteReady {
 		update = setReady(drupalSite) || update
@@ -210,7 +214,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// After a failed update, to be able to restore the site back to the last running version, the status error fields have to be removed if they are set
-	if drupalSite.Spec.DrupalVersion == drupalSite.Status.FailsafeDrupalVersion {
+	if drupalSite.Status.ReleaseID.Failsafe == releaseID(drupalSite) {
 		if drupalSite.ConditionTrue("CodeUpdateFailed") {
 			update = drupalSite.Status.Conditions.RemoveCondition("CodeUpdateFailed") || update
 		}
@@ -224,7 +228,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// Condition `UpdateNeeded` <- either image not matching `drupalVersion` or `drush updb` needed
+	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 	updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
 	if !isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
@@ -248,7 +252,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Set "UpdateNeeded" and perform code update
-	// 1. set the Status.FailsafeDrupalVersion
+	// 1. set the Status.ReleaseID.Failsafe
 	// 2. ensure updated deployment
 	// 3. set condition "CodeUpdateFailed" to true if there is an unrecoverable error & rollback
 
@@ -292,9 +296,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{Requeue: true}, nil
 	}
 
-	// Update the FailsafeDrupalVersion during the first instantiation and after a successful update
-	if drupalSite.Status.FailsafeDrupalVersion != drupalSite.Spec.DrupalVersion && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
-		drupalSite.Status.FailsafeDrupalVersion = drupalSite.Spec.DrupalVersion
+	// Update the Failsafe during the first instantiation and after a successful update
+	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -446,7 +450,7 @@ func (r *DrupalSiteReconciler) getRunningdeployment(ctx context.Context, d *webs
 
 // didVersionRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
 func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (requeue bool, err reconcileError) {
-	pod, err := r.getPodForVersion(ctx, d, d.Spec.DrupalVersion)
+	pod, err := r.getPodForVersion(ctx, d, releaseID(d))
 	if err != nil && err.Temporary() {
 		return false, newApplicationError(err, ErrClientK8s)
 	}
@@ -463,7 +467,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 	return false, nil
 }
 
-// UpdateNeeded checks if a code or DB update is required based on the image tag and drupalVersion in the CR spec and the drush status
+// UpdateNeeded checks if a code or DB update is required based on the image tag and releaseID in the CR spec and the drush status
 func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
 	if d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
@@ -472,7 +476,7 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 			return false, newApplicationError(err, ErrClientK8s)
 		}
 		// Check if image is different, check if current site is ready and installed
-		if deployment.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != d.Spec.DrupalVersion && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
+		if deployment.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) && d.ConditionTrue("Ready") && d.ConditionTrue("Initialized") {
 			return true, nil
 		}
 	}
@@ -513,7 +517,8 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		result, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Spec.DrupalVersion)
+			releaseID := releaseID(d)
+			return deploymentForDrupalSite(deploy, dbodSecret, d, releaseID)
 		})
 		if err != nil {
 			return "", newApplicationError(err, ErrClientK8s)
@@ -529,7 +534,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 // 3. If the rollout succeeds, cache is reloaded on the new version
 // 4. If there is any temporary failure at any point, the process is repeated again after a timeout
 // 5. If there is a permanent unrecoverable error, the deployment is rolled back to the previous version
-// using the 'FailSafeDrupalVersion' on the status and a 'CodeUpdateFailed' status is set on the CR
+// using the 'Failsafe' on the status and a 'CodeUpdateFailed' status is set on the CR
 func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, requeue bool, err reconcileError, errorMessage string) {
 	// Ensure the new deployment is rolledout
 	result, err := r.ensureUpdatedDeployment(ctx, d)
@@ -549,7 +554,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 				return false, false, err, "Temporary error while checking for version roll out"
 				// return false, true, nil, ""
 			} else {
-				err.Wrap("%v: Failed to update version " + d.Spec.DrupalVersion)
+				err.Wrap("%v: Failed to update version " + releaseID(d))
 				rollBackErr := r.rollBackCodeUpdate(ctx, d)
 				if rollBackErr != nil {
 					return false, false, rollBackErr, "Error while rolling back version"
@@ -644,7 +649,7 @@ func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webser
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.FailsafeDrupalVersion)
+			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.ReleaseID.Failsafe)
 		})
 		if err != nil {
 			return newApplicationError(err, ErrClientK8s)

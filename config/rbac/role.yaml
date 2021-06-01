@@ -52,7 +52,7 @@ rules:
   resources:
   - secrets
   verbs:
-  - "*"
+  - '*'
 - apiGroups:
   - dbod.cern.ch
   resources:

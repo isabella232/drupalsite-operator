@@ -73,9 +73,12 @@ var _ = Describe("DrupalSite controller", func() {
 				Namespace: key.Namespace,
 			},
 			Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-				Publish:       true,
-				DrupalVersion: "8.9.13",
-				DiskSize:      "10Gi",
+				Publish: true,
+				Version: drupalwebservicesv1alpha1.Version{
+					Name:        "8.9.13",
+					ReleaseSpec: "stable",
+				},
+				DiskSize: "10Gi",
 				Environment: drupalwebservicesv1alpha1.Environment{
 					Name:          "dev",
 					QoSClass:      "standard",
@@ -216,7 +219,8 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:      Name,
 					Namespace: Namespace,
 				}
-				newVersion := "8.9.13-new"
+				newVersion := "8.9.13"
+				newReleaseSpec := "new"
 
 				// Create drupalSite object
 				cr := drupalwebservicesv1alpha1.DrupalSite{}
@@ -248,7 +252,8 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Updating the version")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Spec.DrupalVersion = newVersion
+					cr.Spec.Version.Name = newVersion
+					cr.Spec.Version.ReleaseSpec = newReleaseSpec
 					return k8sClient.Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
@@ -263,7 +268,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting the new drupal Version on the pod annotation")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &deploy)
-					return deploy.Spec.Template.ObjectMeta.Annotations["drupalVersion"] == newVersion
+					return deploy.Spec.Template.ObjectMeta.Annotations["releaseID"] == newVersion+"-"+newReleaseSpec
 				}, timeout, interval).Should(BeTrue())
 
 				pod := corev1.Pod{
@@ -275,7 +280,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Name:        key.Name,
 						Namespace:   key.Namespace,
 						Labels:      map[string]string{"drupalSite": cr.Name, "app": "drupal"},
-						Annotations: map[string]string{"drupalVersion": cr.Spec.DrupalVersion},
+						Annotations: map[string]string{"releaseID": cr.Spec.Version.Name + "-" + cr.Spec.Version.ReleaseSpec},
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
@@ -448,9 +453,12 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish:       false,
-						DrupalVersion: "8.9.13",
-						DiskSize:      "10Gi",
+						Publish: false,
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "8.9.13",
+							ReleaseSpec: "stable",
+						},
+						DiskSize: "10Gi",
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
@@ -598,7 +606,8 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:      Name + "-advanced",
 					Namespace: "advanced",
 				}
-				newVersion := "8.9.13-new"
+				newVersion := "8.9.13"
+				newReleaseSpec := "new"
 
 				// Create drupalSite object
 				cr := drupalwebservicesv1alpha1.DrupalSite{}
@@ -639,7 +648,8 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Updating the version")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Spec.DrupalVersion = newVersion
+					cr.Spec.Version.Name = newVersion
+					cr.Spec.Version.ReleaseSpec = newReleaseSpec
 					return k8sClient.Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
@@ -660,7 +670,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting the new drupal Version on the pod annotation")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &deploy)
-					return deploy.Spec.Template.ObjectMeta.Annotations["drupalVersion"] == newVersion
+					return deploy.Spec.Template.ObjectMeta.Annotations["releaseID"] == newVersion+"-"+newReleaseSpec
 				}, timeout, interval).Should(BeTrue())
 
 				pod := corev1.Pod{
@@ -672,7 +682,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Name:        key.Name,
 						Namespace:   key.Namespace,
 						Labels:      map[string]string{"drupalSite": cr.Name, "app": "drupal"},
-						Annotations: map[string]string{"drupalVersion": cr.Spec.DrupalVersion},
+						Annotations: map[string]string{"releaseID": cr.Spec.Version.Name + "-" + cr.Spec.Version.ReleaseSpec},
 					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{
@@ -733,9 +743,12 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish:       false,
-						DrupalVersion: "8.9.13",
-						DiskSize:      "10Gi",
+						Publish: false,
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "8.9.13",
+							ReleaseSpec: "stable",
+						},
+						DiskSize: "10Gi",
 						Environment: drupalwebservicesv1alpha1.Environment{
 							Name:            "dev",
 							QoSClass:        "standard",
