@@ -30,7 +30,7 @@ const (
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish defines if the site has to be published or not
+	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed
 	// +kubebuilder:validation:Required
 	Publish bool `json:"publish"`
 
@@ -40,32 +40,52 @@ type DrupalSiteSpec struct {
 	// +optional
 	SiteURL string `json:"siteUrl,omitempty"`
 
-	// DrupalVersion defines the version of the Drupal to install
+	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
+  // Changing this value triggers the website's update process.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	DrupalVersion string `json:"drupalVersion"` // Convert to enum
+	Version `json:"version"`
 
-	// Environment defines the drupal site environments
+	// Environment lets the site owner define alternative instances of the website with different content,
+  // that can be used to test/pilot site building, configuration, or updates.
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
 
-	// DiskSize defines the drupal site PVC size
+	// DiskSize is the max size of the site's files directory
 	// +kubebuilder:validation:Required
 	DiskSize string `json:"diskSize"`
 
-	// WebDAVPassword defines the password for WebDAV file access
-	// Defaults to generated encoded value
+	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
+	// A default is auto-generated if a value isn't given.
+  // Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 }
 
-// Environment defines the environment field in DrupalSite
+// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
+type Version struct {
+	// Name specifies the "version" branch of CERN Drupal Distribution that will be deployed, eg `v8.9-1`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// ReleaseSpec is the concrete release of the specified version,
+  // typically of the format `RELEASE.<timestamp>`.
+  // CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
+  // for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ReleaseSpec string `json:"releaseSpec"`
+}
+
+// Environment lets the site owner define alternative instances of the website with different content,
+// that can be used to test/pilot site building, configuration, or updates.
 type Environment struct {
-	// Name specifies the environment name for the DrupalSite. The name will be used for resource lables and route name
+	// Name specifies the environment name for the DrupalSite.
+  // The name will be used for resource labels and route name
 	// +kubebuilder:validation:Pattern=[a-z0-9]([-a-z0-9]*[a-z0-9])?
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
-	// ExtraConfigRepo passes on the git url with advanced configuration to the DrupalSite S2I functionality
+	// ExtraConfigRepo injects the composer project and other supported configuration from the given git repo to the site,
+  // by building an image specific to this site from the generic CERN one.
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
@@ -77,19 +97,20 @@ type Environment struct {
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:validation:Required
 	QoSClass `json:"qosClass"`
-	// DatabClass requests a specific kind of DBOD resources for the website.
+	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
 	// +kubebuilder:validation:Required
 	DatabaseClass `json:"databaseClass"`
-	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production).
+	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
+  // instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional
-	InitCloneFrom string `json:"initCloneFrom"`
+	InitCloneFrom string `json:"initCloneFrom,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
 type QoSClass string
 
-// DatabaseClass requests a specific kind of DBOD resources for the website. If omitted, it is derived from QoSClass.
+// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
 type DatabaseClass string
 
 // ImageOverride lets the website admin bypass the operator's buildconfigs and inject custom images.
@@ -100,7 +121,6 @@ type ImageOverride struct {
 	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
 	// +optional
 	Sitebuilder string `json:"siteBuilder,omitempty"`
-	// Note: Overrides for the nginx and php images might be added if needed
 }
 
 // DrupalSiteStatus defines the observed state of DrupalSite
@@ -110,16 +130,27 @@ type DrupalSiteStatus struct {
 	// +optional
 	Conditions status.Conditions `json:"conditions,omitempty"`
 
-	// FailsafeDrupalVersion stores the `drupalVersion` string during the upgrade process to allow rollback operations
+	// ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
+	// +optional
+	ReleaseID `json:"releaseID,omitempty"`
+}
+
+// ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
+type ReleaseID struct {
+	// Current releaseID is the image tag that is in use by the site's deployment now
 	// +optional
 	// +kubebuilder:validation:MinLength=1
-	FailsafeDrupalVersion string `json:"failsafeDrupalVersion,omitempty"`
+	Current string `json:"current,omitempty"`
+	// Failsafe releaseID stores the image tag during the upgrade process to allow rollback operations
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	Failsafe string `json:"failsafe,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// DrupalSite is the Schema for the drupalsites API
+// DrupalSite is a website that deploys the CERN Drupal Distribution
 type DrupalSite struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

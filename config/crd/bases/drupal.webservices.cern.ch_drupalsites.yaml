@@ -19,7 +19,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: DrupalSite is the Schema for the drupalsites API
+        description: DrupalSite is a website that deploys the CERN Drupal Distribution
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -37,23 +37,22 @@ spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
               diskSize:
-                description: DiskSize defines the drupal site PVC size
-                type: string
-              drupalVersion:
-                description: DrupalVersion defines the version of the Drupal to install
-                minLength: 1
+                description: DiskSize is the max size of the site's files directory
                 type: string
               environment:
-                description: Environment defines the drupal site environments
+                description: Environment lets the site owner define alternative instances
+                  of the website with different content, that can be used to test/pilot
+                  site building, configuration, or updates.
                 properties:
                   databaseClass:
-                    description: DatabClass requests a specific kind of DBOD resources
-                      for the website.
+                    description: DatabaseClass specifies the kind of database that
+                      the website needs, among those supported by the cluster.
                     type: string
                   extraConfigRepo:
-                    description: 'ExtraConfigRepo passes on the git url with advanced
-                      configuration to the DrupalSite S2I functionality TODO: support
-                      branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
+                    description: 'ExtraConfigRepo injects the composer project and
+                      other supported configuration from the given git repo to the
+                      site, by building an image specific to this site from the generic
+                      CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
                   imageOverride:
@@ -68,11 +67,12 @@ spec:
                     type: object
                   initCloneFrom:
                     description: InitCloneFrom initializes this environment by cloning
-                      the specified DrupalSite (usually production). Immutable.
+                      the specified DrupalSite (usually production), instead of installing
+                      an empty CERN-themed website. Immutable.
                     type: string
                   name:
                     description: Name specifies the environment name for the DrupalSite.
-                      The name will be used for resource lables and route name
+                      The name will be used for resource labels and route name
                     pattern: '[a-z0-9]([-a-z0-9]*[a-z0-9])?'
                     type: string
                   qosClass:
@@ -89,7 +89,8 @@ spec:
                 - qosClass
                 type: object
               publish:
-                description: Publish defines if the site has to be published or not
+                description: Publish toggles the site's visibility to the world, ie
+                  whether any inbound traffic is allowed
                 type: boolean
               siteUrl:
                 description: SiteURL is the URL where the site should be made available.
@@ -97,15 +98,37 @@ spec:
                   is configured per cluster (typically `web.cern.ch`)
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
+              version:
+                description: Version refers to the version and release of the CERN
+                  Drupal Distribution that will be deployed to serve this website.
+                  Changing this value triggers the website's update process.
+                properties:
+                  name:
+                    description: Name specifies the "version" branch of CERN Drupal
+                      Distribution that will be deployed, eg `v8.9-1`
+                    minLength: 1
+                    type: string
+                  releaseSpec:
+                    description: ReleaseSpec is the concrete release of the specified
+                      version, typically of the format `RELEASE.<timestamp>`. CERN
+                      Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
+                      for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                - releaseSpec
+                type: object
               webDAVPassword:
-                description: WebDAVPassword defines the password for WebDAV file access
-                  Defaults to generated encoded value
+                description: WebDAVPassword sets the HTTP basic auth password for
+                  WebDAV file access. A default is auto-generated if a value isn't
+                  given. Changing this field updates the password.
                 type: string
             required:
             - diskSize
-            - drupalVersion
             - environment
             - publish
+            - version
             type: object
           status:
             description: DrupalSiteStatus defines the observed state of DrupalSite
@@ -151,11 +174,21 @@ spec:
                   - type
                   type: object
                 type: array
-              failsafeDrupalVersion:
-                description: FailsafeDrupalVersion stores the `drupalVersion` string
-                  during the upgrade process to allow rollback operations
-                minLength: 1
-                type: string
+              releaseID:
+                description: ReleaseID reports the actual release of CERN Drupal Distribution
+                  that is being used in the deployment.
+                properties:
+                  current:
+                    description: Current releaseID is the image tag that is in use
+                      by the site's deployment now
+                    minLength: 1
+                    type: string
+                  failsafe:
+                    description: Failsafe releaseID stores the image tag during the
+                      upgrade process to allow rollback operations
+                    minLength: 1
+                    type: string
+                type: object
             type: object
         type: object
     served: true

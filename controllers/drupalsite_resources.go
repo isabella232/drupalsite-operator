@@ -71,7 +71,7 @@ var (
 //	log.Info("EXEC", "stdout", sout, "stderr", serr)
 // ````
 func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
-	pod, err := r.getRunningPodForVersion(ctx, d, d.Spec.DrupalVersion)
+	pod, err := r.getRunningPodForVersion(ctx, d, releaseID(d))
 	if err != nil {
 		return "", "", err
 	}
@@ -79,7 +79,7 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 }
 
 // getRunningPodForVersion fetches the list of the running pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, drupalVersion string) (corev1.Pod, reconcileError) {
+func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
@@ -99,7 +99,7 @@ func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *w
 		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
 	}
 	for _, v := range podList.Items {
-		if v.Annotations["drupalVersion"] == drupalVersion {
+		if v.Annotations["releaseID"] == releaseID {
 			if v.Status.Phase == corev1.PodRunning {
 				return v, nil
 			} else {
@@ -272,7 +272,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-				return deploymentForDrupalSite(deploy, databaseSecret, d, d.Spec.DrupalVersion)
+				releaseID := releaseID(d)
+				return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
@@ -457,28 +458,24 @@ func labelsForDrupalSite(name string) map[string]string {
 	return map[string]string{"drupalSite": name}
 }
 
-// releasedImageTag is the image tag to use, depending on the `ReleaseChannel` cmdline arg:
-// If `ReleaseChannel` is set, appends `-${ReleaseChannel}` to the Drupal version.
-func releasedImageTag(drupalVersion string) string {
-	if ReleaseChannel != "" {
-		return drupalVersion + "-" + ReleaseChannel
-	}
-	return drupalVersion
+// releaseID is the image tag to use depending on the version and releaseSpec
+func releaseID(d *webservicesv1a1.DrupalSite) string {
+	return d.Spec.Version.Name + "-" + d.Spec.Version.ReleaseSpec
 }
 
 // baseImageReferenceToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
 // If yes, the S2I buildconfig will be used; baseImageReferenceToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
-func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, drupalVersion string) corev1.ObjectReference {
+func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(drupalVersion),
+			Name: "site-builder-s2i-" + d.Name + ":" + releaseID,
 		}
 	}
 	return corev1.ObjectReference{
 		Kind: "DockerImage",
-		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(drupalVersion),
+		Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releaseID,
 	}
 }
 
@@ -518,14 +515,14 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 					SourceStrategy: &buildv1.SourceBuildStrategy{
 						From: corev1.ObjectReference{
 							Kind: "DockerImage",
-							Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releasedImageTag(d.Spec.DrupalVersion),
+							Name: "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder-base:" + releaseID(d),
 						},
 					},
 				},
 				Output: buildv1.BuildOutput{
 					To: &corev1.ObjectReference{
 						Kind: "ImageStreamTag",
-						Name: "site-builder-s2i-" + d.Name + ":" + releasedImageTag(d.Spec.DrupalVersion),
+						Name: "site-builder-s2i-" + d.Name + ":" + releaseID(d),
 					},
 				},
 			},
@@ -574,7 +571,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 }
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, drupalVersion string) error {
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string) error {
 	nginxResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
@@ -611,7 +608,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// a wrong image built from a different build, that is left out on the node
 		// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + drupalVersion + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
+		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
 		currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
 
@@ -798,21 +795,21 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 
 	}
 
-	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"]
-	if !annotExists || d.Status.FailsafeDrupalVersion == "" || currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] != drupalVersion {
+	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"]
+	if !annotExists || d.Status.ReleaseID.Failsafe == "" || currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID {
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + releasedImageTag(drupalVersion)
+				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx:" + releaseID
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
+				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, releaseID).Name
 			case "drupal-logs":
-				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, drupalVersion).Name
+				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, releaseID).Name
 			}
 		}
 	}
-	// Add an annotation to be able to verify what version of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
-	currentobject.Spec.Template.ObjectMeta.Annotations["drupalVersion"] = drupalVersion
+	// Add an annotation to be able to verify what releaseID of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
+	currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] = releaseID
 	return nil
 }
 
@@ -1018,7 +1015,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, databaseSecret string, d 
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
+				Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),
@@ -1078,7 +1075,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 		currentobject.Spec.Template.Spec = corev1.PodSpec{
 			InitContainers: []corev1.Container{
 				{
-					Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
+					Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
 					Command:         takeBackup("dbBackUp.sql"),
@@ -1105,7 +1102,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           baseImageReferenceToUse(d, d.Spec.DrupalVersion).Name,
+				Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
 				Command:         cloneSource("dbBackUp.sql"),

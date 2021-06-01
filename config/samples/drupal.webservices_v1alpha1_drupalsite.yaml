@@ -4,7 +4,9 @@ metadata:
   name: drupalsite-sample
 spec:
   publish: true
-  drupalVersion: "8.9.14"
+  version:
+    name: "8.9.14"
+    releaseSpec: "stable"
   environment:
     name: "production"
     qosClass: "standard"
