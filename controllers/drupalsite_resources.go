@@ -463,10 +463,10 @@ func releaseID(d *webservicesv1a1.DrupalSite) string {
 	return d.Spec.Version.Name + "-" + d.Spec.Version.ReleaseSpec
 }
 
-// baseImageReferenceToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
-// If yes, the S2I buildconfig will be used; baseImageReferenceToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
+// sitebuilderImageRefToUse returns which base image to use, depending on whether the field `environment.ExtraConfigRepo` is set.
+// If yes, the S2I buildconfig will be used; sitebuilderImageRefToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
-func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
+func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
@@ -802,9 +802,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			case "nginx":
 				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, releaseID).Name
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "drupal-logs":
-				currentobject.Spec.Template.Spec.Containers[i].Image = baseImageReferenceToUse(d, releaseID).Name
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			}
 		}
 	}
@@ -1015,7 +1015,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, databaseSecret string, d 
 			}},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
+				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
 				Command:         siteInstallJobForDrupalSite(),
@@ -1075,7 +1075,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 		currentobject.Spec.Template.Spec = corev1.PodSpec{
 			InitContainers: []corev1.Container{
 				{
-					Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
+					Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 					Name:            "db-backup",
 					ImagePullPolicy: "Always",
 					Command:         takeBackup("dbBackUp.sql"),
@@ -1102,7 +1102,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			},
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
-				Image:           baseImageReferenceToUse(d, releaseID(d)).Name,
+				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 				Name:            "clone",
 				ImagePullPolicy: "Always",
 				Command:         cloneSource("dbBackUp.sql"),
