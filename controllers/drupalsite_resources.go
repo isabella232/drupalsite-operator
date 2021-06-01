@@ -229,7 +229,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
 	case "is_s2i":
-		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + d.Name, Namespace: d.Namespace}}
+		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, is, func() error {
 			return imageStreamForDrupalSiteBuilderS2I(is, d)
 		})
@@ -239,7 +239,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "bc_s2i":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "site-builder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			return buildConfigForDrupalSiteBuilderS2I(bc, d)
@@ -470,7 +470,7 @@ func baseImageReferenceToUse(d *webservicesv1a1.DrupalSite, releaseID string) co
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "site-builder-s2i-" + d.Name + ":" + releaseID,
+			Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID,
 		}
 	}
 	return corev1.ObjectReference{
@@ -489,7 +489,7 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 		currentobject.Labels = map[string]string{}
 	}
 	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "site-builder"
+	ls["app"] = "sitebuilder"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
@@ -515,14 +515,14 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 					SourceStrategy: &buildv1.SourceBuildStrategy{
 						From: corev1.ObjectReference{
 							Kind: "DockerImage",
-							Name: baseImageReferenceToUse(d, releaseID(d)).Name,
+							Name: SiteBuilderImage + ":" + releaseID(d),
 						},
 					},
 				},
 				Output: buildv1.BuildOutput{
 					To: &corev1.ObjectReference{
 						Kind: "ImageStreamTag",
-						Name: "site-builder-s2i-" + d.Name + ":" + releaseID(d),
+						Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID(d),
 					},
 				},
 			},
@@ -537,7 +537,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 		currentobject.Labels = map[string]string{}
 	}
 	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "site-builder"
+	ls["app"] = "sitebuilder"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}

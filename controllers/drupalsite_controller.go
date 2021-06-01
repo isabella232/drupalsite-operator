@@ -501,7 +501,7 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Check status of the S2i buildconfig if the extraConfigRepo field is set
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
-		status, err := r.getBuildStatus(ctx, "site-builder-s2i-", d)
+		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
 		switch {
 		case err != nil:
 			return newApplicationError(err, ErrClientK8s)
