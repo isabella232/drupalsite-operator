@@ -332,7 +332,7 @@ func (r *DrupalSiteReconciler) initEnv() {
 	}
 	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
 
-	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/repository/archive.tar?path=configuration&ref=" + ImageRecipesRepoRef
+	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/-/archive/" + ImageRecipesRepoRef + "/drupal-runtime.tar?path=configuration"
 	downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
 	configPath := "/tmp/drupal-runtime/"
 	createConfigDirectory(configPath, log)
