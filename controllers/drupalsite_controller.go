@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -316,6 +317,17 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *DrupalSiteReconciler) initEnv() {
 	log := r.Log
 	log.Info("Initializing environment")
+
+	requiredArgs := []string{"sitebuilder-image", "nginx-image"}
+
+	givenArgs := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) { givenArgs[f.Name] = true })
+	for _, req := range requiredArgs {
+		if !givenArgs[req] {
+			log.Error(nil, "Missing required commandline argument", "commandline argument", req)
+			os.Exit(2)
+		}
+	}
 
 	var err error
 	BuildResources, err = resourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
