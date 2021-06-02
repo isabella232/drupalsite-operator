@@ -30,8 +30,6 @@ spec:
         image: {{ .Values.image | quote }}
         imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
         env:
-        - name: RUNTIME_REPO
-          value: {{ .Values.drupalsiteOperator.drupalRuntimeRepo }}
         - name: DEFAULT_DOMAIN
           value: {{ .Values.drupalsiteOperator.defaultDomain }}
         livenessProbe:

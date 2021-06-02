@@ -149,3 +149,4 @@ if (getenv('ENVIRONMENT') != 'production' && file_exists($app_root . '/' . $site
 $databases['default']['default']['init_commands']['lock_wait_timeout'] = "SET SESSION innodb_lock_wait_timeout = 20";
 $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION wait_timeout = 600";
 // }
+
