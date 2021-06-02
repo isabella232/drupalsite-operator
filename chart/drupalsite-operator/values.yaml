@@ -18,3 +18,5 @@ resources:
 drupalsiteOperator:
   # Default domain to expose DrupalSites that don't specify a `siteUrl`
   defaultDomain: "webtest.cern.ch"
+  sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
+  nginxImage:  "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx"

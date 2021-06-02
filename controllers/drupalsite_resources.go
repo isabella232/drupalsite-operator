@@ -1160,7 +1160,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 // updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/php-fpm.conf"
+	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Environment.QoSClass) + "/php-fpm.conf"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading PHP-FPM configMap failed: %w", err), ErrFilesystemIO)
@@ -1209,7 +1209,7 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 // updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	configPath := "/tmp/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx.conf"
+	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Environment.QoSClass) + "/nginx.conf"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
@@ -1259,7 +1259,7 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 
-		configPath := "/tmp/sitebuilder/settings.php"
+		configPath := "/tmp/runtime-config/sitebuilder/settings.php"
 
 		content, err := ioutil.ReadFile(configPath)
 		if err != nil {
