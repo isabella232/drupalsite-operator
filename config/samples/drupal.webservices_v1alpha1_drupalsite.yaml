@@ -5,8 +5,8 @@ metadata:
 spec:
   publish: true
   version:
-    name: "8.9.14"
-    releaseSpec: "stable"
+    name: "v8.9-1"
+    releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   environment:
     name: "production"
     qosClass: "standard"

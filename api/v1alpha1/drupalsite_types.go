@@ -41,12 +41,12 @@ type DrupalSiteSpec struct {
 	SiteURL string `json:"siteUrl,omitempty"`
 
 	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
-  // Changing this value triggers the website's update process.
+	// Changing this value triggers the website's update process.
 	// +kubebuilder:validation:Required
 	Version `json:"version"`
 
 	// Environment lets the site owner define alternative instances of the website with different content,
-  // that can be used to test/pilot site building, configuration, or updates.
+	// that can be used to test/pilot site building, configuration, or updates.
 	// +kubebuilder:validation:Required
 	Environment `json:"environment"`
 
@@ -56,7 +56,7 @@ type DrupalSiteSpec struct {
 
 	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
 	// A default is auto-generated if a value isn't given.
-  // Changing this field updates the password.
+	// Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 }
@@ -68,9 +68,9 @@ type Version struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 	// ReleaseSpec is the concrete release of the specified version,
-  // typically of the format `RELEASE.<timestamp>`.
-  // CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
-  // for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
+	// typically of the format `RELEASE.<timestamp>`.
+	// CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
+	// for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	ReleaseSpec string `json:"releaseSpec"`
@@ -80,12 +80,12 @@ type Version struct {
 // that can be used to test/pilot site building, configuration, or updates.
 type Environment struct {
 	// Name specifies the environment name for the DrupalSite.
-  // The name will be used for resource labels and route name
+	// The name will be used for resource labels and route name
 	// +kubebuilder:validation:Pattern=[a-z0-9]([-a-z0-9]*[a-z0-9])?
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// ExtraConfigRepo injects the composer project and other supported configuration from the given git repo to the site,
-  // by building an image specific to this site from the generic CERN one.
+	// by building an image specific to this site from the generic CERN one.
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
@@ -101,7 +101,7 @@ type Environment struct {
 	// +kubebuilder:validation:Required
 	DatabaseClass `json:"databaseClass"`
 	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
-  // instead of installing an empty CERN-themed website.
+	// instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional
 	InitCloneFrom string `json:"initCloneFrom,omitempty"`

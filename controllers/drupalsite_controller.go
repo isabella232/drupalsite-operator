@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -67,6 +68,10 @@ var (
 	ImageRecipesRepoRef string
 	// DefaultDomain is used in the Route's Host field
 	DefaultDomain string
+	// SiteBuilderImage refers to the sitebuilder image name
+	SiteBuilderImage string
+	// NginxImage refers to the nginx image name
+	NginxImage string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -313,6 +318,17 @@ func (r *DrupalSiteReconciler) initEnv() {
 	log := r.Log
 	log.Info("Initializing environment")
 
+	requiredArgs := []string{"sitebuilder-image", "nginx-image"}
+
+	givenArgs := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) { givenArgs[f.Name] = true })
+	for _, req := range requiredArgs {
+		if !givenArgs[req] {
+			log.Error(nil, "Missing required commandline argument", "commandline argument", req)
+			os.Exit(2)
+		}
+	}
+
 	var err error
 	BuildResources, err = resourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
 	if err != nil {
@@ -497,7 +513,7 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Check status of the S2i buildconfig if the extraConfigRepo field is set
 	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
-		status, err := r.getBuildStatus(ctx, "site-builder-s2i-", d)
+		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
 		switch {
 		case err != nil:
 			return newApplicationError(err, ErrClientK8s)

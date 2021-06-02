@@ -23,6 +23,8 @@ spec:
       containers:
       - args:
         - --leader-elect
+        - --sitebuilder-image={{.Values.drupalsiteOperator.sitebuilderImage}}
+        - --nginx-image={{.Values.drupalsiteOperator.nginxImage}}
         command:
         - /manager
         image: {{ .Values.image | quote }}

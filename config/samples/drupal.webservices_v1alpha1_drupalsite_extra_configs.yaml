@@ -5,8 +5,8 @@ metadata:
 spec:
   publish: false
   version:
-    name: "8.9.14"
-    releaseSpec: "stable"
+    name: "v8.9-1"
+    releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   environment:
     name: "dev"
     extraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
