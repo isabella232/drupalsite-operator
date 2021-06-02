@@ -1186,7 +1186,6 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 	if !currentobject.CreationTimestamp.IsZero() {
 		currentConfig := currentobject.Data["zz-docker.conf"]
@@ -1235,7 +1234,6 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 	if !currentobject.CreationTimestamp.IsZero() {
 		currentConfig := currentobject.Data["custom.conf"]
@@ -1284,7 +1282,6 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	currentobject.Annotations["drupalRuntimeRepoRef"] = ImageRecipesRepoRef
 
 	return nil
 }

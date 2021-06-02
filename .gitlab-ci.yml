@@ -8,7 +8,6 @@ stages:
 
 variables:
   DEFAULT_DOMAIN: "webtest.cern.ch"
-  RUNTIME_REPO: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
 
 GoTest:
   stage: go_test

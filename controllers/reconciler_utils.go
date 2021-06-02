@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -258,4 +259,10 @@ func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, n
 		data[key] = string(val)
 	}
 	return data
+}
+
+// generateWebDAVpassword generates the password for WebDAV
+func generateWebDAVpassword() string {
+	hash := md5.Sum([]byte(time.Now().String()))
+	return hex.EncodeToString(hash[:])[0:10]
 }

@@ -18,15 +18,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -59,13 +54,6 @@ const (
 )
 
 var (
-	// ImageRecipesRepo refers to the drupal runtime repo which contains the dockerfiles and other config data to build the images
-	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git"
-	ImageRecipesRepo string
-	// ImageRecipesRepoRef refers to the branch (git ref) of the drupal runtime repo which contains the dockerfiles
-	// and other config data to build the images
-	// Example: "s2i"
-	ImageRecipesRepoRef string
 	// DefaultDomain is used in the Route's Host field
 	DefaultDomain string
 	// SiteBuilderImage refers to the sitebuilder image name
@@ -335,25 +323,7 @@ func (r *DrupalSiteReconciler) initEnv() {
 		log.Error(err, "Invalid configuration: can't parse build resources")
 		os.Exit(1)
 	}
-	// <git_url>@<git_ref>
-	// Drupal runtime repo containing the dockerfiles and other config data
-	// to build the runtime images. After '@' a git ref can be specified (default: "master").
-	// Example: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@s2i"
-	runtimeRepo := strings.Split(getenvOrDie("RUNTIME_REPO", log), "@")
-	ImageRecipesRepo = runtimeRepo[0]
-	if len(runtimeRepo) > 1 {
-		ImageRecipesRepoRef = runtimeRepo[1]
-	} else {
-		ImageRecipesRepoRef = "master"
-	}
 	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
-
-	ImageRecipesRepoDownload := strings.Trim(runtimeRepo[0], ".git") + "/-/archive/" + ImageRecipesRepoRef + "/drupal-runtime.tar?path=configuration"
-	downloadFile(ImageRecipesRepoDownload, "/tmp/repo.tar", log)
-	configPath := "/tmp/drupal-runtime/"
-	createConfigDirectory(configPath, log)
-	untar("/tmp/repo.tar", "/tmp/drupal-runtime", log)
-	renameConfigDirectory("/tmp/drupal-runtime", log)
 }
 
 // isInstallJobCompleted checks if the drush job is successfully completed
@@ -691,80 +661,4 @@ func getenvOrDie(name string, log logr.Logger) string {
 		os.Exit(1)
 	}
 	return e
-}
-
-// downloadFile downloads from the given URL and writes it to the given filename
-func downloadFile(url string, fileName string, log logr.Logger) {
-	_, err := exec.Command("wget", url, "-O", fileName).Output()
-	if err != nil {
-		log.Error(err, "error downloading config files during initEnv")
-		os.Exit(1)
-	}
-}
-
-// untar decompress the given tar file to the given target directory
-func untar(tarball, target string, log logr.Logger) {
-	_, err := exec.Command("tar", "-xf", tarball, "-C", target).Output()
-	if err != nil {
-		log.Error(err, "error downloading config files during initEnv")
-		os.Exit(1)
-	}
-}
-
-// renameConfigDirectory reorganises the configuration files into the appropriate directories after decompressing them
-func renameConfigDirectory(path string, log logr.Logger) {
-	files, err := ioutil.ReadDir(path)
-	if err != nil || len(files) < 0 {
-		log.Error(err, "error creating config files during initEnv")
-		os.Exit(1)
-	}
-	directoryName := files[0].Name()
-	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-critical", "/tmp/qos-critical", log)
-	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-eco", "/tmp/qos-eco", log)
-	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/qos-standard", "/tmp/qos-standard", log)
-	moveFile("/tmp/drupal-runtime/"+directoryName+"/configuration/sitebuilder", "/tmp/sitebuilder", log)
-	removeFileIfExists("/tmp/drupal-runtime", log)
-}
-
-// createConfigDirectory creates the required directories to download the configurations
-func createConfigDirectory(configPath string, log logr.Logger) {
-	removeFileIfExists("/tmp/qos-critical", log)
-	removeFileIfExists("/tmp/qos-eco", log)
-	removeFileIfExists("/tmp/qos-standard", log)
-	removeFileIfExists("/tmp/sitebuilder", log)
-	removeFileIfExists("/tmp/drupal-runtime", log)
-	createDir("/tmp/drupal-runtime", log)
-}
-
-// removeFileIfExists checks if the given file/ directory exists. If it does, it removes it
-func removeFileIfExists(path string, log logr.Logger) {
-	_, err := exec.Command("rm", "-rf", path).Output()
-	if err != nil {
-		log.Error(err, "error cleaning up old config files during initEnv")
-		os.Exit(1)
-	}
-}
-
-// moveFile moves it to the given location
-func moveFile(from string, to string, log logr.Logger) {
-	_, err := exec.Command("mv", from, to).Output()
-	if err != nil {
-		log.Error(err, "error moving config files during initEnv")
-		os.Exit(1)
-	}
-}
-
-// createDir creates the given directory in the given path
-func createDir(path string, log logr.Logger) {
-	_, err := exec.Command("mkdir", "-p", path).Output()
-	if err != nil {
-		log.Error(err, "error creating config files during initEnv")
-		os.Exit(1)
-	}
-}
-
-// generateWebDAVpassword generates the password for WebDAV
-func generateWebDAVpassword() string {
-	hash := md5.Sum([]byte(time.Now().String()))
-	return hex.EncodeToString(hash[:])[0:10]
 }
