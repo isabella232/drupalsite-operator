@@ -63,7 +63,7 @@ In our infrastructure, we deploy the operator and its CRD with 2 separate ArgoCD
 
 ### Configuration
 
-hen deploying the Helm chart, operator configuration is exposed as Helm values.
+When deploying the Helm chart, operator configuration is exposed as Helm values.
 This reference is useful to run the operator locally.
 
 #### environment variables
@@ -78,6 +78,16 @@ argument | example | description
 --- | --- | ---
 `sitebuilder-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder | The sitebuilder source image name
 `nginx-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx | The nginx source image name
+
+#### Configmaps for each QoS class
+
+The operator configures each website according to its QoS class with configmaps.
+It reads the configmaps from `/tmp/runtime-config`.
+In order to test locally, we must first copy them:
+
+```bash
+$ cp -r chart/drupalsite-operator/runtime-config/ /tmp/
+```
 
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 
