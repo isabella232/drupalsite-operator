@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"flag"
 	"path/filepath"
 	"testing"
 
@@ -46,6 +47,11 @@ import (
 var k8sClient client.Client
 var testEnv *envtest.Environment
 
+func init() {
+	flag.StringVar(&NginxImage, "sitebuilder-image", "", "The sitebuilder source image name.")
+	flag.StringVar(&SiteBuilderImage, "nginx-image", "", "The nginx source image name.")
+}
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -65,6 +71,9 @@ var _ = BeforeSuite(func(done Done) {
 
 	apiServerFlags := append([]string(nil), envtest.DefaultKubeAPIServerFlags...)
 	apiServerFlags = append(apiServerFlags, customApiServerFlags...)
+
+	NginxImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
+	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
