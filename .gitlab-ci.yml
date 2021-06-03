@@ -6,9 +6,6 @@ stages:
   - build
   - go_test
 
-variables:
-  DEFAULT_DOMAIN: "webtest.cern.ch"
-
 GoTest:
   stage: go_test
   image: golang:1.15

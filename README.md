@@ -89,6 +89,10 @@ In order to test locally, we must first copy them:
 $ cp -r chart/drupalsite-operator/runtime-config/ /tmp/
 ```
 
+#### Testing
+This project uses [envtest](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest) for basic integration tests by running a local control plane. The control plane spun up by `envtest`, doesn't have any K8s controllers except for the controller it is testing. The tests for the drupalsite controller are located in [controllers/drupalsite_controller_test.go](controllers/drupalsite_controller_test.go).
+
+To run these tests locally, use `make test` 
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 
 This project was generated with the [operator-sdk](https://sdk.operatorframework.io/)
