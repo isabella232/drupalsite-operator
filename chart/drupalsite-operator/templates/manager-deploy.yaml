@@ -51,10 +51,25 @@ spec:
         securityContext:
           allowPrivilegeEscalation: false
         volumeMounts:
-        - mountPath: /tmp/runtime-config
-          name: runtime-config
+        - mountPath: /tmp/runtime-config/qos-critical
+          name: qos-critical
+        - mountPath: /tmp/runtime-config/qos-standard
+          name: qos-standard
+        - mountPath: /tmp/runtime-config/qos-eco
+          name: qos-eco
+        - mountPath: /tmp/runtime-config/sitebuilder
+          name: sitebuilder
       terminationGracePeriodSeconds: 10
       volumes:
-      - name: runtime-config
+      - name: qos-critical
         configMap:
-          name: qos-config
+          name: qos-critical
+      - name: qos-standard
+        configMap:
+          name: qos-standard
+      - name: qos-eco
+        configMap:
+          name: qos-eco
+      - name: sitebuilder
+        configMap:
+          name: sitebuilder
