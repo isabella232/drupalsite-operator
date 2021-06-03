@@ -50,11 +50,11 @@ spec:
         {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
-      terminationGracePeriodSeconds: 10
-      volumeMounts:
+        volumeMounts:
         - mountPath: /tmp/runtime-config
           name: runtime-config
-   volumes:
-     - name: runtime-config
-       configMap:
-        name: qos-config
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: runtime-config
+        configMap:
+          name: qos-config
