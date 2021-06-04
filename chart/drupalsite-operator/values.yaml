@@ -18,8 +18,5 @@ resources:
 drupalsiteOperator:
   # Default domain to expose DrupalSites that don't specify a `siteUrl`
   defaultDomain: "webtest.cern.ch"
-  # Repo and git refspec from which the operator fetches (at startup) configuration for provisioned sites.
-  # Currently this includes the source of the Nginx, PHP-FPM and settings.php configmaps for each QoS class
-  drupalRuntimeRepo: "https://gitlab.cern.ch/drupal/paas/drupal-runtime.git@master"
   sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
   nginxImage:  "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx"

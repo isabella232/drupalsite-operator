@@ -30,8 +30,6 @@ spec:
         image: {{ .Values.image | quote }}
         imagePullPolicy: {{ .Values.imagePullPolicy | quote }}
         env:
-        - name: RUNTIME_REPO
-          value: {{ .Values.drupalsiteOperator.drupalRuntimeRepo }}
         - name: DEFAULT_DOMAIN
           value: {{ .Values.drupalsiteOperator.defaultDomain }}
         livenessProbe:
@@ -52,4 +50,26 @@ spec:
         {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
+        volumeMounts:
+        - mountPath: /tmp/runtime-config/qos-critical
+          name: qos-critical
+        - mountPath: /tmp/runtime-config/qos-standard
+          name: qos-standard
+        - mountPath: /tmp/runtime-config/qos-eco
+          name: qos-eco
+        - mountPath: /tmp/runtime-config/sitebuilder
+          name: sitebuilder
       terminationGracePeriodSeconds: 10
+      volumes:
+      - name: qos-critical
+        configMap:
+          name: qos-critical
+      - name: qos-standard
+        configMap:
+          name: qos-standard
+      - name: qos-eco
+        configMap:
+          name: qos-eco
+      - name: sitebuilder
+        configMap:
+          name: sitebuilder
