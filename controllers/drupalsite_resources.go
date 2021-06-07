@@ -26,7 +26,6 @@ import (
 	"net/url"
 	"os/exec"
 	"path"
-	"strconv"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -382,7 +381,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "cm_settings":
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "site-settings-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			return updateConfigMapForSiteSettings(ctx, cm, d)
+			return updateConfigMapForSiteSettings(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -598,10 +597,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Annotations = map[string]string{}
 		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
-		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{
-			"php-configmap-version":   "1",
-			"nginx-configmap-version": "1",
-		}
+		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "drupal-logs"}}
 
 		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
@@ -1188,19 +1184,25 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 	}
 
 	if !currentobject.CreationTimestamp.IsZero() {
-		currentConfig := currentobject.Data["zz-docker.conf"]
-		if currentConfig != string(content) {
-			// Roll out a new deployment
-			deploy := &appsv1.Deployment{}
-			err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
-			if err != nil {
-				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
+		// Roll out a new deployment
+		deploy := &appsv1.Deployment{}
+		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
+		}
+		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+			hash := md5.Sum([]byte(currentobject.Data["zz-docker.conf"]))
+			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"]
+			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
+				deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hash[:])
 			}
-			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"])
-			deploy.Spec.Template.ObjectMeta.Annotations["php-configmap-version"] = strconv.Itoa(currentVersion + 1)
-			if err := c.Update(ctx, deploy); err != nil {
-				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
-			}
+			return nil
+		}
+		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
+			return updateDeploymentAnnotations(deploy, d)
+		})
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
 		}
 	}
 	return nil
@@ -1236,35 +1238,41 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	}
 
 	if !currentobject.CreationTimestamp.IsZero() {
-		currentConfig := currentobject.Data["custom.conf"]
-		if currentConfig != string(content) {
-			// Roll out a new deployment
-			deploy := &appsv1.Deployment{}
-			err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
-			if err != nil {
-				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
+		// Roll out a new deployment
+		deploy := &appsv1.Deployment{}
+		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
+		}
+		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+			hash := md5.Sum([]byte(currentobject.Data["custom.conf"]))
+			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"]
+			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
+				deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hash[:])
 			}
-			currentVersion, _ := strconv.Atoi(deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"])
-			deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap-version"] = strconv.Itoa(currentVersion + 1)
-			if err := c.Update(ctx, deploy); err != nil {
-				return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
-			}
+			return nil
+		}
+		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
+			return updateDeploymentAnnotations(deploy, d)
+		})
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
 		}
 	}
 	return nil
 }
 
 // updateConfigMapForSiteSettings modifies the configmap to include the file settings.php
-func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite) error {
+func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	configPath := "/tmp/runtime-config/sitebuilder/settings.php"
+	content, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
+	}
+
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 
-		configPath := "/tmp/runtime-config/sitebuilder/settings.php"
-
-		content, err := ioutil.ReadFile(configPath)
-		if err != nil {
-			return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
-		}
 		currentobject.Data = map[string]string{
 			"settings.php": string(content),
 		}
@@ -1281,6 +1289,29 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	ls["app"] = "nginx"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
+	}
+
+	if !currentobject.CreationTimestamp.IsZero() {
+		// Roll out a new deployment
+		deploy := &appsv1.Deployment{}
+		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the settings.php configMap (deployment not found): %w", err), ErrClientK8s)
+		}
+		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+			hash := md5.Sum([]byte(currentobject.Data["settings.php"]))
+			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"]
+			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
+				deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"] = hex.EncodeToString(hash[:])
+			}
+			return nil
+		}
+		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
+			return updateDeploymentAnnotations(deploy, d)
+		})
+		if err != nil {
+			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the settings.php configMap: %w", err), ErrClientK8s)
+		}
 	}
 
 	return nil
