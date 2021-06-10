@@ -897,6 +897,10 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = routev1.RouteSpec{
+			TLS: &routev1.TLSConfig{
+				InsecureEdgeTerminationPolicy: "Redirect",
+				Termination:                   "edge",
+			},
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   d.Name,
@@ -951,6 +955,10 @@ func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite)
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = routev1.RouteSpec{
+			TLS: &routev1.TLSConfig{
+				InsecureEdgeTerminationPolicy: "Redirect",
+				Termination:                   "edge",
+			},
 			To: routev1.RouteTargetReference{
 				Kind:   "Service",
 				Name:   d.Name,
@@ -1193,7 +1201,7 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
 			hash := md5.Sum([]byte(currentobject.Data["zz-docker.conf"]))
 			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"]
-      // NOTE: the following check is unnecessary, we can always perform the action
+			// NOTE: the following check is unnecessary, we can always perform the action
 			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
 				deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hash[:])
 			}
