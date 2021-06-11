@@ -31,7 +31,7 @@ const (
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
 	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed
-	// +kubebuilder:validation:Required
+	// +optional
 	Publish bool `json:"publish"`
 
 	// SiteURL is the URL where the site should be made available.

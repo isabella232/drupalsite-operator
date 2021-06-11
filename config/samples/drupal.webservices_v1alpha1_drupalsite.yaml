@@ -10,5 +10,5 @@ spec:
   environment:
     name: "production"
     qosClass: "standard"
-    databaseClass: "test" 
+    databaseClass: "test"
   diskSize: "1Gi"
