@@ -38,6 +38,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -712,6 +713,26 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
+				currentobject.Spec.Template.Spec.Containers[i].ReadinessProbe = &v1.Probe{
+					Handler: v1.Handler{
+						HTTPGet: &v1.HTTPGetAction{
+							Path: "/",
+							Port: intstr.FromInt(8080),
+						},
+					},
+					InitialDelaySeconds: 40,
+					TimeoutSeconds:      15,
+				}
+				currentobject.Spec.Template.Spec.Containers[i].LivenessProbe = &v1.Probe{
+					Handler: v1.Handler{
+						HTTPGet: &v1.HTTPGetAction{
+							Path: "/",
+							Port: intstr.FromInt(8080),
+						},
+					},
+					InitialDelaySeconds: 40,
+					TimeoutSeconds:      15,
+				}
 
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
