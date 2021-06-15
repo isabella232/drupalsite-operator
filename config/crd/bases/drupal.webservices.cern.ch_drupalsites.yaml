@@ -127,7 +127,6 @@ spec:
             required:
             - diskSize
             - environment
-            - publish
             - version
             type: object
           status:
