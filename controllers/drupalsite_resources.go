@@ -576,7 +576,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	drupallogsResources, err := resourceRequestLimit("10Mi", "1m", "15Mi", "5m")
+	phpfpmexporterResources, err := resourceRequestLimit("10Mi", "1m", "15Mi", "5m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
@@ -599,7 +599,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Annotations = map[string]string{}
 		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
-		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "drupal-logs"}}
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}}
 
 		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 		// a wrong image built from a different build, that is left out on the node
@@ -678,7 +678,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Name = "nginx"
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -735,7 +734,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				}
 
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Name = "php-fpm"
 				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
@@ -790,23 +788,28 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
 
-			case "drupal-logs":
-				currentobject.Spec.Template.Spec.Containers[i].Name = "drupal-logs"
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"sh", "-c", "touch /drupal-data/drupal.log;" + " tail -f /drupal-data/drupal.log"}
+			case "php-fpm-exporter":
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				// Port on which to expose metrics
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
-					ContainerPort: 8081,
-					Name:          "drupal-logs",
+					ContainerPort: 9253,
+					Name:          "php-fpm-metrics",
 					Protocol:      "TCP",
 				}}
-				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+				currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
 					{
-						Name:      "drupal-directory-" + d.Name,
-						MountPath: "/drupal-data",
+						Name:  "PHP_FPM_SCRAPE_URI",
+						Value: "unix:///var/run/drupal.sock;/_site/_php-fpm-status",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = drupallogsResources
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmexporterResources
 			}
 		}
 
@@ -820,8 +823,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-			case "drupal-logs":
-				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			case "php-fpm-exporter":
+				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z"
 			}
 		}
 	}
@@ -882,7 +885,7 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 	return nil
 }
 
-// serviceForDrupalSite returns a service object for Nginx
+// serviceForDrupalSite returns a service object
 func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -907,6 +910,12 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 				TargetPort: intstr.FromInt(8081),
 				Name:       "webdav",
 				Port:       81,
+				Protocol:   "TCP",
+			},
+			{
+				TargetPort: intstr.FromInt(9253),
+				Name:       "php-fpm-exporter",
+				Port:       9253,
 				Protocol:   "TCP",
 			}}
 	}
