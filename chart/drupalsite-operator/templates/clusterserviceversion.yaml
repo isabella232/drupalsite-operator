@@ -27,12 +27,18 @@ metadata:
             "name": "mysite"
           },
           "spec": {
-            "publish": false,
-            "drupalVersion": "8.9.13",
+            "publish": true,
+            "version": {
+              "name": "v8.9-1",
+              "releaseSpec": "RELEASE-2021.05.31T09-39-10Z",
+            },
             "environment": {
               "name": "dev",
               "qosClass": "standard",
+              "databaseClass": "standard",
+              "extraConfigRepo": "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
             }
+          "diskSize": "1Gi"
           }
         }
       ]
