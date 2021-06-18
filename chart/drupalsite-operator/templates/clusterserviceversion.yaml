@@ -88,12 +88,23 @@ spec:
             - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
             - 'urn:alm:descriptor:com.tectonic.ui:select:eco'
 
-        - description: (advanced) Provide additional settings to your website in a git repository
+        - description: Request appropriate database resources for the requirements of your website.
+          displayName: Database Class
+          path: environment.databaseClass
+          x-descriptors:
+            - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
+
+        - description: (advanced) Provide additional settings to your website in a git repository.
           displayName: Extra configs repo
           path: environment.extraConfigRepo
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:text'
 
+        - description: Specify the version branch of CERN Drupal Distribution that will be deployed.
+          displayName: Name
+          path: version.name
+          x-descriptors:
+            - 'urn:alm:descriptor:com.tectonic.ui:select:v8.9-1'
 
         # - displayName: Type of authorization
         #   description: The type of authorization to apply. `NoAccess` results in `Require all denied` and prevents access to the folder contents via the web.
