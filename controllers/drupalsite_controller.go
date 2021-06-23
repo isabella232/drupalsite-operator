@@ -292,6 +292,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Update the Failsafe during the first instantiation and after a successful update
 	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
+		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
