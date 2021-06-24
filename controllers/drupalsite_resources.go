@@ -715,7 +715,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].ReadinessProbe = &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
-							Path: "/",
+							Path: "/user/login",
 							Port: intstr.FromInt(8080),
 						},
 					},
@@ -725,7 +725,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].LivenessProbe = &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
-							Path: "/",
+							Path: "/user/login",
 							Port: intstr.FromInt(8080),
 						},
 					},
