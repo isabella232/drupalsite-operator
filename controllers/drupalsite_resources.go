@@ -129,7 +129,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 1. BuildConfigs and ImageStreams
 
-	if len(drp.Spec.ExtraConfigRepo) > 0 {
+	if len(drp.Spec.ExtraConfigurationRepo) > 0 {
 		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder ImageStream"))
 		}
@@ -169,12 +169,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		switch {
-		case drp.Spec.InitCloneFrom == string(webservicesv1a1.CloneFromNothing):
+		if drp.Spec.CloneFrom == string(webservicesv1a1.CloneFromNothing) {
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
-		case drp.Spec.InitCloneFrom != "":
+		} else {
 			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
 			}
@@ -463,11 +462,11 @@ func releaseID(d *webservicesv1a1.DrupalSite) string {
 	return d.Spec.Version.Name + "-" + d.Spec.Version.ReleaseSpec
 }
 
-// sitebuilderImageRefToUse returns which base image to use, depending on whether the field `ExtraConfigRepo` is set.
+// sitebuilderImageRefToUse returns which base image to use, depending on whether the field `ExtraConfigurationRepo` is set.
 // If yes, the S2I buildconfig will be used; sitebuilderImageRefToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
 func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
-	if len(d.Spec.ExtraConfigRepo) > 0 {
+	if len(d.Spec.ExtraConfigurationRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
 			Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID,
@@ -508,7 +507,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 					Git: &buildv1.GitBuildSource{
 						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 						Ref: "master",
-						URI: d.Spec.ExtraConfigRepo,
+						URI: d.Spec.ExtraConfigurationRepo,
 					},
 				},
 				Strategy: buildv1.BuildStrategy{
@@ -1123,13 +1122,13 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						{
 							SecretRef: &corev1.SecretEnvSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "dbcredentials-" + d.Spec.InitCloneFrom,
+									Name: "dbcredentials-" + d.Spec.CloneFrom,
 								},
 							},
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.InitCloneFrom,
+						Name:      "drupal-directory-" + d.Spec.CloneFrom,
 						MountPath: "/drupal-data",
 					}},
 				},
@@ -1157,7 +1156,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name:      "drupal-directory-" + d.Spec.InitCloneFrom,
+						Name:      "drupal-directory-" + d.Spec.CloneFrom,
 						MountPath: "/drupal-data-source",
 					},
 					{
@@ -1175,10 +1174,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				},
 				{
-					Name: "drupal-directory-" + d.Spec.InitCloneFrom,
+					Name: "drupal-directory-" + d.Spec.CloneFrom,
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: "pv-claim-" + d.Spec.InitCloneFrom,
+							ClaimName: "pv-claim-" + d.Spec.CloneFrom,
 						},
 					},
 				}},

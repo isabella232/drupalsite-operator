@@ -26,17 +26,19 @@ const (
 	QoSStandard      QoSClass      = "standard"
 	DBODStandard     DatabaseClass = "standard"
 	DBODSSD          DatabaseClass = "ssd"
-	CloneFromNothing CloneFromStr  = "nothing"
+	CloneFromNothing CloneFromStr  = "__nothing__"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed
+	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true".
 	// +kubebuilder:default=true
+	// +optional
 	Publish bool `json:"publish"`
 
-	// IsMainSite specifies if the site is production site or not.
+	// IsMainSite specifies if the site is production site or not. The default value is "true".
 	// +kubebuilder:default=true
+	// +optional
 	IsMainSite bool `json:"isMainSite"`
 
 	// SiteURL is the URL where the site should be made available.
@@ -50,30 +52,33 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Version `json:"version"`
 
-	// ExtraConfigRepo injects the composer project and other supported configuration from the given git repo to the site,
+	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
 	// by building an image specific to this site from the generic CERN one.
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
-	ExtraConfigRepo string `json:"extraConfigRepo,omitempty"`
+	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
 
-	// QoSClass specifies the website's performance and availability requirements
+	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:default=standard
+	// +optional
 	QoSClass `json:"qosClass"`
 
-	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
+	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
 	// +kubebuilder:default=standard
+	// +optional
 	DatabaseClass `json:"databaseClass"`
 
-	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
+	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
 	// instead of installing an empty CERN-themed website.
 	// Immutable.
-	// +kubebuilder:default=nothing
-	InitCloneFrom string `json:"initCloneFrom,omitempty"`
+	// +optional
+	CloneFrom string `json:"cloneFrom,omitempty"`
 
-	// DiskSize is the max size of the site's files directory
+	// DiskSize is the max size of the site's files directory. The default value is "1500Mi".
 	// +kubebuilder:default="1500Mi"
+	// +optional
 	DiskSize string `json:"diskSize"`
 
 	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
@@ -104,7 +109,7 @@ type QoSClass string
 // DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
 type DatabaseClass string
 
-// CloneFromStr specifies the string that the initCloneFrom field acts on.
+// CloneFromStr specifies the string that the CloneFrom field acts on.
 type CloneFromStr string
 
 // DrupalSiteStatus defines the observed state of DrupalSite

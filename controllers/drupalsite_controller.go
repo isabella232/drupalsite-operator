@@ -159,7 +159,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// 1. Init: Check if finalizer is set. If not, set it, validate and update CR status
 
-	if update := ensureSpecFinalizer(drupalSite, log); update {
+	if update, err := r.ensureSpecFinalizer(ctx, drupalSite, log); err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to ensure DrupalSite spec defaults", err.Unwrap()))
+		setErrorCondition(drupalSite, err)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	} else if update {
 		log.Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
@@ -407,7 +411,7 @@ func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
+func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError) {
 	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
 		log.Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
@@ -423,7 +427,40 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 	if drp.Spec.WebDAVPassword == "" {
 		drp.Spec.WebDAVPassword = generateWebDAVpassword()
 	}
-	return
+	_, exists := drp.Labels["production"]
+	if drp.Spec.IsMainSite && !exists {
+		if len(drp.Labels) == 0 {
+			drp.Labels = map[string]string{}
+		}
+		drp.Labels["production"] = "true"
+	}
+	if !drp.Spec.IsMainSite && exists {
+		delete(drp.Labels, "production")
+	}
+
+	if drp.Spec.CloneFrom == "" {
+		drupalSiteList := webservicesv1a1.DrupalSiteList{}
+		drupalSiteLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+			MatchLabels: map[string]string{"production": "true"},
+		})
+		if err != nil {
+			return false, newApplicationError(err, ErrFunctionDomain)
+		}
+		options := client.ListOptions{
+			LabelSelector: drupalSiteLabels,
+			Namespace:     drp.Namespace,
+		}
+		err = r.List(ctx, &drupalSiteList, &options)
+		if err != nil {
+			return false, newApplicationError(err, ErrClientK8s)
+		}
+		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.IsMainSite {
+			drp.Spec.CloneFrom = drupalSiteList.Items[0].Name
+		} else {
+			drp.Spec.CloneFrom = string(webservicesv1a1.CloneFromNothing)
+		}
+	}
+	return update, nil
 }
 
 // getRunningdeployment fetches the running drupal deployment
@@ -480,8 +517,8 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 }
 
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
-	// Check status of the S2i buildconfig if the extraConfigRepo field is set
-	if len(d.Spec.ExtraConfigRepo) > 0 {
+	// Check status of the S2i buildconfig if the extraConfigurationRepo field is set
+	if len(d.Spec.ExtraConfigurationRepo) > 0 {
 		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
 		switch {
 		case err != nil:

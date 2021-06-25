@@ -44,7 +44,7 @@ spec:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   # Name of the DrupalSite (in the same namespace) to clone
-  initCloneFrom: "myproductionsite"
+  cloneFrom: "myproductionsite"
   qosClass: "standard"
   databaseClass: "test"
   diskSize: "1Gi"

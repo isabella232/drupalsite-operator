@@ -36,7 +36,7 @@ metadata:
               "name": "dev",
               "qosClass": "standard",
               "databaseClass": "standard",
-              "extraConfigRepo": "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
+              "extraConfigurationRepo": "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git"
             }
           "diskSize": "1Gi"
           }
@@ -90,7 +90,7 @@ spec:
 
         - description: (advanced) Provide additional settings to your website in a git repository.
           displayName: Extra configs repo
-          path: extraConfigRepo
+          path: extraConfigurationRepo
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:text'
 
