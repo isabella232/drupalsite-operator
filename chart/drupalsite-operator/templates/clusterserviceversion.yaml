@@ -72,17 +72,11 @@ spec:
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
 
-        - description: Many branches of the website can exist in the same project for development and testing purposes.
-                       Set "production" for the public website, or any other value for branches.
-          displayName: Environment name
-          path: environment.name
-          x-descriptors:
-            - 'urn:alm:descriptor:com.tectonic.ui:text'
 
         - description: Request appropriate default configurations and resources for the requirements of your website.
                        Is this a "critical", "standard", or "eco" website?
           displayName: Quality of Service class
-          path: environment.qosClass
+          path: qosClass
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:critical'
             - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
@@ -90,13 +84,13 @@ spec:
 
         - description: Request appropriate database resources for the requirements of your website.
           displayName: Database Class
-          path: environment.databaseClass
+          path: databaseClass
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
 
         - description: (advanced) Provide additional settings to your website in a git repository.
           displayName: Extra configs repo
-          path: environment.extraConfigRepo
+          path: extraConfigRepo
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:text'
 

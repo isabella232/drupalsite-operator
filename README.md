@@ -36,20 +36,17 @@ spec:
   # Create an ingress route?
   publish: true
   # Optional: URL to request in the route.
-  # If omitted, the default URL is `<spec.environment.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
-  # And for `environment.name == "production"`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
+  # If omitted, the default URL is `<spec.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
+  # And for `isMainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
   siteUrl: mysite.webtest.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
-  environment:
-    # Non-production environments can be specified to test changes starting from the current state of another DrupalSite
-    name: "dev"
-    # Name of the DrupalSite (in the same namespace) to clone
-    initCloneFrom: "myproductionsite"
-    qosClass: "standard"
-    databaseClass: "test"
+  # Name of the DrupalSite (in the same namespace) to clone
+  initCloneFrom: "myproductionsite"
+  qosClass: "standard"
+  databaseClass: "test"
   diskSize: "1Gi"
 ```
 

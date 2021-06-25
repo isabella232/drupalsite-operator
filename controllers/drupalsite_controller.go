@@ -47,10 +47,9 @@ import (
 
 const (
 	// finalizerStr string that is going to added to every DrupalSite created
-	finalizerStr          = "controller.drupalsite.webservices.cern.ch"
-	productionEnvironment = "production"
-	adminAnnotation       = "drupal.cern.ch/admin-custom-edit"
-	oidcSecretName        = "oidc-client-secret"
+	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
+	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
+	oidcSecretName  = "oidc-client-secret"
 )
 
 var (
@@ -415,11 +414,10 @@ func ensureSpecFinalizer(drp *webservicesv1a1.DrupalSite, log logr.Logger) (upda
 		update = true
 	}
 	if drp.Spec.SiteURL == "" {
-		switch drp.Spec.Environment.Name {
-		case productionEnvironment:
+		if drp.Spec.IsMainSite {
 			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
-		default:
-			drp.Spec.SiteURL = drp.Spec.Environment.Name + "-" + drp.Namespace + "." + DefaultDomain
+		} else {
+			drp.Spec.SiteURL = drp.Name + "-" + drp.Namespace + "." + DefaultDomain
 		}
 	}
 	if drp.Spec.WebDAVPassword == "" {
@@ -483,7 +481,7 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Check status of the S2i buildconfig if the extraConfigRepo field is set
-	if len(d.Spec.Environment.ExtraConfigRepo) > 0 {
+	if len(d.Spec.ExtraConfigRepo) > 0 {
 		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
 		switch {
 		case err != nil:
