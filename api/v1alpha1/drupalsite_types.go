@@ -133,6 +133,10 @@ type DrupalSiteStatus struct {
 	// ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
 	// +optional
 	ReleaseID `json:"releaseID,omitempty"`
+
+	// ServingPodImage reports the complete image name of the PHP-FPM container that is being used in the deployment.
+	// +optional
+	ServingPodImage string `json:"servingPodImage,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

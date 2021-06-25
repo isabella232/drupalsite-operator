@@ -188,6 +188,10 @@ spec:
                     minLength: 1
                     type: string
                 type: object
+              servingPodImage:
+                description: ServingPodImage reports the complete image name of the
+                  PHP-FPM container that is being used in the deployment.
+                type: string
             type: object
         type: object
     served: true
