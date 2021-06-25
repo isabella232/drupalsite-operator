@@ -455,9 +455,9 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 			return false, newApplicationError(err, ErrClientK8s)
 		}
 		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.MainSite {
-			drp.Spec.Configuration.CloneFrom = drupalSiteList.Items[0].Name
+			drp.Spec.Configuration.CloneFrom = webservicesv1a1.CloneFrom(drupalSiteList.Items[0].Name)
 		} else {
-			drp.Spec.Configuration.CloneFrom = string(webservicesv1a1.CloneFromNothing)
+			drp.Spec.Configuration.CloneFrom = webservicesv1a1.CloneFromNothing
 		}
 	}
 	return update, nil

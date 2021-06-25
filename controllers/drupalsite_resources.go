@@ -169,7 +169,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if drp.Spec.Configuration.CloneFrom == string(webservicesv1a1.CloneFromNothing) {
+		if drp.Spec.Configuration.CloneFrom == webservicesv1a1.CloneFromNothing {
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
@@ -1122,13 +1122,13 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						{
 							SecretRef: &corev1.SecretEnvSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "dbcredentials-" + d.Spec.Configuration.CloneFrom,
+									Name: "dbcredentials-" + string(d.Spec.Configuration.CloneFrom),
 								},
 							},
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.Configuration.CloneFrom,
+						Name:      "drupal-directory-" + string(d.Spec.Configuration.CloneFrom),
 						MountPath: "/drupal-data",
 					}},
 				},
@@ -1156,7 +1156,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name:      "drupal-directory-" + d.Spec.Configuration.CloneFrom,
+						Name:      "drupal-directory-" + string(d.Spec.Configuration.CloneFrom),
 						MountPath: "/drupal-data-source",
 					},
 					{
@@ -1174,10 +1174,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				},
 				{
-					Name: "drupal-directory-" + d.Spec.Configuration.CloneFrom,
+					Name: "drupal-directory-" + string(d.Spec.Configuration.CloneFrom),
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: "pv-claim-" + d.Spec.Configuration.CloneFrom,
+							ClaimName: "pv-claim-" + string(d.Spec.Configuration.CloneFrom),
 						},
 					},
 				}},

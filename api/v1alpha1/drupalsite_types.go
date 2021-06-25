@@ -26,7 +26,7 @@ const (
 	QoSStandard      QoSClass      = "standard"
 	DBODStandard     DatabaseClass = "standard"
 	DBODSSD          DatabaseClass = "ssd"
-	CloneFromNothing CloneFromStr  = "__nothing__"
+	CloneFromNothing CloneFrom     = "__nothing__"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
@@ -96,7 +96,7 @@ type Configuration struct {
 	// instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional
-	CloneFrom string `json:"cloneFrom,omitempty"`
+	CloneFrom `json:"cloneFrom,omitempty"`
 
 	// DiskSize is the max size of the site's files directory. The default value is "1500Mi".
 	// +kubebuilder:default="1500Mi"
@@ -116,8 +116,8 @@ type QoSClass string
 // DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
 type DatabaseClass string
 
-// CloneFromStr specifies the string that the CloneFrom field acts on.
-type CloneFromStr string
+// CloneFrom specifies the string that the CloneFrom field acts on.
+type CloneFrom string
 
 // DrupalSiteStatus defines the observed state of DrupalSite
 type DrupalSiteStatus struct {
