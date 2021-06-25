@@ -129,7 +129,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 1. BuildConfigs and ImageStreams
 
-	if len(drp.Spec.ExtraConfigurationRepo) > 0 {
+	if len(drp.Spec.Configuration.ExtraConfigurationRepo) > 0 {
 		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder ImageStream"))
 		}
@@ -169,7 +169,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if drp.Spec.CloneFrom == string(webservicesv1a1.CloneFromNothing) {
+		if drp.Spec.Configuration.CloneFrom == string(webservicesv1a1.CloneFromNothing) {
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
@@ -466,7 +466,7 @@ func releaseID(d *webservicesv1a1.DrupalSite) string {
 // If yes, the S2I buildconfig will be used; sitebuilderImageRefToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
 // Otherwise, returns the sitebuilder base
 func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
-	if len(d.Spec.ExtraConfigurationRepo) > 0 {
+	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
 			Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID,
@@ -507,7 +507,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 					Git: &buildv1.GitBuildSource{
 						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 						Ref: "master",
-						URI: d.Spec.ExtraConfigurationRepo,
+						URI: d.Spec.Configuration.ExtraConfigurationRepo,
 					},
 				},
 				Strategy: buildv1.BuildStrategy{
@@ -549,7 +549,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 		addOwnerRefToObject(currentobject, asOwner(d))
 		dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
 		currentobject.Spec = dbodv1a1.DatabaseSpec{
-			DatabaseClass: string(d.Spec.DatabaseClass),
+			DatabaseClass: string(d.Spec.Configuration.DatabaseClass),
 			DbName:        hex.EncodeToString(dbID[1:10]),
 			DbUser:        hex.EncodeToString(dbID[1:10]),
 			ExtraLabels: map[string]string{
@@ -837,7 +837,7 @@ func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Type = "kubernetes.io/basic-auth"
-		encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.WebDAVPassword)
+		encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.Configuration.WebDAVPassword)
 		if err != nil {
 			return err
 		}
@@ -868,7 +868,7 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteMany"},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse(d.Spec.DiskSize),
+					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse(d.Spec.Configuration.DiskSize),
 				},
 			},
 		}
@@ -1122,13 +1122,13 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						{
 							SecretRef: &corev1.SecretEnvSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "dbcredentials-" + d.Spec.CloneFrom,
+									Name: "dbcredentials-" + d.Spec.Configuration.CloneFrom,
 								},
 							},
 						},
 					},
 					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						Name:      "drupal-directory-" + d.Spec.Configuration.CloneFrom,
 						MountPath: "/drupal-data",
 					}},
 				},
@@ -1156,7 +1156,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name:      "drupal-directory-" + d.Spec.CloneFrom,
+						Name:      "drupal-directory-" + d.Spec.Configuration.CloneFrom,
 						MountPath: "/drupal-data-source",
 					},
 					{
@@ -1174,10 +1174,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				},
 				{
-					Name: "drupal-directory-" + d.Spec.CloneFrom,
+					Name: "drupal-directory-" + d.Spec.Configuration.CloneFrom,
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: "pv-claim-" + d.Spec.CloneFrom,
+							ClaimName: "pv-claim-" + d.Spec.Configuration.CloneFrom,
 						},
 					},
 				}},
@@ -1193,7 +1193,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 // updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.QoSClass) + "/php-fpm.conf"
+	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Configuration.QoSClass) + "/php-fpm.conf"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading PHP-FPM configMap failed: %w", err), ErrFilesystemIO)
@@ -1249,7 +1249,7 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 // updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.QoSClass) + "/nginx.conf"
+	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Configuration.QoSClass) + "/nginx.conf"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)

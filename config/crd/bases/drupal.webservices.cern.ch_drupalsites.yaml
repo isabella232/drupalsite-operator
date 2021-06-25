@@ -36,29 +36,49 @@ spec:
           spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
-              cloneFrom:
-                description: CloneFrom initializes this environment by cloning the
-                  specified DrupalSite (usually production), instead of installing
-                  an empty CERN-themed website. Immutable.
-                type: string
-              databaseClass:
-                default: standard
-                description: DatabaseClass specifies the kind of database that the
-                  website needs, among those supported by the cluster. The default
-                  value is "standard".
-                type: string
-              diskSize:
-                default: 1500Mi
-                description: DiskSize is the max size of the site's files directory.
-                  The default value is "1500Mi".
-                type: string
-              extraConfigurationRepo:
-                description: 'ExtraConfigurationRepo injects the composer project
-                  and other supported configuration from the given git repo to the
-                  site, by building an image specific to this site from the generic
-                  CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
-                pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
-                type: string
+              configuration:
+                description: Configuration refers to the configuration fields of the
+                  DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass,
+                  CloneFrom, DiskSize, WebDAVPassword
+                properties:
+                  cloneFrom:
+                    description: CloneFrom initializes this environment by cloning
+                      the specified DrupalSite (usually production), instead of installing
+                      an empty CERN-themed website. Immutable.
+                    type: string
+                  databaseClass:
+                    default: standard
+                    description: DatabaseClass specifies the kind of database that
+                      the website needs, among those supported by the cluster. The
+                      default value is "standard".
+                    type: string
+                  diskSize:
+                    default: 1500Mi
+                    description: DiskSize is the max size of the site's files directory.
+                      The default value is "1500Mi".
+                    type: string
+                  extraConfigurationRepo:
+                    description: 'ExtraConfigurationRepo injects the composer project
+                      and other supported configuration from the given git repo to
+                      the site, by building an image specific to this site from the
+                      generic CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
+                    pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                    type: string
+                  qosClass:
+                    default: standard
+                    description: QoSClass specifies the website's performance and
+                      availability requirements.  The default value is "standard".
+                    enum:
+                    - critical
+                    - eco
+                    - standard
+                    type: string
+                  webDAVPassword:
+                    description: WebDAVPassword sets the HTTP basic auth password
+                      for WebDAV file access. A default is auto-generated if a value
+                      isn't given. Changing this field updates the password.
+                    type: string
+                type: object
               mainSite:
                 default: true
                 description: MainSite specifies if the site is production site or
@@ -69,15 +89,6 @@ spec:
                 description: Publish toggles the site's visibility to the world, ie
                   whether any inbound traffic is allowed. The default value is "true".
                 type: boolean
-              qosClass:
-                default: standard
-                description: QoSClass specifies the website's performance and availability
-                  requirements.  The default value is "standard".
-                enum:
-                - critical
-                - eco
-                - standard
-                type: string
               siteUrl:
                 description: SiteURL is the URL where the site should be made available.
                   Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain>
@@ -105,11 +116,6 @@ spec:
                 - name
                 - releaseSpec
                 type: object
-              webDAVPassword:
-                description: WebDAVPassword sets the HTTP basic auth password for
-                  WebDAV file access. A default is auto-generated if a value isn't
-                  given. Changing this field updates the password.
-                type: string
             required:
             - version
             type: object

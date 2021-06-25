@@ -52,6 +52,28 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Version `json:"version"`
 
+	// Configuration refers to the configuration fields of the DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass, CloneFrom, DiskSize, WebDAVPassword
+	// +optional
+	Configuration `json:"configuration"`
+}
+
+// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
+type Version struct {
+	// Name specifies the "version" branch of CERN Drupal Distribution that will be deployed, eg `v8.9-1`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// ReleaseSpec is the concrete release of the specified version,
+	// typically of the format `RELEASE.<timestamp>`.
+	// CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
+	// for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	ReleaseSpec string `json:"releaseSpec"`
+}
+
+// Configuration refers to the configuration fields of the DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass, CloneFrom, DiskSize, WebDAVPassword
+type Configuration struct {
 	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
 	// by building an image specific to this site from the generic CERN one.
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
@@ -86,21 +108,6 @@ type DrupalSiteSpec struct {
 	// Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
-}
-
-// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
-type Version struct {
-	// Name specifies the "version" branch of CERN Drupal Distribution that will be deployed, eg `v8.9-1`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-	// ReleaseSpec is the concrete release of the specified version,
-	// typically of the format `RELEASE.<timestamp>`.
-	// CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
-	// for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	ReleaseSpec string `json:"releaseSpec"`
 }
 
 // QoSClass specifies the website's performance and availability requirements

@@ -424,8 +424,8 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 			drp.Spec.SiteURL = drp.Name + "-" + drp.Namespace + "." + DefaultDomain
 		}
 	}
-	if drp.Spec.WebDAVPassword == "" {
-		drp.Spec.WebDAVPassword = generateWebDAVpassword()
+	if drp.Spec.Configuration.WebDAVPassword == "" {
+		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
 	}
 	_, exists := drp.Labels["production"]
 	if drp.Spec.MainSite && !exists {
@@ -438,7 +438,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		delete(drp.Labels, "production")
 	}
 
-	if drp.Spec.CloneFrom == "" {
+	if drp.Spec.Configuration.CloneFrom == "" {
 		drupalSiteList := webservicesv1a1.DrupalSiteList{}
 		drupalSiteLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 			MatchLabels: map[string]string{"production": "true"},
@@ -455,9 +455,9 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 			return false, newApplicationError(err, ErrClientK8s)
 		}
 		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.MainSite {
-			drp.Spec.CloneFrom = drupalSiteList.Items[0].Name
+			drp.Spec.Configuration.CloneFrom = drupalSiteList.Items[0].Name
 		} else {
-			drp.Spec.CloneFrom = string(webservicesv1a1.CloneFromNothing)
+			drp.Spec.Configuration.CloneFrom = string(webservicesv1a1.CloneFromNothing)
 		}
 	}
 	return update, nil
@@ -518,7 +518,7 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 
 func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Check status of the S2i buildconfig if the extraConfigurationRepo field is set
-	if len(d.Spec.ExtraConfigurationRepo) > 0 {
+	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
 		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
 		switch {
 		case err != nil:
