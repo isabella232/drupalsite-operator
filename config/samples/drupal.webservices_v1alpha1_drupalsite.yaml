@@ -10,4 +10,4 @@ spec:
   qosClass: "standard"
   databaseClass: "test"
   diskSize: "1Gi"
-  isMainSite: true
+  mainSite: true

@@ -36,10 +36,10 @@ type DrupalSiteSpec struct {
 	// +optional
 	Publish bool `json:"publish"`
 
-	// IsMainSite specifies if the site is production site or not. The default value is "true".
+	// MainSite specifies if the site is production site or not. The default value is "true".
 	// +kubebuilder:default=true
 	// +optional
-	IsMainSite bool `json:"isMainSite"`
+	MainSite bool `json:"mainSite"`
 
 	// SiteURL is the URL where the site should be made available.
 	// Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain> is configured per cluster (typically `web.cern.ch`)

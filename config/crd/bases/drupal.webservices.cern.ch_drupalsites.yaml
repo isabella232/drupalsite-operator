@@ -59,9 +59,9 @@ spec:
                   CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
-              isMainSite:
+              mainSite:
                 default: true
-                description: IsMainSite specifies if the site is production site or
+                description: MainSite specifies if the site is production site or
                   not. The default value is "true".
                 type: boolean
               publish:

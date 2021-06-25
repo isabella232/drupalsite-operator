@@ -418,7 +418,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		update = true
 	}
 	if drp.Spec.SiteURL == "" {
-		if drp.Spec.IsMainSite {
+		if drp.Spec.MainSite {
 			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
 		} else {
 			drp.Spec.SiteURL = drp.Name + "-" + drp.Namespace + "." + DefaultDomain
@@ -428,13 +428,13 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		drp.Spec.WebDAVPassword = generateWebDAVpassword()
 	}
 	_, exists := drp.Labels["production"]
-	if drp.Spec.IsMainSite && !exists {
+	if drp.Spec.MainSite && !exists {
 		if len(drp.Labels) == 0 {
 			drp.Labels = map[string]string{}
 		}
 		drp.Labels["production"] = "true"
 	}
-	if !drp.Spec.IsMainSite && exists {
+	if !drp.Spec.MainSite && exists {
 		delete(drp.Labels, "production")
 	}
 
@@ -454,7 +454,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		if err != nil {
 			return false, newApplicationError(err, ErrClientK8s)
 		}
-		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.IsMainSite {
+		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.MainSite {
 			drp.Spec.CloneFrom = drupalSiteList.Items[0].Name
 		} else {
 			drp.Spec.CloneFrom = string(webservicesv1a1.CloneFromNothing)

@@ -37,7 +37,7 @@ spec:
   publish: true
   # Optional: URL to request in the route.
   # If omitted, the default URL is `<spec.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
-  # And for `isMainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
+  # And for `mainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
   siteUrl: mysite.webtest.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
