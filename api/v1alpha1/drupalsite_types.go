@@ -31,18 +31,18 @@ const (
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true".
+	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true". Set to false if you want to quickly cut all access to the site.
 	// +kubebuilder:default=true
 	// +optional
 	Publish bool `json:"publish"`
 
-	// MainSite specifies if the site is production site or not. The default value is "true".
+	// MainSite specifies that this DrupalSite is the "live" website of this project, meaning that every other DrupalSite in the project is a testing environment
 	// +kubebuilder:default=true
 	// +optional
 	MainSite bool `json:"mainSite"`
 
 	// SiteURL is the URL where the site should be made available.
-	// Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain> is configured per cluster (typically `web.cern.ch`)
+	// Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain> is typically `web.cern.ch`
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
 	SiteURL string `json:"siteUrl,omitempty"`
@@ -52,7 +52,7 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Version `json:"version"`
 
-	// Configuration refers to the configuration fields of the DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass, CloneFrom, DiskSize, WebDAVPassword
+	// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
 	// +optional
 	Configuration `json:"configuration"`
 }
@@ -72,7 +72,7 @@ type Version struct {
 	ReleaseSpec string `json:"releaseSpec"`
 }
 
-// Configuration refers to the configuration fields of the DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass, CloneFrom, DiskSize, WebDAVPassword
+// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
 type Configuration struct {
 	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
 	// by building an image specific to this site from the generic CERN one.
@@ -98,8 +98,8 @@ type Configuration struct {
 	// +optional
 	CloneFrom `json:"cloneFrom,omitempty"`
 
-	// DiskSize is the max size of the site's files directory. The default value is "1500Mi".
-	// +kubebuilder:default="1500Mi"
+	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
+	// +kubebuilder:default="2000Mi"
 	// +optional
 	DiskSize string `json:"diskSize"`
 
