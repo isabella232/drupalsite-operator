@@ -23,19 +23,26 @@ import (
 )
 
 const (
-	QoSStandard  QoSClass      = "standard"
-	DBODStandard DatabaseClass = "standard"
-	DBODSSD      DatabaseClass = "ssd"
+	QoSStandard      QoSClass      = "standard"
+	DBODStandard     DatabaseClass = "standard"
+	DBODSSD          DatabaseClass = "ssd"
+	CloneFromNothing CloneFrom     = "__nothing__"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed
+	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true". Set to false if you want to quickly cut all access to the site.
+	// +kubebuilder:default=true
 	// +optional
 	Publish bool `json:"publish"`
 
+	// MainSite specifies that this DrupalSite is the "live" website of this project, meaning that every other DrupalSite in the project is a testing environment
+	// +kubebuilder:default=true
+	// +optional
+	MainSite bool `json:"mainSite"`
+
 	// SiteURL is the URL where the site should be made available.
-	// Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain> is configured per cluster (typically `web.cern.ch`)
+	// Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain> is typically `web.cern.ch`
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
 	SiteURL string `json:"siteUrl,omitempty"`
@@ -45,20 +52,9 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:validation:Required
 	Version `json:"version"`
 
-	// Environment lets the site owner define alternative instances of the website with different content,
-	// that can be used to test/pilot site building, configuration, or updates.
-	// +kubebuilder:validation:Required
-	Environment `json:"environment"`
-
-	// DiskSize is the max size of the site's files directory
-	// +kubebuilder:validation:Required
-	DiskSize string `json:"diskSize"`
-
-	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
-	// A default is auto-generated if a value isn't given.
-	// Changing this field updates the password.
+	// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
 	// +optional
-	WebDAVPassword string `json:"webDAVPassword,omitempty"`
+	Configuration `json:"configuration"`
 }
 
 // Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
@@ -76,35 +72,42 @@ type Version struct {
 	ReleaseSpec string `json:"releaseSpec"`
 }
 
-// Environment lets the site owner define alternative instances of the website with different content,
-// that can be used to test/pilot site building, configuration, or updates.
-type Environment struct {
-	// Name specifies the environment name for the DrupalSite.
-	// The name will be used for resource labels and route name
-	// +kubebuilder:validation:Pattern=[a-z0-9]([-a-z0-9]*[a-z0-9])?
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-	// ExtraConfigRepo injects the composer project and other supported configuration from the given git repo to the site,
+// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
+type Configuration struct {
+	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
 	// by building an image specific to this site from the generic CERN one.
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
-	ExtraConfigRepo string `json:"extraConfigRepo,omitempty"`
-	// ImageOverride overrides the image urls in the DrupalSite deployment for the fields that are set
-	// +optional
-	ImageOverride `json:"imageOverride,omitempty"`
-	// QoSClass specifies the website's performance and availability requirements
+	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
+
+	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
 	// +kubebuilder:validation:Enum:=critical;eco;standard
-	// +kubebuilder:validation:Required
+	// +kubebuilder:default=standard
+	// +optional
 	QoSClass `json:"qosClass"`
-	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
-	// +kubebuilder:validation:Required
+
+	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
+	// +kubebuilder:default=standard
+	// +optional
 	DatabaseClass `json:"databaseClass"`
-	// InitCloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
+
+	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
 	// instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional
-	InitCloneFrom string `json:"initCloneFrom,omitempty"`
+	CloneFrom `json:"cloneFrom,omitempty"`
+
+	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
+	// +kubebuilder:default="2000Mi"
+	// +optional
+	DiskSize string `json:"diskSize"`
+
+	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
+	// A default is auto-generated if a value isn't given.
+	// Changing this field updates the password.
+	// +optional
+	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
@@ -113,15 +116,8 @@ type QoSClass string
 // DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster.
 type DatabaseClass string
 
-// ImageOverride lets the website admin bypass the operator's buildconfigs and inject custom images.
-// Envisioned primarily for the sitebuilder, this could allow an advanced developer to deploy their own
-// custom version of Drupal or different PHP versions.
-type ImageOverride struct {
-	// Sitebuilder overrides the Sitebuilder image url in the DrupalSite deployment
-	// +kubebuilder:validation:Pattern=`[a-z0-9]+(?:[\/._-][a-z0-9]+)*.`
-	// +optional
-	Sitebuilder string `json:"siteBuilder,omitempty"`
-}
+// CloneFrom specifies the string that the CloneFrom field acts on.
+type CloneFrom string
 
 // DrupalSiteStatus defines the observed state of DrupalSite
 type DrupalSiteStatus struct {

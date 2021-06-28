@@ -6,9 +6,9 @@ spec:
   publish: true
   version:
     name: "v8.9-1"
-    releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
-  environment:
-    name: "production"
+    releaseSpec: "RELEASE-2021.06.24T14-24-58Z"
+  configuration:
     qosClass: "standard"
     databaseClass: "test"
-  diskSize: "1Gi"
+    diskSize: "1Gi"
+  mainSite: true

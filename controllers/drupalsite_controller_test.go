@@ -78,9 +78,8 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:        "8.9.13",
 					ReleaseSpec: "stable",
 				},
-				DiskSize: "10Gi",
-				Environment: drupalwebservicesv1alpha1.Environment{
-					Name:          "dev",
+				Configuration: drupalwebservicesv1alpha1.Configuration{
+					DiskSize:      "10Gi",
 					QoSClass:      "standard",
 					DatabaseClass: "test",
 				},
@@ -458,12 +457,11 @@ var _ = Describe("DrupalSite controller", func() {
 							Name:        "8.9.13",
 							ReleaseSpec: "stable",
 						},
-						DiskSize: "10Gi",
-						Environment: drupalwebservicesv1alpha1.Environment{
-							Name:            "dev",
-							QoSClass:        "standard",
-							DatabaseClass:   "test",
-							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:               "10Gi",
+							QoSClass:               "standard",
+							DatabaseClass:          "test",
+							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 					},
 				}
@@ -748,12 +746,11 @@ var _ = Describe("DrupalSite controller", func() {
 							Name:        "8.9.13",
 							ReleaseSpec: "stable",
 						},
-						DiskSize: "10Gi",
-						Environment: drupalwebservicesv1alpha1.Environment{
-							Name:            "dev",
-							QoSClass:        "standard",
-							DatabaseClass:   "test",
-							ExtraConfigRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:               "10Gi",
+							QoSClass:               "standard",
+							DatabaseClass:          "test",
+							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 					},
 				}

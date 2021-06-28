@@ -35,22 +35,22 @@ metadata:
 spec:
   # Create an ingress route?
   publish: true
+  # Is this the main/production site of the project? (all other sites in the same project considered extra environments for dev/test
+  mainSite: true
   # Optional: URL to request in the route.
-  # If omitted, the default URL is `<spec.environment.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
-  # And for `environment.name == "production"`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
+  # If omitted, the default URL is `<spec.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
+  # And for `mainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
   siteUrl: mysite.webtest.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
-  environment:
-    # Non-production environments can be specified to test changes starting from the current state of another DrupalSite
-    name: "dev"
-    # Name of the DrupalSite (in the same namespace) to clone
-    initCloneFrom: "myproductionsite"
+  configuration:
+    # Name of the DrupalSite (in the same namespace) to clone from. Defaults to the main/production website.
+    cloneFrom: "<myproductionsite>"
     qosClass: "standard"
-    databaseClass: "test"
-  diskSize: "1Gi"
+    databaseClass: "standard"
+    diskSize: "5Gi"
 ```
 
 ## Running the operator
@@ -92,7 +92,7 @@ $ cp -r chart/drupalsite-operator/runtime-config/ /tmp/
 #### Testing
 This project uses [envtest](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest) for basic integration tests by running a local control plane. The control plane spun up by `envtest`, doesn't have any K8s controllers except for the controller it is testing. The tests for the drupalsite controller are located in [controllers/drupalsite_controller_test.go](controllers/drupalsite_controller_test.go).
 
-To run these tests locally, use `make test` 
+To run these tests locally, use `make test`
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 
 This project was generated with the [operator-sdk](https://sdk.operatorframework.io/)
