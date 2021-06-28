@@ -37,9 +37,9 @@ spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
               configuration:
-                description: Configuration refers to the configuration fields of the
-                  DrupalSite like ExtraConfigurationRepo, QoSClass, DatabaseClass,
-                  CloneFrom, DiskSize, WebDAVPassword
+                description: Configuration of the DrupalSite for specific needs. A
+                  typical default value is given for every setting, so usually these
+                  won't need to change.
                 properties:
                   cloneFrom:
                     description: CloneFrom initializes this environment by cloning
@@ -53,9 +53,9 @@ spec:
                       default value is "standard".
                     type: string
                   diskSize:
-                    default: 1500Mi
+                    default: 2000Mi
                     description: DiskSize is the max size of the site's files directory.
-                      The default value is "1500Mi".
+                      The default value is "2000Mi".
                     type: string
                   extraConfigurationRepo:
                     description: 'ExtraConfigurationRepo injects the composer project
@@ -81,18 +81,20 @@ spec:
                 type: object
               mainSite:
                 default: true
-                description: MainSite specifies if the site is production site or
-                  not. The default value is "true".
+                description: MainSite specifies that this DrupalSite is the "live"
+                  website of this project, meaning that every other DrupalSite in
+                  the project is a testing environment
                 type: boolean
               publish:
                 default: true
                 description: Publish toggles the site's visibility to the world, ie
                   whether any inbound traffic is allowed. The default value is "true".
+                  Set to false if you want to quickly cut all access to the site.
                 type: boolean
               siteUrl:
                 description: SiteURL is the URL where the site should be made available.
-                  Defaults to <envName>-<projectname>.<defaultDomain>, where <defaultDomain>
-                  is configured per cluster (typically `web.cern.ch`)
+                  Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain>
+                  is typically `web.cern.ch`
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
               version:
