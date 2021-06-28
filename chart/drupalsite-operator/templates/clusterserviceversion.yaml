@@ -59,19 +59,11 @@ spec:
       name: drupalsites.drupal.webservices.cern.ch
       resources: []
       specDescriptors:
-        - description: Which version of the [CERN Drupal distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) to start from
-          displayName: Drupal version
-          path: drupalVersion
-          x-descriptors:
-            # list of field rendering options in https://github.com/openshift/console/blob/b0f60e476dbd5eab74a3de76bf13d0d1c865c9bf/frontend/packages/operator-lifecycle-manager/src/components/descriptors/reference/reference.md
-            - 'urn:alm:descriptor:com.tectonic.ui:text'
-
         - description: Should the site become accessible to the internet?
           displayName: Publish
           path: publish
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-
 
         - description: Request appropriate default configurations and resources for the requirements of your website.
                        Is this a "critical", "standard", or "eco" website?
@@ -94,29 +86,11 @@ spec:
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:text'
 
-        - description: Specify the version branch of CERN Drupal Distribution that will be deployed.
+        - description: Specify the version branch of [CERN Drupal Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) that will be deployed.
           displayName: Name
           path: version.name
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:v8.9-1'
-
-        # - displayName: Type of authorization
-        #   description: The type of authorization to apply. `NoAccess` results in `Require all denied` and prevents access to the folder contents via the web.
-        #                     `Anonymous` results in `Require all granted` and grants access without authentication.
-        #                     `CernRole` results in `Require claim cern_role:<value of cernRole>`.
-        #   path: folderConfiguration[0].authorization.authorizationMode
-        #   x-descriptors:
-        #     - 'urn:alm:descriptor:com.tectonic.ui:select:NoAccess'
-        #     - 'urn:alm:descriptor:com.tectonic.ui:select:CernRole'
-        #     - 'urn:alm:descriptor:com.tectonic.ui:select:Anonymous'
-
-        # - displayName: Authorized CERN Role
-        #   description: The role to require when type is `CernRole`. This role must be defined in the Application Portal (by default, a role `default-role` is created for all sites with all CERN and EduGain users).
-        #   path: folderConfiguration[0].authorization.authorizedCernRole
-        #   x-descriptors:
-        #     - 'urn:alm:descriptor:com.tectonic.ui:text'
-        #     - 'urn:alm:descriptor:com.tectonic.ui:fieldDependency:configuration[0].authorization.authorizationMode:CernRole'
-
 
       statusDescriptors: [] # TODO
       description: >-
