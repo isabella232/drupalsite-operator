@@ -76,7 +76,7 @@ spec:
         - description: Request appropriate default configurations and resources for the requirements of your website.
                        Is this a "critical", "standard", or "eco" website?
           displayName: Quality of Service class
-          path: qosClass
+          path: configuration.qosClass
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:critical'
             - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
@@ -84,13 +84,13 @@ spec:
 
         - description: Request appropriate database resources for the requirements of your website.
           displayName: Database Class
-          path: databaseClass
+          path: configuration.databaseClass
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:standard'
 
         - description: (advanced) Provide additional settings to your website in a git repository.
           displayName: Extra configs repo
-          path: extraConfigurationRepo
+          path: configuration.extraConfigurationRepo
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:text'
 
