@@ -766,4 +766,127 @@ var _ = Describe("DrupalSite controller", func() {
 			})
 		})
 	})
+
+	Describe("Creating a drupalSite object", func() {
+		Context("Without 'configuration' field", func() {
+			It("Default values should be used and the site should be created", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-defaults",
+					Namespace: "defaults",
+				}
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Publish: false,
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "8.9.13",
+							ReleaseSpec: "stable",
+						},
+					},
+				}
+
+				By("By creating the testing namespace")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+						Name: key.Namespace},
+					})
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a new drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				// Create drupalSite object
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting the default configuration values to be set")
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.QoSClass) == "standard"
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.DatabaseClass) == "standard"
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting to delete successfully")
+				Eventually(func() error {
+					return k8sClient.Delete(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting to delete finish")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, drupalSiteObject)
+				}, timeout, interval).ShouldNot(Succeed())
+
+				// Passing only one configuration value
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Publish: false,
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "8.9.13",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DatabaseClass: "test",
+						},
+					},
+				}
+
+				By("By creating a new drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				// Create drupalSite object
+				By("Expecting drupalSite object created")
+				cr = drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting the default configuration values to be set")
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.QoSClass) == "standard"
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.DatabaseClass) == "test"
+				}, timeout, interval).Should(BeTrue())
+				Eventually(func() bool {
+					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting to delete successfully")
+				Eventually(func() error {
+					return k8sClient.Delete(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting to delete finish")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, drupalSiteObject)
+				}, timeout, interval).ShouldNot(Succeed())
+			})
+		})
+	})
 })

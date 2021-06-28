@@ -53,8 +53,9 @@ type DrupalSiteSpec struct {
 	Version `json:"version"`
 
 	// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
+	// +kubebuilder:default={"databaseClass":"standard","qosClass":"standard","diskSize":"2000Mi"}
 	// +optional
-	Configuration `json:"configuration"`
+	Configuration `json:"configuration,omitempty"`
 }
 
 // Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
@@ -85,12 +86,12 @@ type Configuration struct {
 	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:default=standard
 	// +optional
-	QoSClass `json:"qosClass"`
+	QoSClass `json:"qosClass,omitempty"`
 
 	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
 	// +kubebuilder:default=standard
 	// +optional
-	DatabaseClass `json:"databaseClass"`
+	DatabaseClass `json:"databaseClass,omitempty"`
 
 	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
 	// instead of installing an empty CERN-themed website.
@@ -101,7 +102,7 @@ type Configuration struct {
 	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
 	// +kubebuilder:default="2000Mi"
 	// +optional
-	DiskSize string `json:"diskSize"`
+	DiskSize string `json:"diskSize,omitempty"`
 
 	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
 	// A default is auto-generated if a value isn't given.
