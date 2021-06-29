@@ -75,7 +75,7 @@ var _ = Describe("DrupalSite controller", func() {
 			Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 				Publish: true,
 				Version: drupalwebservicesv1alpha1.Version{
-					Name:        "8.9.13",
+					Name:        "v8.9-1",
 					ReleaseSpec: "stable",
 				},
 				Configuration: drupalwebservicesv1alpha1.Configuration{
@@ -218,7 +218,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:      Name,
 					Namespace: Namespace,
 				}
-				newVersion := "8.9.13"
+				newVersion := "v8.9-1"
 				newReleaseSpec := "new"
 
 				// Create drupalSite object
@@ -454,7 +454,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "8.9.13",
+							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
@@ -604,7 +604,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Name:      Name + "-advanced",
 					Namespace: "advanced",
 				}
-				newVersion := "8.9.13"
+				newVersion := "v8.9-1"
 				newReleaseSpec := "new"
 
 				// Create drupalSite object
@@ -743,7 +743,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "8.9.13",
+							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
@@ -784,9 +784,9 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: false,
+						Publish: true,
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "8.9.13",
+							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
 					},
@@ -822,6 +822,114 @@ var _ = Describe("DrupalSite controller", func() {
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
 				}, timeout, interval).Should(BeTrue())
 
+				trueVar := true
+				expectedOwnerReference := metav1.OwnerReference{
+					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+					Kind:       "DrupalSite",
+					Name:       key.Name,
+					UID:        cr.UID,
+					Controller: &trueVar,
+				}
+				configmap := corev1.ConfigMap{}
+				svc := corev1.Service{}
+				pvc := corev1.PersistentVolumeClaim{}
+				job := batchv1.Job{}
+				deploy := appsv1.Deployment{}
+				dbod := dbodv1a1.Database{}
+				route := routev1.Route{}
+
+				// Check DBOD resource creation
+				By("Expecting Database resource created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
+					return dbod.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update DBOD resource status field
+				By("Updating DBOD instance in Database resource status")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
+					dbod.Status.DbodInstance = "test"
+					return k8sClient.Status().Update(ctx, &dbod)
+				}, timeout, interval).Should(Succeed())
+
+				//By("Expecting the drupal deployment to have the EnvFrom secret field set correctly")
+				By("Expecting the drupal deployment to have at least 2 containers")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
+				}, timeout, interval).Should(BeTrue())
+
+				// Check PHP-FPM configMap creation
+				By("Expecting PHP_FPM configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Nginx configMap creation
+				By("Expecting Nginx configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal service
+				By("Expecting Drupal service created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
+					return svc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check drupal persistentVolumeClaim
+				By("Expecting drupal persistentVolumeClaim created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
+					return pvc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal deployments
+				By("Expecting Drupal deployments created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return deploy.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drush job
+				By("Expecting Drush job created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update drupalSite custom resource status fields to allow route conditions
+				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check Route
+				By("Expecting Route to be created since publish is true")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
+					return route.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Switch "publish: false"
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.Publish = false
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting Route to be removed after switching publish to false.")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
+				}, timeout, interval).Should(Not(Succeed()))
+
 				By("Expecting to delete successfully")
 				Eventually(func() error {
 					return k8sClient.Delete(ctx, drupalSiteObject)
@@ -845,7 +953,7 @@ var _ = Describe("DrupalSite controller", func() {
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "8.9.13",
+							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
@@ -886,6 +994,41 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, key, drupalSiteObject)
 				}, timeout, interval).ShouldNot(Succeed())
+
+				// Passing invalid configuration value
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Publish: false,
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "v8.9-1",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							QoSClass: "test",
+						},
+					},
+				}
+
+				By("By creating a new drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).ShouldNot(Succeed())
+
+				// Create drupalSite object
+				By("Expecting drupalSite object to not be created")
+				cr = drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).ShouldNot(Succeed())
+
 			})
 		})
 	})
