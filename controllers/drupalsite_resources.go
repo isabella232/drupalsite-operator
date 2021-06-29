@@ -1046,7 +1046,7 @@ func jobForDrupalSiteDrush(currentobject *batchv1.Job, databaseSecret string, d 
 					MountPath: "/drupal-data",
 				}},
 			}},
-			RestartPolicy: "Never",
+			RestartPolicy: "OnFailure",
 			Containers: []corev1.Container{{
 				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 				Name:            "drush",
