@@ -65,9 +65,11 @@ if (extension_loaded('redis')) {
   // Set Redis as the default backend for any cache bin not otherwise specified.
   $settings['cache']['default'] = 'cache.backend.redis';
   $settings['redis.connection']['interface'] = 'PhpRedis';
-  $settings['redis.connection']['host'] = 'redis.' . getenv('NAMESPACE') . '.svc.cluster.local';
+  //$settings['redis.connection']['host'] = 'redis.' . getenv('NAMESPACE') . '.svc.cluster.local';
+  $settings['redis.connection']['host'] = getenv('REDIS_SERVICE_HOST');
   $settings['redis.connection']['port'] = getenv('REDIS_SERVICE_PORT');
-  
+  // NOTE: env `REDIS_PASSWORD` needs to be manually exposed
+  $settings['redis.connection']['password'] = getenv('REDIS_PASSWORD');
   // Allow the services to work before the Redis module itself is enabled.
   $settings['container_yamls'][] = 'modules/contrib/redis/redis.services.yml';
   // Manually add the classloader path, this is required for the container cache bin definition below
@@ -149,4 +151,3 @@ if (getenv('ENVIRONMENT') != 'production' && file_exists($app_root . '/' . $site
 $databases['default']['default']['init_commands']['lock_wait_timeout'] = "SET SESSION innodb_lock_wait_timeout = 20";
 $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION wait_timeout = 600";
 // }
-
