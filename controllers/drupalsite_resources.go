@@ -606,8 +606,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
-		currentobject.Spec.Template.Spec.ShareProcessNamespace = pointer.BoolPtr(true)
-
 		currentobject.Spec.Replicas = pointer.Int32Ptr(1)
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -674,6 +672,16 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			},
 		}
 
+		currentobject.Spec.Template.Spec.InitContainers = []corev1.Container{{
+			Name:            "nginx-init",
+			ImagePullPolicy: "Always",
+			Command:         []string{"/bin/sh", "-c", "cp -r /app /var/run/"},
+			VolumeMounts: []corev1.VolumeMount{{
+				Name:      "empty-dir",
+				MountPath: "/var/run/",
+			}},
+		}}
+
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
@@ -733,7 +741,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				}
 
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -822,6 +830,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
 				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z"
 			}
