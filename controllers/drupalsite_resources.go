@@ -842,6 +842,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 	// Add an annotation to be able to verify what releaseID of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
 	currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] = releaseID
+	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/container"] = "php-fpm"
+	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/command"] = "[\"sh\",\"-c\", \"/operations/database-backup.sh -f database_backup.sql\"]"
+	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
 	return nil
 }
 
