@@ -37,6 +37,10 @@ spec:
             description: DrupalSiteSpec defines the desired state of DrupalSite
             properties:
               configuration:
+                default:
+                  databaseClass: standard
+                  diskSize: 2000Mi
+                  qosClass: standard
                 description: Configuration of the DrupalSite for specific needs. A
                   typical default value is given for every setting, so usually these
                   won't need to change.
