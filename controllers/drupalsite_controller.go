@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -29,6 +30,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -42,7 +44,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -50,6 +54,7 @@ const (
 	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
 	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName  = "oidc-client-secret"
+	veleroNamespace = "velero"
 )
 
 var (
@@ -101,6 +106,34 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
+			func(a client.Object) []reconcile.Request {
+				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
+				annotation, bool := a.GetAnnotations()["drupal.webservices.cern.ch/drupalSite"]
+				if bool {
+					backupAnnotation := strings.Split(annotation, "/")
+					if len(backupAnnotation) == 2 {
+						drupalSiteName := backupAnnotation[1]
+						drupalSiteNamespace := backupAnnotation[0]
+						drupalSite := &webservicesv1a1.DrupalSite{}
+						// Fetch the Drupalsite with the namespace & name fetched from the backup annotation
+						if err := mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: drupalSiteName, Namespace: drupalSiteNamespace}, drupalSite); err != nil {
+							if k8sapierrors.IsNotFound(err) {
+								log.Info("Drupalsite with the given name not found in the namespace")
+							} else {
+								log.Error(err, "Couldn't query drupalsites in the namespace")
+							}
+							return []reconcile.Request{}
+						}
+						requests := make([]reconcile.Request, 1)
+						requests[0].Name = drupalSite.Name
+						requests[0].Namespace = drupalSite.Namespace
+						return requests
+					}
+				}
+				return []reconcile.Request{}
+			}),
+		).
 		Complete(r)
 }
 
@@ -299,6 +332,17 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
 		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	}
+
+	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
+	switch {
+	case err != nil:
+		return ctrl.Result{}, err
+	case len(backupList) != 0:
+		if backupListUpdateNeeded(backupList, drupalSite.Status.Backups) {
+			drupalSite.Status.Backups = updateBackupListStatus(backupList)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
 	}
 
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff

@@ -47,6 +47,8 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
 
 var (
@@ -449,6 +451,38 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
+}
+
+func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, transientErr reconcileError) {
+	backupList := velerov1.BackupList{}
+	hash := md5.Sum([]byte(d.Namespace + "/" + d.Name))
+
+	completedBackupsList := []velerov1.Backup{}
+
+	backupLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
+	})
+	if err != nil {
+		return completedBackupsList, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: backupLabels,
+		Namespace:     veleroNamespace,
+	}
+	err = r.List(ctx, &backupList, &options)
+	switch {
+	case err != nil:
+		return completedBackupsList, newApplicationError(err, ErrClientK8s)
+	case len(backupList.Items) == 0:
+		log.Info("No backup found with given labels " + backupLabels.String())
+		return completedBackupsList, nil
+	}
+	for i := range backupList.Items {
+		if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
+			completedBackupsList = append(completedBackupsList, backupList.Items[i])
+		}
+	}
+	return completedBackupsList, nil
 }
 
 // labelsForDrupalSite returns the labels for selecting the resources
@@ -1450,4 +1484,27 @@ func checkIfSiteIsInstalled() []string {
 // cacheReload outputs the command to reload cache on the drupalSite
 func cacheReload() []string {
 	return []string{"/operations/clear-cache.sh"}
+}
+
+// backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
+// A nil argument is equivalent to an empty slice.
+func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsList []webservicesv1a1.Backup) bool {
+	if len(veleroBackupsList) != len(statusBackupsList) {
+		return true
+	}
+	for i, v := range veleroBackupsList {
+		if v.Name != statusBackupsList[i].Name {
+			return true
+		}
+	}
+	return false
+}
+
+// updateBackupListStatus updates the list of backups in the status of the DrupalSite
+func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1a1.Backup {
+	statusBackupsList := []webservicesv1a1.Backup{}
+	for _, v := range veleroBackupsList {
+		statusBackupsList = append(statusBackupsList, webservicesv1a1.Backup{Name: v.Name, Date: v.Status.CompletionTimestamp, Expires: v.Status.Expiration})
+	}
+	return statusBackupsList
 }

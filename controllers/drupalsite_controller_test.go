@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -26,6 +28,7 @@ import (
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/operator-framework/operator-lib/status"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -207,6 +210,56 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 				}, timeout, interval).Should(Not(Succeed()))
+
+				// Create a backup resource for the drupalSite
+				hash := md5.Sum([]byte(key.Namespace + "/" + key.Name))
+				backup := velerov1.Backup{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "velero.io/v1",
+						Kind:       "Backup",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "test-backup",
+						Namespace:   "velero",
+						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
+						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+					},
+					Status: velerov1.BackupStatus{
+						Phase: velerov1.BackupPhaseCompleted,
+					},
+				}
+
+				By("By creating a namespace for velero backup resources")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &corev1.Namespace{
+						TypeMeta: metav1.TypeMeta{
+							APIVersion: "v1",
+							Kind:       "Namespace",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "velero",
+						},
+					})
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a backup resource for the drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &backup)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the backup resource is created
+				By("By creating a backup resource for the drupalSite")
+				backup1 := velerov1.Backup{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "test-backup", Namespace: "velero"}, &backup1)
+				}, timeout, interval).Should(Succeed())
+
+				// Check for the Backup name in the Drupalsite Status
+				By("By checking for the Backup in the DrupalSite Status")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return len(cr.Status.Backups) > 0 && cr.Status.Backups[0].Name == backup.Name
+				}, timeout, interval).Should(BeTrue())
 			})
 		})
 	})

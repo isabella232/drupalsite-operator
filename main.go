@@ -39,6 +39,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -58,6 +59,7 @@ func init() {
 	utilruntime.Must(routev1.AddToScheme(scheme))
 	utilruntime.Must(imagev1.AddToScheme(scheme))
 	utilruntime.Must(buildv1.AddToScheme(scheme))
+	utilruntime.Must(velerov1.AddToScheme(scheme))
 }
 
 func main() {
