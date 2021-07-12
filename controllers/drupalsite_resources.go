@@ -736,8 +736,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 							Port: intstr.FromInt(8080),
 						},
 					},
-					InitialDelaySeconds: 40,
-					TimeoutSeconds:      15,
+					InitialDelaySeconds: 300,
+					TimeoutSeconds:      100,
 				}
 
 			case "php-fpm":
