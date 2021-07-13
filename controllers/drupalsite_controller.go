@@ -443,6 +443,9 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	log.Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
+	if err := r.ensureNoSchedule(ctx, drp, log); err != nil {
+		return ctrl.Result{}, err
+	}
 	return r.updateCRorFailReconcile(ctx, log, drp)
 }
 

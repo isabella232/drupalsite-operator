@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path"
+	"time"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -205,6 +206,14 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
 		}
 	}
+
+	// 5. Backup schedule
+
+	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") {
+		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
+		}
+	}
 	return transientErrs
 }
 
@@ -226,6 +235,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 	- webdav_secret: Secret with credential for WebDAV
 	- webdav_route: Route for WebDAV
+	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -400,6 +410,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
+	case "backup_schedule":
+		schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: veleroNamespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, schedule, func() error {
+			return scheduledBackupsForDrupalSite(schedule, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", schedule.TypeMeta.Kind, "Resource.Namespace", schedule.Namespace, "Resource.Name", schedule.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
@@ -448,6 +468,22 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 		}
 	}
 	if err := r.Delete(ctx, oidc_return_uri); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: veleroNamespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: schedule.Name, Namespace: schedule.Namespace}, schedule); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, schedule); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
@@ -1240,6 +1276,48 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 		for k, v := range ls {
 			currentobject.Labels[k] = v
 		}
+	}
+	return nil
+}
+
+// scheduledBackupsForDrupalSite returns a velero Schedule object thats creates scheudled backups
+func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservicesv1a1.DrupalSite) error {
+	ls := labelsForDrupalSite(d.Name)
+
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+
+	hash := md5.Sum([]byte(d.Namespace + "/" + d.Name))
+	ls["drupal.webservices.cern.ch/drupalSite"] = hex.EncodeToString(hash[:])
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
+	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Namespace + "/" + d.Name
+
+	currentobject.Spec = velerov1.ScheduleSpec{
+		// Schedule backup at 3AM every day
+		Schedule: "* 3 * * *",
+		Template: velerov1.BackupSpec{
+			IncludedNamespaces: []string{d.Namespace},
+			IncludedResources:  []string{"pods"},
+			// Add label selector to pick up the right pod and the respective PVC
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app":        "drupal",
+					"drupalSite": d.Name,
+				},
+			},
+			// TTL is 7 days. The backups are deleted automatically after this duration
+			TTL: metav1.Duration{
+				Duration: 168 * time.Hour,
+			},
+		},
+		UseOwnerReferencesInBackup: pointer.BoolPtr(true),
 	}
 	return nil
 }
