@@ -71,6 +71,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&controllers.SiteBuilderImage, "sitebuilder-image", "", "The sitebuilder source image name.")
 	flag.StringVar(&controllers.NginxImage, "nginx-image", "", "The nginx source image name.")
+	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
 	opts := zap.Options{
 		Development: true,
 	}
