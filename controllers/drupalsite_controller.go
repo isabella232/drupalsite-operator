@@ -59,6 +59,8 @@ var (
 	SiteBuilderImage string
 	// NginxImage refers to the nginx image name
 	NginxImage string
+	// SMTPHost used by Drupal server pods to send emails
+	SMTPHost string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
