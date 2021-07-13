@@ -737,7 +737,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						},
 					},
 					InitialDelaySeconds: 300,
-					TimeoutSeconds:      100,
+					TimeoutSeconds:      200,
 				}
 
 			case "php-fpm":
