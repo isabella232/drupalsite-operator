@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -93,6 +94,19 @@ var _ = Describe("DrupalSite controller", func() {
 	Describe("Creating drupalSite object", func() {
 		Context("With basic spec", func() {
 			It("All dependent resources should be created", func() {
+				By("By creating a namespace for velero backup resources")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &corev1.Namespace{
+						TypeMeta: metav1.TypeMeta{
+							APIVersion: "v1",
+							Kind:       "Namespace",
+						},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "velero",
+						},
+					})
+				}, timeout, interval).Should(Succeed())
+
 				By("By creating a new drupalSite")
 				Eventually(func() error {
 					return k8sClient.Create(ctx, drupalSiteObject)
@@ -184,12 +198,30 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' status field in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
 					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Update deployment status fields to allow 'ready' status field to be set on the drupalSite resource
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the Schedule resource is created
+				By("Expecting Schedule to be created")
+				schedule := velerov1.Schedule{}
+				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+				fmt.Println(cr.Status.Conditions)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: "velero"}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -219,7 +251,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Kind:       "Backup",
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        "test-backup",
+						Name:        key.Name + "backup",
 						Namespace:   "velero",
 						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
 						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
@@ -228,19 +260,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Phase: velerov1.BackupPhaseCompleted,
 					},
 				}
-
-				By("By creating a namespace for velero backup resources")
-				Eventually(func() error {
-					return k8sClient.Create(ctx, &corev1.Namespace{
-						TypeMeta: metav1.TypeMeta{
-							APIVersion: "v1",
-							Kind:       "Namespace",
-						},
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "velero",
-						},
-					})
-				}, timeout, interval).Should(Succeed())
 
 				By("By creating a backup resource for the drupalSite")
 				Eventually(func() error {
@@ -251,7 +270,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By creating a backup resource for the drupalSite")
 				backup1 := velerov1.Backup{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: "test-backup", Namespace: "velero"}, &backup1)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: "velero"}, &backup1)
 				}, timeout, interval).Should(Succeed())
 
 				// Check for the Backup name in the Drupalsite Status
@@ -282,24 +301,6 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				deploy := appsv1.Deployment{}
-
-				// Update deployment status fields to allow update to proceed
-				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
-				Eventually(func() error {
-					k8sClient.Get(ctx, key, &deploy)
-					deploy.Status.Replicas = 1
-					deploy.Status.AvailableReplicas = 1
-					deploy.Status.ReadyReplicas = 1
-					return k8sClient.Status().Update(ctx, &deploy)
-				}, timeout, interval).Should(Succeed())
-
-				// Update drupalSite custom resource status fields to allow update to proceed
-				By("Updating 'initialized' status fields in drupalSite resource")
-				Eventually(func() error {
-					k8sClient.Get(ctx, key, &cr)
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
-					return k8sClient.Status().Update(ctx, &cr)
-				}, timeout, interval).Should(Succeed())
 
 				By("Updating the version")
 				Eventually(func() error {
@@ -633,12 +634,30 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Update drupalSite custom resource status fields to allow route conditions
-				By("Updating 'initialized' and 'ready' status fields in drupalSite resource")
+				By("Updating 'initialized' status field in drupalSite resource")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Ready", Status: "True"})
 					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
 					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Update deployment status fields to allow 'ready' status field to be set on the drupalSite resource
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the Schedule resource is created
+				By("Expecting Schedule to be created")
+				schedule := velerov1.Schedule{}
+				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+				fmt.Println(cr.Status.Conditions)
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: "velero"}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -646,6 +665,43 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 				}, timeout, interval).Should(Not(Succeed()))
+
+				// Create a backup resource for the drupalSite
+				hash := md5.Sum([]byte(key.Namespace + "/" + key.Name))
+				backup := velerov1.Backup{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "velero.io/v1",
+						Kind:       "Backup",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        key.Name + "backup",
+						Namespace:   "velero",
+						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
+						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+					},
+					Status: velerov1.BackupStatus{
+						Phase: velerov1.BackupPhaseCompleted,
+					},
+				}
+
+				By("By creating a backup resource for the drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &backup)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the backup resource is created
+				By("By creating a backup resource for the drupalSite")
+				backup1 := velerov1.Backup{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: "velero"}, &backup1)
+				}, timeout, interval).Should(Succeed())
+
+				// Check for the Backup name in the Drupalsite Status
+				By("By checking for the Backup in the DrupalSite Status")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return len(cr.Status.Backups) > 0 && cr.Status.Backups[0].Name == backup.Name
+				}, timeout, interval).Should(BeTrue())
 			})
 		})
 	})
@@ -677,24 +733,6 @@ var _ = Describe("DrupalSite controller", func() {
 				}
 				bc := buildv1.BuildConfig{}
 				deploy := appsv1.Deployment{}
-
-				// Update deployment status fields to allow update to proceed
-				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
-				Eventually(func() error {
-					k8sClient.Get(ctx, key, &deploy)
-					deploy.Status.Replicas = 1
-					deploy.Status.AvailableReplicas = 1
-					deploy.Status.ReadyReplicas = 1
-					return k8sClient.Status().Update(ctx, &deploy)
-				}, timeout, interval).Should(Succeed())
-
-				// Update drupalSite custom resource status fields to allow update to proceed
-				By("Updating 'initialized' status fields in drupalSite resource")
-				Eventually(func() error {
-					k8sClient.Get(ctx, key, &cr)
-					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
-					return k8sClient.Status().Update(ctx, &cr)
-				}, timeout, interval).Should(Succeed())
 
 				By("Updating the version")
 				Eventually(func() error {
