@@ -339,8 +339,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	case err != nil:
 		return ctrl.Result{}, err
 	case len(backupList) != 0:
-		if backupListUpdateNeeded(backupList, drupalSite.Status.Backups) {
-			drupalSite.Status.Backups = updateBackupListStatus(backupList)
+		if backupListUpdateNeeded(backupList, drupalSite.Status.AvailableBackups) {
+			drupalSite.Status.AvailableBackups = updateBackupListStatus(backupList)
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 	}

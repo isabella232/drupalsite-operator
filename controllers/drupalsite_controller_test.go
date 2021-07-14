@@ -277,7 +277,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By checking for the Backup in the DrupalSite Status")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					return len(cr.Status.Backups) > 0 && cr.Status.Backups[0].Name == backup.Name
+					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].Name == backup.Name
 				}, timeout, interval).Should(BeTrue())
 			})
 		})
@@ -700,7 +700,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By checking for the Backup in the DrupalSite Status")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					return len(cr.Status.Backups) > 0 && cr.Status.Backups[0].Name == backup.Name
+					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].Name == backup.Name
 				}, timeout, interval).Should(BeTrue())
 			})
 		})

@@ -137,7 +137,7 @@ type DrupalSiteStatus struct {
 
 	// AvailableBackups lists all the velero 'Backup' objects created for the current DrupalSite
 	// +optional
-	AvailableBackups `json:"availableBackups,omitempty"`
+	AvailableBackups []Backup `json:"availableBackups,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
@@ -152,14 +152,7 @@ type ReleaseID struct {
 	Failsafe string `json:"failsafe,omitempty"`
 }
 
-// AvailableBackups lists all the velero 'Backup' objects created for the current DrupalSite
-type AvailableBackups struct {
-	// Backup represents details of a given velero 'Backup' resource
-	// +optional
-	Backups []Backup `json:"backups,omitempty"`
-}
-
-// Backup represents information of a single velero 'Backup' object
+// Backup item represents information of a single velero 'Backup' object
 type Backup struct {
 	// Name represents the name of a given velero 'Backup' resource
 	// +optional
