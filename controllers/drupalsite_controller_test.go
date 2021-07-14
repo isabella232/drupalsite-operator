@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -52,9 +51,10 @@ var _ = Describe("DrupalSite controller", func() {
 		Name      = "test"
 		Namespace = "default"
 
-		timeout  = time.Second * 30
-		duration = time.Second * 30
-		interval = time.Millisecond * 250
+		veleroNamespace = "cluster-state-backup"
+		timeout         = time.Second * 30
+		duration        = time.Second * 30
+		interval        = time.Millisecond * 250
 	)
 	var (
 		drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{}
@@ -102,7 +102,7 @@ var _ = Describe("DrupalSite controller", func() {
 							Kind:       "Namespace",
 						},
 						ObjectMeta: metav1.ObjectMeta{
-							Name: "velero",
+							Name: veleroNamespace,
 						},
 					})
 				}, timeout, interval).Should(Succeed())
@@ -218,10 +218,8 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
 				schedule := velerov1.Schedule{}
-				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-				fmt.Println(cr.Status.Conditions)
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: "velero"}, &schedule)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -252,7 +250,7 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        key.Name + "backup",
-						Namespace:   "velero",
+						Namespace:   veleroNamespace,
 						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
 						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
 					},
@@ -270,7 +268,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By creating a backup resource for the drupalSite")
 				backup1 := velerov1.Backup{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: "velero"}, &backup1)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: veleroNamespace}, &backup1)
 				}, timeout, interval).Should(Succeed())
 
 				// Check for the Backup name in the Drupalsite Status
@@ -654,10 +652,8 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
 				schedule := velerov1.Schedule{}
-				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-				fmt.Println(cr.Status.Conditions)
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: "velero"}, &schedule)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -675,7 +671,7 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        key.Name + "backup",
-						Namespace:   "velero",
+						Namespace:   veleroNamespace,
 						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
 						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
 					},
@@ -693,7 +689,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By creating a backup resource for the drupalSite")
 				backup1 := velerov1.Backup{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: "velero"}, &backup1)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: veleroNamespace}, &backup1)
 				}, timeout, interval).Should(Succeed())
 
 				// Check for the Backup name in the Drupalsite Status

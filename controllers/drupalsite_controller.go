@@ -54,7 +54,8 @@ const (
 	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
 	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName  = "oidc-client-secret"
-	veleroNamespace = "velero"
+	// veleroNamespace refers to the namespace of the velero server to create backups
+	veleroNamespace = "cluster-state-backup"
 )
 
 var (
