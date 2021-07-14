@@ -6,7 +6,7 @@ spec:
   publish: true
   version:
     name: "v8.9-1"
-    releaseSpec: "RELEASE-2021.06.24T14-24-58Z"
+    releaseSpec: "RELEASE-2021.07.08T08-16-45Z"
   configuration:
     qosClass: "standard"
     databaseClass: "test"
