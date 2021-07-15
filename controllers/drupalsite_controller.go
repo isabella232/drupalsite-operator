@@ -34,6 +34,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/util/workqueue"
 
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -72,8 +74,10 @@ var (
 // DrupalSiteReconciler reconciles a DrupalSite object
 type DrupalSiteReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log                     logr.Logger
+	Scheme                  *runtime.Scheme
+	MaxRateLimiterSeconds   int
+	StartRateLimiterSeconds int
 }
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
@@ -100,6 +104,7 @@ type DrupalSiteReconciler struct {
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	exponentialFailure := workqueue.NewItemExponentialFailureRateLimiter(time.Second*time.Duration(r.StartRateLimiterSeconds), time.Minute*time.Duration(r.MaxRateLimiterSeconds))
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
 		Owns(&appsv1.Deployment{}).
@@ -134,6 +139,9 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{}
 			}),
 		).
+		WithOptions(controller.Options{
+			RateLimiter: exponentialFailure,
+		}).
 		Complete(r)
 }
 

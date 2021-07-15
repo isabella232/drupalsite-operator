@@ -105,9 +105,11 @@ func main() {
 	}
 
 	if err = (&controllers.DrupalSiteReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
-		Scheme: mgr.GetScheme(),
+		Client:                  mgr.GetClient(),
+		Log:                     ctrl.Log.WithName("controllers").WithName("DrupalSite"),
+		Scheme:                  mgr.GetScheme(),
+		StartRateLimiterSeconds: 1,
+		MaxRateLimiterSeconds:   600, // 10 Minutes
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DrupalSite")
 		os.Exit(1)
