@@ -46,6 +46,8 @@ import (
 // By defines smaller tests under a given it and in case of failure, the 'By' text is printed out
 // Ref: http://onsi.github.io/ginkgo/
 
+const dummySiteUrl = "testsite.webtest.cern.ch"
+
 var _ = Describe("DrupalSite controller", func() {
 	const (
 		Name      = "test"
@@ -87,6 +89,7 @@ var _ = Describe("DrupalSite controller", func() {
 					QoSClass:      "standard",
 					DatabaseClass: "test",
 				},
+				SiteURL: dummySiteUrl,
 			},
 		}
 	})
@@ -519,6 +522,7 @@ var _ = Describe("DrupalSite controller", func() {
 							DatabaseClass:          "test",
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
+						SiteURL: dummySiteUrl,
 					},
 				}
 
@@ -848,6 +852,7 @@ var _ = Describe("DrupalSite controller", func() {
 							DatabaseClass:          "test",
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
+						SiteURL: dummySiteUrl,
 					},
 				}
 				By("Expecting to delete successfully")
@@ -885,6 +890,7 @@ var _ = Describe("DrupalSite controller", func() {
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
+						SiteURL: dummySiteUrl,
 					},
 				}
 
@@ -1055,6 +1061,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							DatabaseClass: "test",
 						},
+						SiteURL: dummySiteUrl,
 					},
 				}
 
@@ -1110,6 +1117,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							QoSClass: "test",
 						},
+						SiteURL: dummySiteUrl,
 					},
 				}
 

@@ -37,10 +37,10 @@ spec:
   publish: true
   # Is this the main/production site of the project? (all other sites in the same project considered extra environments for dev/test
   mainSite: true
-  # Optional: URL to request in the route.
-  # If omitted, the default URL is `<spec.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
-  # And for `mainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
-  siteUrl: mysite.webtest.cern.ch
+  # URL to request in the route.
+	# Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+  # or `<projectname>.web.cern.ch` if this is the "live" site
+  siteUrl: mysite.web.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
     name: "v8.9-1"
@@ -65,12 +65,6 @@ In our infrastructure, we deploy the operator and its CRD with 2 separate ArgoCD
 
 When deploying the Helm chart, operator configuration is exposed as Helm values.
 This reference is useful to run the operator locally.
-
-#### environment variables
-
- env var | example | description
- --- | --- | ---
-`DEFAULT_DOMAIN`  | `webtest.cern.ch`           | Route's Host field
 
 #### cmdline arguments
 

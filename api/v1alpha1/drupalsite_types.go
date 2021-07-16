@@ -42,10 +42,11 @@ type DrupalSiteSpec struct {
 	MainSite bool `json:"mainSite"`
 
 	// SiteURL is the URL where the site should be made available.
-	// Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain> is typically `web.cern.ch`
+	// Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+	// or `<projectname>.web.cern.ch` if this is the "live" site
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
-	// +optional
-	SiteURL string `json:"siteUrl,omitempty"`
+	// +kubebuilder:validation:Required
+	SiteURL string `json:"siteUrl"`
 
 	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
 	// Changing this value triggers the website's update process.

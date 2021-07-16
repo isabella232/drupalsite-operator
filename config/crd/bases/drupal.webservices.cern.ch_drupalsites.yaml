@@ -97,8 +97,8 @@ spec:
                 type: boolean
               siteUrl:
                 description: SiteURL is the URL where the site should be made available.
-                  Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain>
-                  is typically `web.cern.ch`
+                  Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+                  or `<projectname>.web.cern.ch` if this is the "live" site
                 pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                 type: string
               version:
@@ -123,6 +123,7 @@ spec:
                 - releaseSpec
                 type: object
             required:
+            - siteUrl
             - version
             type: object
           status:

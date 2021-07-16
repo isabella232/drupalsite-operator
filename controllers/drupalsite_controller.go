@@ -56,8 +56,6 @@ const (
 )
 
 var (
-	// DefaultDomain is used in the Route's Host field
-	DefaultDomain string
 	// SiteBuilderImage refers to the sitebuilder image name
 	SiteBuilderImage string
 	// NginxImage refers to the nginx image name
@@ -371,7 +369,6 @@ func (r *DrupalSiteReconciler) initEnv() {
 		log.Error(err, "Invalid configuration: can't parse build resources")
 		os.Exit(1)
 	}
-	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
 }
 
 // isInstallJobCompleted checks if the drush job is successfully completed
@@ -463,13 +460,6 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		log.Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
-	}
-	if drp.Spec.SiteURL == "" {
-		if drp.Spec.MainSite {
-			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
-		} else {
-			drp.Spec.SiteURL = drp.Name + "-" + drp.Namespace + "." + DefaultDomain
-		}
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
 		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
