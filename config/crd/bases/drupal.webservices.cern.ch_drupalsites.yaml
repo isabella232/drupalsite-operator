@@ -78,7 +78,7 @@ spec:
                       availability requirements.  The default value is "standard".
                     enum:
                     - critical
-                    - eco
+                    - test
                     - standard
                     type: string
                   webDAVPassword:

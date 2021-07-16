@@ -25,7 +25,7 @@ import (
 const (
 	QoSStandard  QoSClass      = "standard"
 	QoSCritical  QoSClass      = "critical"
-	QoSEco       QoSClass      = "eco"
+	QoSTest      QoSClass      = "test"
 	DBODStandard DatabaseClass = "standard"
 	DBODCritical DatabaseClass = "critical"
 	DBODSSD      DatabaseClass = "ssd"
@@ -81,7 +81,7 @@ type Configuration struct {
 	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
-	// +kubebuilder:validation:Enum:=critical;eco;standard
+	// +kubebuilder:validation:Enum:=critical;test;standard
 	// +kubebuilder:default=standard
 	// +optional
 	QoSClass `json:"qosClass,omitempty"`

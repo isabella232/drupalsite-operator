@@ -46,6 +46,7 @@ spec:
   configuration:
     # Name of the DrupalSite (in the same namespace) to clone from, typically the "live"/production website
     cloneFrom: "<myproductionsite>"
+    # "standard", "critical" or "test"
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "5Gi"
