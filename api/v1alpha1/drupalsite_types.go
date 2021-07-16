@@ -154,9 +154,9 @@ type ReleaseID struct {
 
 // Backup item represents information of a single velero 'Backup' object
 type Backup struct {
-	// Name represents the name of a given velero 'Backup' resource
+	// BackupName represents the name of a given velero 'Backup' resource
 	// +optional
-	Name string `json:"name,omitempty"`
+	BackupName string `json:"backupName,omitempty"`
 
 	// Date represents the created date of a given velero 'Backup' resource
 	// +optional
@@ -165,6 +165,10 @@ type Backup struct {
 	// Expires represents the expiry date of a given velero 'Backup' resource
 	// +optional
 	Expires *metav1.Time `json:"expires,omitempty"`
+
+	// DrupalSiteName represents the name of the drupalSite for the given velero 'Backup' resource
+	// +optional
+	DrupalSiteName string `json:"drupalSiteName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

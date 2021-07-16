@@ -135,19 +135,23 @@ spec:
                   description: Backup item represents information of a single velero
                     'Backup' object
                   properties:
+                    backupName:
+                      description: BackupName represents the name of a given velero
+                        'Backup' resource
+                      type: string
                     date:
                       description: Date represents the created date of a given velero
                         'Backup' resource
                       format: date-time
                       type: string
+                    drupalSiteName:
+                      description: DrupalSiteName represents the name of the drupalSite
+                        for the given velero 'Backup' resource
+                      type: string
                     expires:
                       description: Expires represents the expiry date of a given velero
                         'Backup' resource
                       format: date-time
-                      type: string
-                    name:
-                      description: Name represents the name of a given velero 'Backup'
-                        resource
                       type: string
                   type: object
                 type: array

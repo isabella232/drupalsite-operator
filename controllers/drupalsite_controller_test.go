@@ -51,7 +51,7 @@ var _ = Describe("DrupalSite controller", func() {
 		Name      = "test"
 		Namespace = "default"
 
-		veleroNamespace = "cluster-state-backup"
+		veleroNamespace = "openshift-cern-clusterstatebackup"
 		timeout         = time.Second * 30
 		duration        = time.Second * 30
 		interval        = time.Millisecond * 250
@@ -219,7 +219,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting Schedule to be created")
 				schedule := velerov1.Schedule{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: veleroNamespace}, &schedule)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -242,16 +242,20 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Not(Succeed()))
 
 				// Create a backup resource for the drupalSite
-				hash := md5.Sum([]byte(key.Namespace + "/" + key.Name))
+				hash := md5.Sum([]byte(key.Namespace))
 				backup := velerov1.Backup{
 					TypeMeta: metav1.TypeMeta{
 						APIVersion: "velero.io/v1",
 						Kind:       "Backup",
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        key.Name + "backup",
-						Namespace:   veleroNamespace,
-						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
+						Name:      key.Name + "backup",
+						Namespace: veleroNamespace,
+						Labels: map[string]string{
+							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
+							"drupal.webservices.cern.ch/project":     key.Namespace,
+							"drupal.webservices.cern.ch/drupalSite":  key.Name,
+						},
 						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
 					},
 					Status: velerov1.BackupStatus{
@@ -275,7 +279,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By checking for the Backup in the DrupalSite Status")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].Name == backup.Name
+					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].BackupName == backup.Name
 				}, timeout, interval).Should(BeTrue())
 			})
 		})
@@ -653,7 +657,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting Schedule to be created")
 				schedule := velerov1.Schedule{}
 				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: veleroNamespace}, &schedule)
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
@@ -663,16 +667,21 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Not(Succeed()))
 
 				// Create a backup resource for the drupalSite
-				hash := md5.Sum([]byte(key.Namespace + "/" + key.Name))
+				hash := md5.Sum([]byte(key.Namespace))
 				backup := velerov1.Backup{
 					TypeMeta: metav1.TypeMeta{
 						APIVersion: "velero.io/v1",
 						Kind:       "Backup",
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:        key.Name + "backup",
-						Namespace:   veleroNamespace,
-						Labels:      map[string]string{"drupal.webservices.cern.ch/drupalSite": hex.EncodeToString(hash[:])},
+						Name:      key.Name + "backup",
+						Namespace: veleroNamespace,
+
+						Labels: map[string]string{
+							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
+							"drupal.webservices.cern.ch/project":     key.Namespace,
+							"drupal.webservices.cern.ch/drupalSite":  key.Name,
+						},
 						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
 					},
 					Status: velerov1.BackupStatus{
@@ -696,7 +705,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By checking for the Backup in the DrupalSite Status")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].Name == backup.Name
+					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].BackupName == backup.Name
 				}, timeout, interval).Should(BeTrue())
 			})
 		})

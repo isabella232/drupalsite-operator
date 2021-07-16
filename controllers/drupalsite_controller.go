@@ -22,7 +22,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -55,7 +54,7 @@ const (
 	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName  = "oidc-client-secret"
 	// veleroNamespace refers to the namespace of the velero server to create backups
-	veleroNamespace = "cluster-state-backup"
+	veleroNamespace = "openshift-cern-clusterstatebackup"
 )
 
 var (
@@ -107,30 +106,29 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&velerov1.Schedule{}).
 		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
 			func(a client.Object) []reconcile.Request {
 				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
-				annotation, bool := a.GetAnnotations()["drupal.webservices.cern.ch/drupalSite"]
+				projectName, bool := a.GetLabels()["drupal.webservices.cern.ch/project"]
 				if bool {
-					backupAnnotation := strings.Split(annotation, "/")
-					if len(backupAnnotation) == 2 {
-						drupalSiteName := backupAnnotation[1]
-						drupalSiteNamespace := backupAnnotation[0]
-						drupalSite := &webservicesv1a1.DrupalSite{}
-						// Fetch the Drupalsite with the namespace & name fetched from the backup annotation
-						if err := mgr.GetClient().Get(context.TODO(), types.NamespacedName{Name: drupalSiteName, Namespace: drupalSiteNamespace}, drupalSite); err != nil {
-							if k8sapierrors.IsNotFound(err) {
-								log.Info("Drupalsite with the given name not found in the namespace")
-							} else {
-								log.Error(err, "Couldn't query drupalsites in the namespace")
-							}
-							return []reconcile.Request{}
-						}
-						requests := make([]reconcile.Request, 1)
-						requests[0].Name = drupalSite.Name
-						requests[0].Namespace = drupalSite.Namespace
-						return requests
+					drupalSiteNamespace := projectName
+					// Fetch all the Drupalsites in the given namespace
+					drupalSiteList := webservicesv1a1.DrupalSiteList{}
+					options := client.ListOptions{
+						Namespace: drupalSiteNamespace,
 					}
+					err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
+					if err != nil {
+						log.Error(err, "Couldn't query drupalsites in the namespace")
+						return []reconcile.Request{}
+					}
+					requests := make([]reconcile.Request, len(drupalSiteList.Items))
+					for i, drupalSite := range drupalSiteList.Items {
+						requests[i].Name = drupalSite.Name
+						requests[i].Namespace = drupalSite.Namespace
+					}
+					return requests
 				}
 				return []reconcile.Request{}
 			}),
