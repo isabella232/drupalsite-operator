@@ -47,14 +47,18 @@ spec:
                 properties:
                   cloneFrom:
                     description: CloneFrom initializes this environment by cloning
-                      the specified DrupalSite (usually production), instead of installing
-                      an empty CERN-themed website. Immutable.
+                      the specified DrupalSite (usually the "live" site), instead
+                      of installing an empty CERN-themed website. Immutable.
                     type: string
                   databaseClass:
                     default: standard
                     description: DatabaseClass specifies the kind of database that
                       the website needs, among those supported by the cluster. The
                       default value is "standard".
+                    enum:
+                    - critical
+                    - ssd
+                    - standard
                     type: string
                   diskSize:
                     default: 2000Mi
@@ -83,12 +87,6 @@ spec:
                       isn't given. Changing this field updates the password.
                     type: string
                 type: object
-              mainSite:
-                default: true
-                description: MainSite specifies that this DrupalSite is the "live"
-                  website of this project, meaning that every other DrupalSite in
-                  the project is a testing environment
-                type: boolean
               publish:
                 default: true
                 description: Publish toggles the site's visibility to the world, ie

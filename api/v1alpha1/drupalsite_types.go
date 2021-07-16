@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	QoSStandard      QoSClass      = "standard"
-	DBODStandard     DatabaseClass = "standard"
-	DBODSSD          DatabaseClass = "ssd"
-	CloneFromNothing CloneFrom     = "__nothing__"
+	QoSStandard  QoSClass      = "standard"
+	QoSCritical  QoSClass      = "critical"
+	QoSEco       QoSClass      = "eco"
+	DBODStandard DatabaseClass = "standard"
+	DBODCritical DatabaseClass = "critical"
+	DBODSSD      DatabaseClass = "ssd"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
@@ -35,11 +37,6 @@ type DrupalSiteSpec struct {
 	// +kubebuilder:default=true
 	// +optional
 	Publish bool `json:"publish"`
-
-	// MainSite specifies that this DrupalSite is the "live" website of this project, meaning that every other DrupalSite in the project is a testing environment
-	// +kubebuilder:default=true
-	// +optional
-	MainSite bool `json:"mainSite"`
 
 	// SiteURL is the URL where the site should be made available.
 	// Recommended to set `<environmentName>-<projectname>.web.cern.ch`
@@ -90,11 +87,12 @@ type Configuration struct {
 	QoSClass `json:"qosClass,omitempty"`
 
 	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
+	// +kubebuilder:validation:Enum:=critical;ssd;standard
 	// +kubebuilder:default=standard
 	// +optional
 	DatabaseClass `json:"databaseClass,omitempty"`
 
-	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
+	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually the "live" site),
 	// instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional

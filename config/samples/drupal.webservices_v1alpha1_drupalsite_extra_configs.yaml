@@ -1,9 +1,10 @@
 apiVersion: drupal.webservices.cern.ch/v1alpha1
 kind: DrupalSite
 metadata:
-  name: drupalsite-advanced
+  name: drupalsite-extraconfig
 spec:
   publish: false
+  siteUrl: "drupalsite-extraconfig.webtest.cern.ch"
   version:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.07.08T08-16-45Z"
@@ -12,4 +13,3 @@ spec:
     qosClass: "standard"
     databaseClass: "test"
     diskSize: "1Gi"
-  mainSite: true

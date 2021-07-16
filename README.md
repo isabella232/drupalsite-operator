@@ -35,8 +35,6 @@ metadata:
 spec:
   # Create an ingress route?
   publish: true
-  # Is this the main/production site of the project? (all other sites in the same project considered extra environments for dev/test
-  mainSite: true
   # URL to request in the route.
 	# Recommended to set `<environmentName>-<projectname>.web.cern.ch`
   # or `<projectname>.web.cern.ch` if this is the "live" site
@@ -46,7 +44,7 @@ spec:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   configuration:
-    # Name of the DrupalSite (in the same namespace) to clone from. Defaults to the main/production website.
+    # Name of the DrupalSite (in the same namespace) to clone from, typically the "live"/production website
     cloneFrom: "<myproductionsite>"
     qosClass: "standard"
     databaseClass: "standard"
