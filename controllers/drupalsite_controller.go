@@ -106,17 +106,16 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
-		Owns(&velerov1.Schedule{}).
 		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {
 				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
-				projectName, bool := a.GetLabels()["drupal.webservices.cern.ch/project"]
-				if bool {
-					drupalSiteNamespace := projectName
+				projectName, exists := a.GetLabels()["drupal.webservices.cern.ch/project"]
+				if exists {
 					// Fetch all the Drupalsites in the given namespace
 					drupalSiteList := webservicesv1a1.DrupalSiteList{}
 					options := client.ListOptions{
-						Namespace: drupalSiteNamespace,
+						Namespace: projectName,
 					}
 					err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
 					if err != nil {

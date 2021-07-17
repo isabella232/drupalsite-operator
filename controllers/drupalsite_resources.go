@@ -208,16 +208,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		}
 	}
 
-	// 5. Backup schedule
+	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
 
-	if drp.ConditionTrue("Initialized") && drp.ConditionTrue("Ready") {
-		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
-		}
+	if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 	}
-
-	// 6. Tekton RBAC
-
 	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
 	}
@@ -495,8 +490,8 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 }
 
 func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: veleroNamespace}}
-	if err := r.Get(ctx, types.NamespacedName{Name: schedule.Name, Namespace: schedule.Namespace}, schedule); err != nil {
+	schedule := &velerov1.Schedule{}
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: veleroNamespace}, schedule); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
@@ -510,17 +505,16 @@ func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservi
 	return nil
 }
 
-func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, transientErr reconcileError) {
+func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
 	backupList := velerov1.BackupList{}
+	backups = make([]velerov1.Backup, 0)
 	hash := md5.Sum([]byte(d.Namespace))
-
-	completedBackupsList := []velerov1.Backup{}
-
 	backupLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:])},
 	})
 	if err != nil {
-		return completedBackupsList, newApplicationError(err, ErrFunctionDomain)
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+		return
 	}
 	options := client.ListOptions{
 		LabelSelector: backupLabels,
@@ -529,17 +523,17 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	err = r.List(ctx, &backupList, &options)
 	switch {
 	case err != nil:
-		return completedBackupsList, newApplicationError(err, ErrClientK8s)
+		reconcileErr = newApplicationError(err, ErrClientK8s)
 	case len(backupList.Items) == 0:
-		log.Info("No backup found with given labels " + backupLabels.String())
-		return completedBackupsList, nil
-	}
-	for i := range backupList.Items {
-		if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
-			completedBackupsList = append(completedBackupsList, backupList.Items[i])
+		log.V(5).Info("No backup found with given labels " + backupLabels.String())
+	default:
+		for i := range backupList.Items {
+			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
+				backups = append(backups, backupList.Items[i])
+			}
 		}
 	}
-	return completedBackupsList, nil
+	return
 }
 
 // labelsForDrupalSite returns the labels for selecting the resources
@@ -1301,13 +1295,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 	return nil
 }
 
-// scheduledBackupsForDrupalSite returns a velero Schedule object thats creates scheudled backups
+// scheduledBackupsForDrupalSite returns a velero Schedule object that creates scheduled backups
 func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservicesv1a1.DrupalSite) error {
 	// Do not add owner references here. As this object is created in a different namespace. Instead the deletion
 	// of this object is handled manually in the 'cleanupDrupalSite' function
-
-	ls := labelsForDrupalSite(d.Name)
-
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
 	}
@@ -1316,17 +1307,16 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 	}
 
 	hash := md5.Sum([]byte(d.Namespace))
-	// These lables need to be converted into annotations, as annotations support longer values.
+	currentobject.Labels["drupal.webservices.cern.ch/projectHash"] = hex.EncodeToString(hash[:])
+	// These labels need to be removed, as annotations support longer values.
 	// But this can be done only after upgrading velero to 1.5 or higher which supports propagating annotations
 	// from schedules to the backups.
-	ls["drupal.webservices.cern.ch/projectHash"] = hex.EncodeToString(hash[:])
-	ls["drupal.webservices.cern.ch/project"] = d.Namespace
-	ls["drupal.webservices.cern.ch/drupalSite"] = d.Name
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
+	// ref: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/457
+	currentobject.Labels["drupal.webservices.cern.ch/project"] = d.Namespace
+	currentobject.Labels["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
-	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Namespace + "/" + d.Name
+	currentobject.Annotations["drupal.webservices.cern.ch/project"] = d.Namespace
+	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
 	currentobject.Spec = velerov1.ScheduleSpec{
 		// Schedule backup at 3AM every day
