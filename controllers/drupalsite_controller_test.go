@@ -79,7 +79,6 @@ var _ = Describe("DrupalSite controller", func() {
 				Namespace: key.Namespace,
 			},
 			Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-				Publish: true,
 				Version: drupalwebservicesv1alpha1.Version{
 					Name:        "v8.9-1",
 					ReleaseSpec: "stable",
@@ -226,23 +225,11 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to be created since publish is true")
+				By("Expecting Route to be created")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Switch "publish: false"
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Spec.Publish = false
-					return k8sClient.Update(ctx, &cr)
-				}, timeout, interval).Should(Succeed())
-
-				By("Expecting Route to be removed after switching publish to false.")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-				}, timeout, interval).Should(Not(Succeed()))
 
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
@@ -464,16 +451,15 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Route
-				// Since we switch the publish field to 'false' in the last test case, there shouldn't be a route that exists
 				By("Expecting Route recreated")
 				Eventually(func() error {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return k8sClient.Delete(ctx, &route)
-				}, timeout, interval).Should(Not(Succeed()))
+				}, timeout, interval).Should(Succeed())
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(Not(ContainElement(expectedOwnerReference)))
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
 	})
@@ -511,7 +497,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
@@ -665,10 +650,10 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to not be created since publish is false")
+				By("Expecting Route to exist")
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-				}, timeout, interval).Should(Not(Succeed()))
+				}, timeout, interval).Should(Succeed())
 
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
@@ -841,7 +826,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
@@ -885,7 +869,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: true,
 						Version: drupalwebservicesv1alpha1.Version{
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
@@ -1014,23 +997,11 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to be created since publish is true")
+				By("Expecting Route to be created")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
 					return route.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Switch "publish: false"
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					cr.Spec.Publish = false
-					return k8sClient.Update(ctx, &cr)
-				}, timeout, interval).Should(Succeed())
-
-				By("Expecting Route to be removed after switching publish to false.")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-				}, timeout, interval).Should(Not(Succeed()))
 
 				By("Expecting to delete successfully")
 				Eventually(func() error {
@@ -1053,7 +1024,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
@@ -1109,7 +1079,6 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: key.Namespace,
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
-						Publish: false,
 						Version: drupalwebservicesv1alpha1.Version{
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",

@@ -33,8 +33,6 @@ kind: DrupalSite
 metadata:
   name: drupalsite-sample
 spec:
-  # Create an ingress route?
-  publish: true
   # URL to request in the route.
 	# Recommended to set `<environmentName>-<projectname>.web.cern.ch`
   # or `<projectname>.web.cern.ch` if this is the "live" site

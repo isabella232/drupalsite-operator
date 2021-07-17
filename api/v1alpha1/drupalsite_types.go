@@ -33,11 +33,6 @@ const (
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true". Set to false if you want to quickly cut all access to the site.
-	// +kubebuilder:default=true
-	// +optional
-	Publish bool `json:"publish"`
-
 	// SiteURL is the URL where the site should be made available.
 	// Recommended to set `<environmentName>-<projectname>.web.cern.ch`
 	// or `<projectname>.web.cern.ch` if this is the "live" site

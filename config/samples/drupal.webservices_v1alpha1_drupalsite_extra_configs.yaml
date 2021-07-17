@@ -3,7 +3,6 @@ kind: DrupalSite
 metadata:
   name: drupalsite-extraconfig
 spec:
-  publish: false
   siteUrl: "drupalsite-extraconfig.webtest.cern.ch"
   version:
     name: "v8.9-1"

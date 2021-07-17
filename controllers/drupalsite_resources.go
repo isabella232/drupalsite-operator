@@ -186,7 +186,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Initialized") && drp.Spec.Publish {
+	if drp.ConditionTrue("Initialized") {
 		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
 		}
