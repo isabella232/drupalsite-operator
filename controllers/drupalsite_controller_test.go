@@ -85,8 +85,8 @@ var _ = Describe("DrupalSite controller", func() {
 				},
 				Configuration: drupalwebservicesv1alpha1.Configuration{
 					DiskSize:      "10Gi",
-					QoSClass:      "standard",
-					DatabaseClass: "test",
+					QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
+					DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
 				},
 				SiteURL: dummySiteUrl,
 			},
@@ -503,8 +503,8 @@ var _ = Describe("DrupalSite controller", func() {
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							DiskSize:               "10Gi",
-							QoSClass:               "standard",
-							DatabaseClass:          "test",
+							QoSClass:               drupalwebservicesv1alpha1.QoSStandard,
+							DatabaseClass:          drupalwebservicesv1alpha1.DBODStandard,
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 						SiteURL: dummySiteUrl,
@@ -832,8 +832,8 @@ var _ = Describe("DrupalSite controller", func() {
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							DiskSize:               "10Gi",
-							QoSClass:               "standard",
-							DatabaseClass:          "test",
+							QoSClass:               drupalwebservicesv1alpha1.QoSStandard,
+							DatabaseClass:          drupalwebservicesv1alpha1.DBODStandard,
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
 						SiteURL: dummySiteUrl,
@@ -898,10 +898,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				By("Expecting the default configuration values to be set")
 				Eventually(func() bool {
-					return string(cr.Spec.Configuration.QoSClass) == "standard"
+					return string(cr.Spec.Configuration.QoSClass) == string(drupalwebservicesv1alpha1.QoSStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
-					return string(cr.Spec.Configuration.DatabaseClass) == "standard"
+					return string(cr.Spec.Configuration.DatabaseClass) == string(drupalwebservicesv1alpha1.DBODStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
@@ -1029,7 +1029,7 @@ var _ = Describe("DrupalSite controller", func() {
 							ReleaseSpec: "stable",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
-							DatabaseClass: "test",
+							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
 						},
 						SiteURL: dummySiteUrl,
 					},
@@ -1049,10 +1049,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				By("Expecting the default configuration values to be set")
 				Eventually(func() bool {
-					return string(cr.Spec.Configuration.QoSClass) == "standard"
+					return string(cr.Spec.Configuration.QoSClass) == string(drupalwebservicesv1alpha1.QoSStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
-					return string(cr.Spec.Configuration.DatabaseClass) == "test"
+					return string(cr.Spec.Configuration.DatabaseClass) == string(drupalwebservicesv1alpha1.DBODStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
@@ -1084,7 +1084,7 @@ var _ = Describe("DrupalSite controller", func() {
 							ReleaseSpec: "stable",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
-							QoSClass: "test",
+							QoSClass: "randomval",
 						},
 						SiteURL: dummySiteUrl,
 					},
