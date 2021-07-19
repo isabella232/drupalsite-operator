@@ -82,6 +82,13 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	flag.Parse()
 
+	var err error
+	controllers.BuildResources, err = controllers.ResourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
+	if err != nil {
+		setupLog.Error(err, "Invalid configuration: can't parse build resources")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,

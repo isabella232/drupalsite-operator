@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -91,7 +90,6 @@ type DrupalSiteReconciler struct {
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.initEnv()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
 		Owns(&appsv1.Deployment{}).
@@ -347,29 +345,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // business logic
-
-func (r *DrupalSiteReconciler) initEnv() {
-	log := r.Log
-	log.Info("Initializing environment")
-
-	requiredArgs := []string{"sitebuilder-image", "nginx-image"}
-
-	givenArgs := make(map[string]bool)
-	flag.Visit(func(f *flag.Flag) { givenArgs[f.Name] = true })
-	for _, req := range requiredArgs {
-		if !givenArgs[req] {
-			log.Error(nil, "Missing required commandline argument", "commandline argument", req)
-			os.Exit(2)
-		}
-	}
-
-	var err error
-	BuildResources, err = resourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
-	if err != nil {
-		log.Error(err, "Invalid configuration: can't parse build resources")
-		os.Exit(1)
-	}
-}
 
 // isInstallJobCompleted checks if the drush job is successfully completed
 func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
