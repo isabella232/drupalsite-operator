@@ -74,7 +74,7 @@ func main() {
 	flag.StringVar(&controllers.SiteBuilderImage, "sitebuilder-image", "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder", "The sitebuilder source image name.")
 	flag.StringVar(&controllers.NginxImage, "nginx-image", "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx", "The nginx source image name.")
 	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
-	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "", "The namespace of the Velero server to create backups")
+	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
 	opts := zap.Options{
 		Development: true,
 	}
