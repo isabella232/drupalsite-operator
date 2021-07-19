@@ -53,8 +53,6 @@ const (
 	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
 	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
 	oidcSecretName  = "oidc-client-secret"
-	// veleroNamespace refers to the namespace of the velero server to create backups
-	veleroNamespace = "openshift-cern-clusterstatebackup"
 )
 
 var (
@@ -66,6 +64,8 @@ var (
 	NginxImage string
 	// SMTPHost used by Drupal server pods to send emails
 	SMTPHost string
+	// VeleroNamespace refers to the namespace of the velero server to create backups
+	VeleroNamespace string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object

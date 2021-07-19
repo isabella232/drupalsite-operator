@@ -51,7 +51,7 @@ var _ = Describe("DrupalSite controller", func() {
 		Name      = "test"
 		Namespace = "default"
 
-		veleroNamespace = "openshift-cern-clusterstatebackup"
+		veleroNamespace = "openshift-cern-drupalbackups"
 		timeout         = time.Second * 30
 		duration        = time.Second * 30
 		interval        = time.Millisecond * 250

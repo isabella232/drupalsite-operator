@@ -415,7 +415,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "backup_schedule":
-		schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Namespace + "-" + d.Name, Namespace: veleroNamespace}}
+		schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, schedule, func() error {
 			return scheduledBackupsForDrupalSite(schedule, d)
 		})
@@ -491,7 +491,7 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 
 func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	schedule := &velerov1.Schedule{}
-	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: veleroNamespace}, schedule); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
@@ -518,7 +518,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	}
 	options := client.ListOptions{
 		LabelSelector: backupLabels,
-		Namespace:     veleroNamespace,
+		Namespace:     VeleroNamespace,
 	}
 	err = r.List(ctx, &backupList, &options)
 	switch {

@@ -76,6 +76,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	NginxImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
+	VeleroNamespace = "openshift-cern-drupalbackups"
 	os.Setenv("DEFAULT_DOMAIN", "webtest.cern.ch")
 
 	By("bootstrapping test environment")
