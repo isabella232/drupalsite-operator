@@ -118,6 +118,20 @@ rules:
   - oidcreturnuris
   verbs:
   - '*'
+- apiGroups:
+  - velero.io
+  resources:
+  - backups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - velero.io
+  resources:
+  - schedules
+  verbs:
+  - '*'
 ---
 apiVersion: v1
 kind: ServiceAccount

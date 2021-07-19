@@ -106,6 +106,20 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - velero.io
+  resources:
+  - backups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - velero.io
+  resources:
+  - schedules
+  verbs:
+  - '*'
+- apiGroups:
   - webservices.cern.ch
   resources:
   - oidcreturnuris
