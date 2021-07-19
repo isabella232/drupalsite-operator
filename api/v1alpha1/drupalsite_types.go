@@ -134,6 +134,10 @@ type DrupalSiteStatus struct {
 	// ServingPodImage reports the complete image name of the PHP-FPM container that is being used in the deployment.
 	// +optional
 	ServingPodImage string `json:"servingPodImage,omitempty"`
+
+	// AvailableBackups lists all the velero 'Backup' objects created for the current DrupalSite
+	// +optional
+	AvailableBackups []Backup `json:"availableBackups,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
@@ -146,6 +150,25 @@ type ReleaseID struct {
 	// +optional
 	// +kubebuilder:validation:MinLength=1
 	Failsafe string `json:"failsafe,omitempty"`
+}
+
+// Backup item represents information of a single velero 'Backup' object
+type Backup struct {
+	// BackupName represents the name of a given velero 'Backup' resource
+	// +optional
+	BackupName string `json:"backupName,omitempty"`
+
+	// Date represents the created date of a given velero 'Backup' resource
+	// +optional
+	Date *metav1.Time `json:"date,omitempty"`
+
+	// Expires represents the expiry date of a given velero 'Backup' resource
+	// +optional
+	Expires *metav1.Time `json:"expires,omitempty"`
+
+	// DrupalSiteName represents the name of the drupalSite for the given velero 'Backup' resource
+	// +optional
+	DrupalSiteName string `json:"drupalSiteName,omitempty"`
 }
 
 // +kubebuilder:object:root=true

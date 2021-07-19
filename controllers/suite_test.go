@@ -40,6 +40,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -75,6 +76,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	NginxImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
+	VeleroNamespace = "openshift-cern-drupalbackups"
 	os.Setenv("DEFAULT_DOMAIN", "webtest.cern.ch")
 
 	By("bootstrapping test environment")
@@ -111,6 +113,9 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = authz.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = velerov1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	cfg, err := testEnv.Start()

@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path"
+	"time"
 
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
@@ -39,6 +40,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +49,8 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
 
 var (
@@ -203,6 +207,16 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
 		}
 	}
+
+	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
+
+	if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
+	}
+	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
+	}
+
 	return transientErrs
 }
 
@@ -224,6 +238,8 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 	- webdav_secret: Secret with credential for WebDAV
 	- webdav_route: Route for WebDAV
+	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
+	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -398,6 +414,28 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
+	case "backup_schedule":
+		schedule := &velerov1.Schedule{ObjectMeta: metav1.ObjectMeta{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, schedule, func() error {
+			return scheduledBackupsForDrupalSite(schedule, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", schedule.TypeMeta.Kind, "Resource.Namespace", schedule.Namespace, "Resource.Name", schedule.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "tekton_extra_perm_rbac":
+		// We only need one ClusterRoleBinding for a given project. Therefore the naming. It gets created by any of the sites in
+		// the project if it doesn't exist. We don't delete it specifically as well, it can be handled with project deletion
+		rbac := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tektoncd-extra-permissions-" + d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, rbac, func() error {
+			return clusterRoleBindingForTektonExtraPermission(rbac, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", rbac.TypeMeta.Kind, "Resource.Name", rbac.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
@@ -449,6 +487,53 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
+}
+
+func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	schedule := &velerov1.Schedule{}
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, schedule); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
+	backupList := velerov1.BackupList{}
+	backups = make([]velerov1.Backup, 0)
+	hash := md5.Sum([]byte(d.Namespace))
+	backupLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:])},
+	})
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+		return
+	}
+	options := client.ListOptions{
+		LabelSelector: backupLabels,
+		Namespace:     VeleroNamespace,
+	}
+	err = r.List(ctx, &backupList, &options)
+	switch {
+	case err != nil:
+		reconcileErr = newApplicationError(err, ErrClientK8s)
+	case len(backupList.Items) == 0:
+		log.V(5).Info("No backup found with given labels " + backupLabels.String())
+	default:
+		for i := range backupList.Items {
+			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
+				backups = append(backups, backupList.Items[i])
+			}
+		}
+	}
+	return
 }
 
 // labelsForDrupalSite returns the labels for selecting the resources
@@ -842,6 +927,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 	// Add an annotation to be able to verify what releaseID of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
 	currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] = releaseID
+	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/container"] = "php-fpm"
+	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/command"] = "[\"sh\",\"-c\", \"/operations/database-backup.sh -f database_backup.sql\"]"
+	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
 	return nil
 }
 
@@ -1207,6 +1295,71 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 	return nil
 }
 
+// scheduledBackupsForDrupalSite returns a velero Schedule object that creates scheduled backups
+func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservicesv1a1.DrupalSite) error {
+	// Do not add owner references here. As this object is created in a different namespace. Instead the deletion
+	// of this object is handled manually in the 'cleanupDrupalSite' function
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+
+	hash := md5.Sum([]byte(d.Namespace))
+	currentobject.Labels["drupal.webservices.cern.ch/projectHash"] = hex.EncodeToString(hash[:])
+	// These labels need to be removed, as annotations support longer values.
+	// But this can be done only after upgrading velero to 1.5 or higher which supports propagating annotations
+	// from schedules to the backups.
+	// ref: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/457
+	currentobject.Labels["drupal.webservices.cern.ch/project"] = d.Namespace
+	currentobject.Labels["drupal.webservices.cern.ch/drupalSite"] = d.Name
+
+	currentobject.Annotations["drupal.webservices.cern.ch/project"] = d.Namespace
+	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name
+
+	currentobject.Spec = velerov1.ScheduleSpec{
+		// Schedule backup at 3AM every day
+		Schedule: "* 3 * * *",
+		Template: velerov1.BackupSpec{
+			IncludedNamespaces: []string{d.Namespace},
+			IncludedResources:  []string{"pods"},
+			// Add label selector to pick up the right pod and the respective PVC
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app":        "drupal",
+					"drupalSite": d.Name,
+				},
+			},
+			// TTL is 7 days. The backups are deleted automatically after this duration
+			TTL: metav1.Duration{
+				Duration: 168 * time.Hour,
+			},
+		},
+		UseOwnerReferencesInBackup: pointer.BoolPtr(true),
+	}
+	return nil
+}
+
+// clusterRoleBindingForTektonExtraPermission returns a ClusterRoleBinding object thats binds the tektoncd service account
+// with the tektoncd-extra-permissions ClusterRole. This binding grants permissions to create jobs (and only that)
+func clusterRoleBindingForTektonExtraPermission(currentobject *rbacv1.ClusterRoleBinding, d *webservicesv1a1.DrupalSite) error {
+	currentobject.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     "tektoncd-extra-permissions",
+	}
+
+	currentobject.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      "tektoncd",
+			Namespace: d.Namespace,
+		},
+	}
+	return nil
+}
+
 // updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
 // If the file contents change, it rolls out a new deployment.
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
@@ -1447,4 +1600,29 @@ func checkIfSiteIsInstalled() []string {
 // cacheReload outputs the command to reload cache on the drupalSite
 func cacheReload() []string {
 	return []string{"/operations/clear-cache.sh"}
+}
+
+// backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
+// A nil argument is equivalent to an empty slice.
+func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsList []webservicesv1a1.Backup) bool {
+	if len(veleroBackupsList) != len(statusBackupsList) {
+		return true
+	}
+	for i, v := range veleroBackupsList {
+		if v.Name != statusBackupsList[i].BackupName {
+			return true
+		}
+	}
+	return false
+}
+
+// updateBackupListStatus updates the list of backups in the status of the DrupalSite
+func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1a1.Backup {
+	statusBackupsList := []webservicesv1a1.Backup{}
+	for _, v := range veleroBackupsList {
+		if value, bool := v.GetLabels()["drupal.webservices.cern.ch/drupalSite"]; bool {
+			statusBackupsList = append(statusBackupsList, webservicesv1a1.Backup{BackupName: v.Name, DrupalSiteName: value, Date: v.Status.CompletionTimestamp, Expires: v.Status.Expiration})
+		}
+	}
+	return statusBackupsList
 }

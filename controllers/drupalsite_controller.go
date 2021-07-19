@@ -29,6 +29,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -42,7 +43,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -61,6 +64,8 @@ var (
 	NginxImage string
 	// SMTPHost used by Drupal server pods to send emails
 	SMTPHost string
+	// VeleroNamespace refers to the namespace of the velero server to create backups
+	VeleroNamespace string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -101,6 +106,32 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in the project referred to by the Backup
+			func(a client.Object) []reconcile.Request {
+				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
+				projectName, exists := a.GetLabels()["drupal.webservices.cern.ch/project"]
+				if exists {
+					// Fetch all the Drupalsites in the given namespace
+					drupalSiteList := webservicesv1a1.DrupalSiteList{}
+					options := client.ListOptions{
+						Namespace: projectName,
+					}
+					err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
+					if err != nil {
+						log.Error(err, "Couldn't query drupalsites in the namespace")
+						return []reconcile.Request{}
+					}
+					requests := make([]reconcile.Request, len(drupalSiteList.Items))
+					for i, drupalSite := range drupalSiteList.Items {
+						requests[i].Name = drupalSite.Name
+						requests[i].Namespace = drupalSite.Namespace
+					}
+					return requests
+				}
+				return []reconcile.Request{}
+			}),
+		).
 		Complete(r)
 }
 
@@ -301,6 +332,17 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
+	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
+	switch {
+	case err != nil:
+		return ctrl.Result{}, err
+	case len(backupList) != 0:
+		if backupListUpdateNeeded(backupList, drupalSite.Status.AvailableBackups) {
+			drupalSite.Status.AvailableBackups = updateBackupListStatus(backupList)
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
 	// Ref https://gitlab.cern.ch/paas-tools/operators/authz-operator/-/merge_requests/76#note_4501887
 	return ctrl.Result{}, requeueFlag
@@ -399,6 +441,9 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	log.Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
+	if err := r.ensureNoSchedule(ctx, drp, log); err != nil {
+		return ctrl.Result{}, err
+	}
 	return r.updateCRorFailReconcile(ctx, log, drp)
 }
 

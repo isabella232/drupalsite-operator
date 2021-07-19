@@ -128,6 +128,33 @@ spec:
           status:
             description: DrupalSiteStatus defines the observed state of DrupalSite
             properties:
+              availableBackups:
+                description: AvailableBackups lists all the velero 'Backup' objects
+                  created for the current DrupalSite
+                items:
+                  description: Backup item represents information of a single velero
+                    'Backup' object
+                  properties:
+                    backupName:
+                      description: BackupName represents the name of a given velero
+                        'Backup' resource
+                      type: string
+                    date:
+                      description: Date represents the created date of a given velero
+                        'Backup' resource
+                      format: date-time
+                      type: string
+                    drupalSiteName:
+                      description: DrupalSiteName represents the name of the drupalSite
+                        for the given velero 'Backup' resource
+                      type: string
+                    expires:
+                      description: Expires represents the expiry date of a given velero
+                        'Backup' resource
+                      format: date-time
+                      type: string
+                  type: object
+                type: array
               conditions:
                 description: Conditions specifies different conditions based on the
                   DrupalSite status
