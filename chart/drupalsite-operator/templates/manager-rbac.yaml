@@ -132,6 +132,15 @@ rules:
   - schedules
   verbs:
   - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - create
+  - get
+  - list
+  - watch
 ---
 apiVersion: v1
 kind: ServiceAccount
