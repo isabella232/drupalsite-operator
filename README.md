@@ -33,21 +33,18 @@ kind: DrupalSite
 metadata:
   name: drupalsite-sample
 spec:
-  # Create an ingress route?
-  publish: true
-  # Is this the main/production site of the project? (all other sites in the same project considered extra environments for dev/test
-  mainSite: true
-  # Optional: URL to request in the route.
-  # If omitted, the default URL is `<spec.name>-<meta.namespace>.<operatorConfig.defaultDomain>`
-  # And for `mainSite == true`, it is simplified to `<meta.namespace>.<operatorConfig.defaultDomain>`
-  siteUrl: mysite.webtest.cern.ch
+  # URL to request in the route.
+	# Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+  # or `<projectname>.web.cern.ch` if this is the "live" site
+  siteUrl: mysite.web.cern.ch
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
     name: "v8.9-1"
     releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
   configuration:
-    # Name of the DrupalSite (in the same namespace) to clone from. Defaults to the main/production website.
+    # Name of the DrupalSite (in the same namespace) to clone from, typically the "live"/production website
     cloneFrom: "<myproductionsite>"
+    # "standard", "critical" or "test"
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "5Gi"
@@ -65,12 +62,6 @@ In our infrastructure, we deploy the operator and its CRD with 2 separate ArgoCD
 
 When deploying the Helm chart, operator configuration is exposed as Helm values.
 This reference is useful to run the operator locally.
-
-#### environment variables
-
- env var | example | description
- --- | --- | ---
-`DEFAULT_DOMAIN`  | `webtest.cern.ch`           | Route's Host field
 
 #### cmdline arguments
 

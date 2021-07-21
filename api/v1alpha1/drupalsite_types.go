@@ -23,29 +23,22 @@ import (
 )
 
 const (
-	QoSStandard      QoSClass      = "standard"
-	DBODStandard     DatabaseClass = "standard"
-	DBODSSD          DatabaseClass = "ssd"
-	CloneFromNothing CloneFrom     = "__nothing__"
+	QoSStandard  QoSClass      = "standard"
+	QoSCritical  QoSClass      = "critical"
+	QoSTest      QoSClass      = "test"
+	DBODStandard DatabaseClass = "standard"
+	DBODCritical DatabaseClass = "critical"
+	DBODSSD      DatabaseClass = "ssd"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
 type DrupalSiteSpec struct {
-	// Publish toggles the site's visibility to the world, ie whether any inbound traffic is allowed. The default value is "true". Set to false if you want to quickly cut all access to the site.
-	// +kubebuilder:default=true
-	// +optional
-	Publish bool `json:"publish"`
-
-	// MainSite specifies that this DrupalSite is the "live" website of this project, meaning that every other DrupalSite in the project is a testing environment
-	// +kubebuilder:default=true
-	// +optional
-	MainSite bool `json:"mainSite"`
-
 	// SiteURL is the URL where the site should be made available.
-	// Defaults to <name>-<projectname>.<defaultDomain>, where <defaultDomain> is typically `web.cern.ch`
+	// Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+	// or `<projectname>.web.cern.ch` if this is the "live" site
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
-	// +optional
-	SiteURL string `json:"siteUrl,omitempty"`
+	// +kubebuilder:validation:Required
+	SiteURL string `json:"siteUrl"`
 
 	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
 	// Changing this value triggers the website's update process.
@@ -83,17 +76,18 @@ type Configuration struct {
 	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
-	// +kubebuilder:validation:Enum:=critical;eco;standard
+	// +kubebuilder:validation:Enum:=critical;test;standard
 	// +kubebuilder:default=standard
 	// +optional
 	QoSClass `json:"qosClass,omitempty"`
 
 	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
+	// +kubebuilder:validation:Enum:=critical;ssd;standard
 	// +kubebuilder:default=standard
 	// +optional
 	DatabaseClass `json:"databaseClass,omitempty"`
 
-	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually production),
+	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually the "live" site),
 	// instead of installing an empty CERN-themed website.
 	// Immutable.
 	// +optional

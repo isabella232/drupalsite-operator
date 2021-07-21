@@ -118,6 +118,29 @@ rules:
   - oidcreturnuris
   verbs:
   - '*'
+- apiGroups:
+  - velero.io
+  resources:
+  - backups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - velero.io
+  resources:
+  - schedules
+  verbs:
+  - '*'
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - create
+  - get
+  - list
+  - watch
 ---
 apiVersion: v1
 kind: ServiceAccount

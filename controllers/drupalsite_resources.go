@@ -173,7 +173,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if drp.Spec.Configuration.CloneFrom == webservicesv1a1.CloneFromNothing {
+		if drp.Spec.Configuration.CloneFrom == "" {
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
@@ -186,7 +186,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 4. Ingress
 
-	if drp.ConditionTrue("Initialized") && drp.Spec.Publish {
+	if drp.ConditionTrue("Initialized") {
 		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
 		}
@@ -656,15 +656,15 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
 func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string) error {
-	nginxResources, err := resourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmexporterResources, err := resourceRequestLimit("10Mi", "1m", "15Mi", "5m")
+	phpfpmexporterResources, err := ResourceRequestLimit("10Mi", "1m", "15Mi", "5m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmResources, err := resourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
+	phpfpmResources, err := ResourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}

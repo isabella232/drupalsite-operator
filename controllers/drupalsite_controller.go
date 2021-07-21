@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -56,8 +55,6 @@ const (
 )
 
 var (
-	// DefaultDomain is used in the Route's Host field
-	DefaultDomain string
 	// SiteBuilderImage refers to the sitebuilder image name
 	SiteBuilderImage string
 	// NginxImage refers to the nginx image name
@@ -90,10 +87,12 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=dbod.cern.ch,resources=databaseclasses,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=webservices.cern.ch,resources=oidcreturnuris,verbs=*
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=*;
+// +kubebuilder:rbac:groups=velero.io,resources=backups,verbs=get;list;watch;
+// +kubebuilder:rbac:groups=velero.io,resources=schedules,verbs=*;
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.initEnv()
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
 		Owns(&appsv1.Deployment{}).
@@ -350,30 +349,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // business logic
 
-func (r *DrupalSiteReconciler) initEnv() {
-	log := r.Log
-	log.Info("Initializing environment")
-
-	requiredArgs := []string{"sitebuilder-image", "nginx-image"}
-
-	givenArgs := make(map[string]bool)
-	flag.Visit(func(f *flag.Flag) { givenArgs[f.Name] = true })
-	for _, req := range requiredArgs {
-		if !givenArgs[req] {
-			log.Error(nil, "Missing required commandline argument", "commandline argument", req)
-			os.Exit(2)
-		}
-	}
-
-	var err error
-	BuildResources, err = resourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
-	if err != nil {
-		log.Error(err, "Invalid configuration: can't parse build resources")
-		os.Exit(1)
-	}
-	DefaultDomain = getenvOrDie("DEFAULT_DOMAIN", log)
-}
-
 // isInstallJobCompleted checks if the drush job is successfully completed
 func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
@@ -464,47 +439,18 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
 	}
-	if drp.Spec.SiteURL == "" {
-		if drp.Spec.MainSite {
-			drp.Spec.SiteURL = drp.Namespace + "." + DefaultDomain
-		} else {
-			drp.Spec.SiteURL = drp.Name + "-" + drp.Namespace + "." + DefaultDomain
-		}
-	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
 		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
 	}
-	_, exists := drp.Labels["production"]
-	if drp.Spec.MainSite && !exists {
-		if len(drp.Labels) == 0 {
-			drp.Labels = map[string]string{}
-		}
-		drp.Labels["production"] = "true"
-	}
-	if !drp.Spec.MainSite && exists {
-		delete(drp.Labels, "production")
-	}
-
-	if drp.Spec.Configuration.CloneFrom == "" {
-		drupalSiteList := webservicesv1a1.DrupalSiteList{}
-		drupalSiteLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: map[string]string{"production": "true"},
-		})
-		if err != nil {
-			return false, newApplicationError(err, ErrFunctionDomain)
-		}
-		options := client.ListOptions{
-			LabelSelector: drupalSiteLabels,
-			Namespace:     drp.Namespace,
-		}
-		err = r.List(ctx, &drupalSiteList, &options)
-		if err != nil {
+	// Validate that CloneFrom is an existing DrupalSite
+	if drp.Spec.Configuration.CloneFrom != "" {
+		drupalSite := webservicesv1a1.DrupalSite{}
+		err := r.Get(ctx, types.NamespacedName{Name: string(drp.Spec.Configuration.CloneFrom), Namespace: drp.Namespace}, &drupalSite)
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return false, newApplicationError(fmt.Errorf("CloneFrom DrupalSite doesn't exist"), ErrInvalidSpec)
+		case err != nil:
 			return false, newApplicationError(err, ErrClientK8s)
-		}
-		if len(drupalSiteList.Items) != 0 && !drp.ConditionTrue("Initialized") && !drp.Spec.MainSite {
-			drp.Spec.Configuration.CloneFrom = webservicesv1a1.CloneFrom(drupalSiteList.Items[0].Name)
-		} else {
-			drp.Spec.Configuration.CloneFrom = webservicesv1a1.CloneFromNothing
 		}
 	}
 	return update, nil

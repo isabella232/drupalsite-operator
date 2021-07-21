@@ -187,7 +187,7 @@ func resourceList(memory, cpu string) (corev1.ResourceList, error) {
 }
 
 // resourceRequestLimit is a k8s API object representing the resource requests and limits given as strings
-func resourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.ResourceRequirements, error) {
+func ResourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.ResourceRequirements, error) {
 	reqs, err := resourceList(memReq, cpuReq)
 	if err != nil {
 		return corev1.ResourceRequirements{}, err
