@@ -91,8 +91,11 @@ spec:
                 description: SiteURL is the URL where the site should be made available.
                   Recommended to set `<environmentName>-<projectname>.web.cern.ch`
                   or `<projectname>.web.cern.ch` if this is the "live" site
-                pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
-                type: string
+                items:
+                  description: Url refers to where the site should be made available.
+                  pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                  type: string
+                type: array
               version:
                 description: Version refers to the version and release of the CERN
                   Drupal Distribution that will be deployed to serve this website.

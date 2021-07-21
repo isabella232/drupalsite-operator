@@ -36,9 +36,8 @@ type DrupalSiteSpec struct {
 	// SiteURL is the URL where the site should be made available.
 	// Recommended to set `<environmentName>-<projectname>.web.cern.ch`
 	// or `<projectname>.web.cern.ch` if this is the "live" site
-	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +kubebuilder:validation:Required
-	SiteURL string `json:"siteUrl"`
+	SiteURL []Url `json:"siteUrl"`
 
 	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
 	// Changing this value triggers the website's update process.
@@ -113,6 +112,10 @@ type DatabaseClass string
 
 // CloneFrom specifies the string that the CloneFrom field acts on.
 type CloneFrom string
+
+// Url refers to where the site should be made available.
+// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
+type Url string
 
 // DrupalSiteStatus defines the observed state of DrupalSite
 type DrupalSiteStatus struct {

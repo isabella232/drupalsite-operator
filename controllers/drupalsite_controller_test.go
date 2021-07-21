@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -88,7 +89,11 @@ var _ = Describe("DrupalSite controller", func() {
 					QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
 					DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
 				},
-				SiteURL: dummySiteUrl,
+				SiteURL: []drupalwebservicesv1alpha1.Url{
+					"test-1.webtest.cern.ch",
+					"test-2.webtest.cern.ch",
+					"test-3.webtest.cern.ch",
+				},
 			},
 		}
 	})
@@ -225,11 +230,13 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to be created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				By("Expecting Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
 
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
@@ -452,14 +459,16 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check Route
 				By("Expecting Route recreated")
-				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-					return k8sClient.Delete(ctx, &route)
-				}, timeout, interval).Should(Succeed())
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() error {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						return k8sClient.Delete(ctx, &route)
+					}, timeout, interval).Should(Succeed())
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
 			})
 		})
 	})
@@ -507,7 +516,7 @@ var _ = Describe("DrupalSite controller", func() {
 							DatabaseClass:          drupalwebservicesv1alpha1.DBODStandard,
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
-						SiteURL: dummySiteUrl,
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
 
@@ -650,10 +659,13 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to exist")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-				}, timeout, interval).Should(Succeed())
+				By("Expecting Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
 
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
@@ -836,7 +848,7 @@ var _ = Describe("DrupalSite controller", func() {
 							DatabaseClass:          drupalwebservicesv1alpha1.DBODStandard,
 							ExtraConfigurationRepo: "https://gitlab.cern.ch/rvineetr/test-ravineet-d8-containers-buildconfig.git",
 						},
-						SiteURL: dummySiteUrl,
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
 				By("Expecting to delete successfully")
@@ -873,7 +885,7 @@ var _ = Describe("DrupalSite controller", func() {
 							Name:        "v8.9-1",
 							ReleaseSpec: "stable",
 						},
-						SiteURL: dummySiteUrl,
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
 
@@ -997,11 +1009,13 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Route
-				By("Expecting Route to be created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &route)
-					return route.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				By("Expecting Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
 
 				By("Expecting to delete successfully")
 				Eventually(func() error {
@@ -1031,7 +1045,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
 						},
-						SiteURL: dummySiteUrl,
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
 
@@ -1086,7 +1100,7 @@ var _ = Describe("DrupalSite controller", func() {
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							QoSClass: "randomval",
 						},
-						SiteURL: dummySiteUrl,
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
 
