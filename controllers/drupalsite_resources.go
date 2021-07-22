@@ -194,13 +194,25 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	// 4. Ingress
 
 	if drp.ConditionTrue("Initialized") {
-		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
-		}
+		// each function below ensures 1 route per entry in `spec.siteUrl[]`. This is understandably part of the job of "ensuring resource X".
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
+		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
+		}
 		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
+		}
+
+		// each function below removes any unwanted routes
+		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "drupal", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
+		}
+		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "webdav", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
+		}
+		if transientErr := r.ensureNoExtraOidcReturnUriResource(ctx, drp, "drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
 	} else {
@@ -327,33 +339,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "route":
-		existingRoutes := &routev1.RouteList{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		ls["route"] = "drupal"
-		routeLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: ls,
-		})
-		if err != nil {
-			return newApplicationError(err, ErrFunctionDomain)
-		}
-		options := client.ListOptions{
-			Namespace:     d.Namespace,
-			LabelSelector: routeLabels,
-		}
-		err = r.Client.List(context.TODO(), existingRoutes, &options)
-		if err != nil {
-			log.Error(err, "Couldn't query drupalsites in the namespace")
-			return newApplicationError(err, ErrClientK8s)
-		}
 		routeRequestList := d.Spec.SiteURL
 		for _, req := range routeRequestList {
-			for index, route := range existingRoutes.Items {
-				if string(req) == route.Spec.Host {
-					existingRoutes.Items = append(existingRoutes.Items[:index], existingRoutes.Items[index+1:]...)
-				}
-			}
-			route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + strings.Split(string(req), ".")[0], Namespace: d.Namespace}}
+			hash := md5.Sum([]byte(req))
+			route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
 				return routeForDrupalSite(route, d, string(req))
 			})
@@ -362,44 +351,12 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 				return newApplicationError(err, ErrClientK8s)
 			}
 		}
-		for _, route := range existingRoutes.Items {
-			if transientErr := r.ensureNoRoute(ctx, d, route.Spec.Host, log); transientErr != nil {
-				return transientErr
-			}
-		}
 		return nil
 	case "oidc_return_uri":
-		existingOidcReturnURIs := &authz.OidcReturnURIList{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		ls["oidcReturnURI"] = "drupal"
-		oidcReturnURILabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: ls,
-		})
-		if err != nil {
-			return newApplicationError(err, ErrFunctionDomain)
-		}
-		options := client.ListOptions{
-			Namespace:     d.Namespace,
-			LabelSelector: oidcReturnURILabels,
-		}
-		err = r.Client.List(context.TODO(), existingOidcReturnURIs, &options)
-		if err != nil {
-			log.Error(err, "Couldn't query drupalsites in the namespace")
-			return newApplicationError(err, ErrClientK8s)
-		}
 		routeRequestList := d.Spec.SiteURL
 		for _, req := range routeRequestList {
-			for index, route := range existingOidcReturnURIs.Items {
-				url, err := url.Parse(route.Spec.RedirectURI)
-				if err != nil {
-					return newApplicationError(err, ErrFunctionDomain)
-				}
-				if string(req) == url.Host {
-					existingOidcReturnURIs.Items = append(existingOidcReturnURIs.Items[:index], existingOidcReturnURIs.Items[index+1:]...)
-				}
-			}
-			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + strings.Split(string(req), ".")[0], Namespace: d.Namespace}}
+			hash := md5.Sum([]byte(req))
+			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
 				log.Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
 				return newOidcReturnURI(OidcReturnURI, d, string(req))
@@ -408,41 +365,12 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 				log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
 			}
 		}
-		for _, route := range existingOidcReturnURIs.Items {
-			url := strings.Split(route.Spec.RedirectURI, "://")[1]
-			if transientErr := r.ensureNoReturnURI(ctx, d, url, log); transientErr != nil {
-				return transientErr
-			}
-		}
 		return nil
 	case "webdav_route":
-		existingRoutes := &routev1.RouteList{}
-		ls := labelsForDrupalSite(d.Name)
-		ls["app"] = "drupal"
-		ls["route"] = "webdav"
-		routeLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-			MatchLabels: ls,
-		})
-		if err != nil {
-			return newApplicationError(err, ErrFunctionDomain)
-		}
-		options := client.ListOptions{
-			Namespace:     d.Namespace,
-			LabelSelector: routeLabels,
-		}
-		err = r.Client.List(context.TODO(), existingRoutes, &options)
-		if err != nil {
-			log.Error(err, "Couldn't query drupalsites in the namespace")
-			return newApplicationError(err, ErrClientK8s)
-		}
 		routeRequestList := d.Spec.SiteURL
 		for _, req := range routeRequestList {
-			for index, route := range existingRoutes.Items {
-				if ("webdav-" + string(req)) == route.Spec.Host {
-					existingRoutes.Items = append(existingRoutes.Items[:index], existingRoutes.Items[index+1:]...)
-				}
-			}
-			webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + strings.Split(string(req), ".")[0], Namespace: d.Namespace}}
+			hash := md5.Sum([]byte(req))
+			webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
 				log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
 				return routeForWebDAV(webdav_route, d, string(req))
@@ -450,11 +378,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
 				return newApplicationError(err, ErrClientK8s)
-			}
-		}
-		for _, route := range existingRoutes.Items {
-			if transientErr := r.ensureNoWebDAVRoute(ctx, d, strings.Split(route.Spec.Host, "webdav-")[1], log); transientErr != nil {
-				return transientErr
 			}
 		}
 		return nil
@@ -647,8 +570,88 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	return nil
 }
 
+// ensureNoExtraRouteResource uses the current SiteURL resource as reference and deletes any extra route
+func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d *webservicesv1a1.DrupalSite, label string, log logr.Logger) (transientErr reconcileError) {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	ls["route"] = label
+	existingResources := &routev1.RouteList{}
+	routeLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: ls,
+	})
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		Namespace:     d.Namespace,
+		LabelSelector: routeLabels,
+	}
+	err = r.Client.List(context.TODO(), existingResources, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query drupalsites in the namespace")
+		return newApplicationError(err, ErrClientK8s)
+	}
+	routeRequestList := d.Spec.SiteURL
+	for _, req := range routeRequestList {
+		for index, route := range existingResources.Items {
+			if string(req) == route.Spec.Host {
+				existingResources.Items = append(existingResources.Items[:index], existingResources.Items[index+1:]...)
+			}
+		}
+	}
+	for _, route := range existingResources.Items {
+		if transientErr := r.ensureNoRoute(ctx, d, route.Spec.Host, log); transientErr != nil {
+			return transientErr
+		}
+	}
+	return nil
+}
+
+// ensureNoExtraOidcReturnUriResource uses the current SiteURL resource as reference and deletes any extra oidcReturnURI
+func (r *DrupalSiteReconciler) ensureNoExtraOidcReturnUriResource(ctx context.Context, d *webservicesv1a1.DrupalSite, label string, log logr.Logger) (transientErr reconcileError) {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	ls["oidcReturnURI"] = label
+	existingResources := &authz.OidcReturnURIList{}
+	routeLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: ls,
+	})
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		Namespace:     d.Namespace,
+		LabelSelector: routeLabels,
+	}
+	err = r.Client.List(context.TODO(), existingResources, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query drupalsites in the namespace")
+		return newApplicationError(err, ErrClientK8s)
+	}
+	routeRequestList := d.Spec.SiteURL
+	for _, req := range routeRequestList {
+		for index, route := range existingResources.Items {
+			url, err := url.Parse(route.Spec.RedirectURI)
+			if err != nil {
+				return newApplicationError(err, ErrFunctionDomain)
+			}
+			if string(req) == url.Host {
+				existingResources.Items = append(existingResources.Items[:index], existingResources.Items[index+1:]...)
+			}
+		}
+	}
+	for _, route := range existingResources.Items {
+		url := strings.Split(route.Spec.RedirectURI, "://")[1]
+		if transientErr := r.ensureNoReturnURI(ctx, d, url, log); transientErr != nil {
+			return transientErr
+		}
+	}
+	return nil
+}
+
 func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
-	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + strings.Split(Url, ".")[0], Namespace: d.Namespace}}
+	hash := md5.Sum([]byte(Url))
+	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 	if err := r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
@@ -664,7 +667,8 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 }
 
 func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
-	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + strings.Split(Url, ".")[0], Namespace: d.Namespace}}
+	hash := md5.Sum([]byte(Url))
+	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 	if err := r.Get(ctx, types.NamespacedName{Name: webdav_route.Name, Namespace: webdav_route.Namespace}, webdav_route); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
@@ -680,8 +684,9 @@ func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webse
 }
 
 func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
+	hash := md5.Sum([]byte(Url))
 	oidc_return_uri := &authz.OidcReturnURI{}
-	if err := r.Get(ctx, types.NamespacedName{Name: d.Name + "-" + strings.Split(Url, ".")[0], Namespace: d.Namespace}, oidc_return_uri); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}, oidc_return_uri); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
@@ -1256,6 +1261,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
 	ls["route"] = "drupal"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
@@ -1284,6 +1290,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
 	ls["oidcReturnURI"] = "drupal"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
@@ -1326,6 +1333,7 @@ func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite,
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
 	ls["route"] = "webdav"
 	for k, v := range ls {
 		currentobject.Labels[k] = v

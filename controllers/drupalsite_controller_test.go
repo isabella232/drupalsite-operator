@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -232,8 +231,9 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Route
 				By("Expecting Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
@@ -460,12 +460,13 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Route
 				By("Expecting Route recreated")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
 					Eventually(func() error {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return k8sClient.Delete(ctx, &route)
 					}, timeout, interval).Should(Succeed())
 					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
@@ -662,7 +663,8 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						hash := md5.Sum([]byte(url))
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
@@ -1012,7 +1014,8 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + strings.Split(string(url), ".")[0], Namespace: key.Namespace}, &route)
+						hash := md5.Sum([]byte(url))
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
