@@ -9,5 +9,5 @@ spec:
     releaseSpec: "RELEASE-2021.07.08T08-16-45Z"
   configuration:
     qosClass: "standard"
-    databaseClass: "test"
+    databaseClass: "standard"
     diskSize: "1Gi"

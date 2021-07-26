@@ -10,5 +10,5 @@ spec:
   configuration:
     extraConfigurationRepo: "https://gitlab.cern.ch/drupal/paas/example-drupalsite-d8-extraconfig.git"
     qosClass: "standard"
-    databaseClass: "test"
+    databaseClass: "standard"
     diskSize: "1Gi"
