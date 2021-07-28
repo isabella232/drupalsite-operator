@@ -1320,7 +1320,7 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 
 	currentobject.Spec = velerov1.ScheduleSpec{
 		// Schedule backup at 3AM every day
-		Schedule: "* 3 * * *",
+		Schedule: "0 3 * * *",
 		Template: velerov1.BackupSpec{
 			IncludedNamespaces: []string{d.Namespace},
 			IncludedResources:  []string{"pods"},
