@@ -31,6 +31,7 @@ import (
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -138,6 +139,7 @@ var _ = Describe("DrupalSite controller", func() {
 				deploy := appsv1.Deployment{}
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -228,8 +230,8 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
-				// Check Route
-				By("Expecting Route(s) to be created")
+				// Check Routes
+				By("Expecting Drupal Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
@@ -237,6 +239,38 @@ var _ = Describe("DrupalSite controller", func() {
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
+
+				By("Expecting Webdav Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						hash := md5.Sum([]byte("webdav-" + url))
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+			})
+		})
+	})
+
+	Describe("Creating a new backup resource", func() {
+		Context("for the basic drupalSite", func() {
+			It("New velero backups created for the site should reflect in the drupalSite Status", func() {
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
 
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
@@ -390,6 +424,7 @@ var _ = Describe("DrupalSite controller", func() {
 				job := batchv1.Job{}
 				deploy := appsv1.Deployment{}
 				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
 
 				// Check PHP-FPM configMap recreation
 				By("Expecting PHP_FPM configmaps recreated")
@@ -457,8 +492,8 @@ var _ = Describe("DrupalSite controller", func() {
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Check Route
-				By("Expecting Route recreated")
+				// Check Routes
+				By("Expecting Drupal Route(s) recreated")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					hash := md5.Sum([]byte(url))
 					Eventually(func() error {
@@ -470,6 +505,112 @@ var _ = Describe("DrupalSite controller", func() {
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
+
+				By("Expecting Webdav Route recreated")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte("webdav-" + url))
+					Eventually(func() error {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return k8sClient.Delete(ctx, &route)
+					}, timeout, interval).Should(Succeed())
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnUri(s) recreated")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() error {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return k8sClient.Delete(ctx, &oidcReturnUri)
+					}, timeout, interval).Should(Succeed())
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+			})
+		})
+	})
+
+	Describe("Updating siteUrl Spec", func() {
+		Context("Of the basic drupalSite", func() {
+			It("Extra routes, oidcReturnUris should be removed and siteUrl list should be ensured", func() {
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+				trueVar := true
+				expectedOwnerReference := metav1.OwnerReference{
+					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+					Kind:       "DrupalSite",
+					Name:       key.Name,
+					UID:        cr.UID,
+					Controller: &trueVar,
+				}
+				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
+
+				By("Updating the siteUrl spec")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.SiteURL = cr.Spec.SiteURL[:len(cr.Spec.SiteURL)-1]
+					cr.Spec.SiteURL = append(cr.Spec.SiteURL, "test-4.webtest.cern.ch")
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check Routes
+				By("Expecting Drupal Route created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				By("Expecting Webdav Route created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte("webdav-" + url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check deleted entries
+				By("Expecting Drupal Route deleted")
+				hash := md5.Sum([]byte("test-3.webtest.cern.ch"))
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+				}, timeout, interval).ShouldNot(Succeed())
+
+				By("Expecting Webdav Route deleted")
+				hash = md5.Sum([]byte("webdav-test-3.webtest.cern.ch"))
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+				}, timeout, interval).ShouldNot(Succeed())
+
+				By("Expecting oidcReturnURI deleted")
+				hash = md5.Sum([]byte("test-3.webtest.cern.ch"))
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+				}, timeout, interval).ShouldNot(Succeed())
 			})
 		})
 	})
@@ -556,6 +697,7 @@ var _ = Describe("DrupalSite controller", func() {
 				bc := buildv1.BuildConfig{}
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -659,8 +801,8 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
 				}, timeout, interval).Should(Succeed())
 
-				// Check Route
-				By("Expecting Route(s) to be created")
+				// Check Routes
+				By("Expecting Drupal Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					Eventually(func() []metav1.OwnerReference {
 						hash := md5.Sum([]byte(url))
@@ -669,6 +811,36 @@ var _ = Describe("DrupalSite controller", func() {
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
+				By("Expecting Webdav Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						hash := md5.Sum([]byte("webdav-" + url))
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+			})
+		})
+	})
+
+	Describe("Creating a new backup resource", func() {
+		Context("for the drupalSite with s2i source", func() {
+			It("New velero backups created for the site should reflect in the drupalSite Status", func() {
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
 				backup := velerov1.Backup{
@@ -936,6 +1108,7 @@ var _ = Describe("DrupalSite controller", func() {
 				deploy := appsv1.Deployment{}
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -1010,12 +1183,31 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
-				// Check Route
-				By("Expecting Route(s) to be created")
+				// Check Routes
+				By("Expecting Drupal Route(s) to be created")
 				for _, url := range drupalSiteObject.Spec.SiteURL {
 					Eventually(func() []metav1.OwnerReference {
 						hash := md5.Sum([]byte(url))
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				By("Expecting Webdav Route(s) to be created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					Eventually(func() []metav1.OwnerReference {
+						hash := md5.Sum([]byte("webdav-" + url))
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range drupalSiteObject.Spec.SiteURL {
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
