@@ -1129,7 +1129,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
 			Labels: ls,
 		}
-		currentobject.Spec.BackoffLimit = pointer.Int32Ptr(0)
+		currentobject.Spec.BackoffLimit = pointer.Int32Ptr(1)
 		currentobject.Spec.Template.Spec = corev1.PodSpec{
 			InitContainers: []corev1.Container{{
 				Image:           "bash",
