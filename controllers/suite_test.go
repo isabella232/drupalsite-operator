@@ -76,6 +76,8 @@ var _ = BeforeSuite(func(done Done) {
 	NginxImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 	VeleroNamespace = "openshift-cern-drupalbackups"
+	PhpFpmExporterImage = "test-phpfpmexporter"
+	WebDAVImage = "test-webdav"
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{

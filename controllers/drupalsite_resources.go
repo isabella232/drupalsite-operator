@@ -24,7 +24,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/url"
-	"os/exec"
 	"path"
 	"time"
 
@@ -52,6 +51,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+)
+
+// Const vars
+const (
+	// Variable used to define Default WebDAV login Username
+	webDAVDefaultLogin string = "admin"
 )
 
 var (
@@ -197,9 +202,6 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
-		}
 		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
@@ -208,17 +210,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra routes"))
 		}
-		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "webdav", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra webdav routes"))
-		}
 		if transientErr := r.ensureNoExtraOidcReturnUriResource(ctx, drp, "drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra OidcReturnURIs"))
 		}
 	} else {
 		for _, url := range drp.Spec.SiteURL {
-			if transientErr := r.ensureNoWebDAVRoute(ctx, drp, string(url), log); transientErr != nil {
-				transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the WebDAV Route"))
-			}
 			if transientErr := r.ensureNoRoute(ctx, drp, string(url), log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
 			}
@@ -257,7 +253,6 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
 	- webdav_secret: Secret with credential for WebDAV
-	- webdav_route: Route for WebDAV
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
@@ -362,21 +357,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
-			}
-		}
-		return nil
-	case "webdav_route":
-		routeRequestList := d.Spec.SiteURL
-		for _, req := range routeRequestList {
-			hash := md5.Sum([]byte(req))
-			webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
-				log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
-				return routeForWebDAV(webdav_route, d, string(req))
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
-				return newApplicationError(err, ErrClientK8s)
 			}
 		}
 		return nil
@@ -607,14 +587,8 @@ func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d
 		}
 	}
 	for _, route := range routesToRemove {
-		if label == "webdav" {
-			if transientErr := r.ensureNoWebDAVRoute(ctx, d, string(route), log); transientErr != nil {
-				return transientErr
-			}
-		} else {
-			if transientErr := r.ensureNoRoute(ctx, d, string(route), log); transientErr != nil {
-				return transientErr
-			}
+		if transientErr := r.ensureNoRoute(ctx, d, string(route), log); transientErr != nil {
+			return transientErr
 		}
 	}
 	return nil
@@ -683,23 +657,6 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 		}
 	}
 	if err := r.Delete(ctx, route); err != nil {
-		return newApplicationError(err, ErrClientK8s)
-	}
-	return nil
-}
-
-func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
-	hash := md5.Sum([]byte(Url[len("webdav-"):]))
-	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
-	if err := r.Get(ctx, types.NamespacedName{Name: webdav_route.Name, Namespace: webdav_route.Namespace}, webdav_route); err != nil {
-		switch {
-		case k8sapierrors.IsNotFound(err):
-			return nil
-		default:
-			return newApplicationError(err, ErrClientK8s)
-		}
-	}
-	if err := r.Delete(ctx, webdav_route); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
@@ -901,7 +858,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-
+	//TODO: Check best resource consumption
+	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -916,7 +877,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Annotations = map[string]string{}
 		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
-		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}}
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
 
 		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
 		// a wrong image built from a different build, that is left out on the node
@@ -985,6 +946,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: "webdav-secret-" + d.Name,
+						Items: []corev1.KeyToPath{
+							// Unecessary but garantees no other secrets are mounted
+							{
+								Key:  "htdigest",
+								Path: "htdigest",
+							},
+						},
 					},
 				},
 			},
@@ -1030,10 +998,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					{
 						Name:      "empty-dir",
 						MountPath: "/var/run/",
-					},
-					{
-						Name:      "webdav-volume",
-						MountPath: "/etc/nginx/webdav",
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
@@ -1139,6 +1103,39 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmexporterResources
+
+			case "webdav":
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
+				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+					ContainerPort: 8008,
+					Name:          "webdav",
+					Protocol:      "TCP",
+				}}
+				//TODO: mount password as file
+				currentobject.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "webdav-volume",
+						MountPath: "/webdav/htdigest",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].Resources = webDAVResources
 			}
 		}
 
@@ -1154,7 +1151,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
-				currentobject.Spec.Template.Spec.Containers[i].Image = "gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z"
+				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
+			case "webdav":
+				currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
 			}
 		}
 	}
@@ -1170,13 +1169,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Type = "kubernetes.io/basic-auth"
-		encryptedBasicAuthPassword, err := encryptBasicAuthPassword(d.Spec.Configuration.WebDAVPassword)
-		if err != nil {
-			return err
-		}
+		currentobject.Type = "kubernetes.io/opaque"
+		encryptedOpaquePassword := encryptBasicAuthPassword(d.Spec.Configuration.WebDAVPassword)
 		currentobject.StringData = map[string]string{
-			"password": "admin:" + encryptedBasicAuthPassword,
+			"htdigest": encryptedOpaquePassword,
 		}
 	}
 	if currentobject.Labels == nil {
@@ -1237,12 +1233,6 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 				TargetPort: intstr.FromInt(8080),
 				Name:       "nginx",
 				Port:       80,
-				Protocol:   "TCP",
-			},
-			{
-				TargetPort: intstr.FromInt(8081),
-				Name:       "webdav",
-				Port:       81,
 				Protocol:   "TCP",
 			},
 			{
@@ -1324,48 +1314,6 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 	currentobject.Spec = authz.OidcReturnURISpec{
 		RedirectURI: returnURI,
 	}
-	return nil
-}
-
-// routeForWebDAV returns a route object
-func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite, Url string) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec = routev1.RouteSpec{
-			TLS: &routev1.TLSConfig{
-				InsecureEdgeTerminationPolicy: "Redirect",
-				Termination:                   "edge",
-			},
-			To: routev1.RouteTargetReference{
-				Kind:   "Service",
-				Name:   d.Name,
-				Weight: pointer.Int32Ptr(100),
-			},
-			Port: &routev1.RoutePort{
-				TargetPort: intstr.FromInt(8081),
-			},
-		}
-	}
-
-	if currentobject.Annotations == nil {
-		currentobject.Annotations = map[string]string{}
-	}
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	ls := labelsForDrupalSite(d.Name)
-	ls["app"] = "drupal"
-	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
-	ls["route"] = "webdav"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-
-	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
-		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
-	}
-	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
-	currentobject.Spec.Host = "webdav-" + Url
 	return nil
 }
 
@@ -1833,12 +1781,11 @@ func cloneSource(filename string) []string {
 }
 
 // encryptBasicAuthPassword encrypts a password for basic authentication
-func encryptBasicAuthPassword(password string) (string, error) {
-	encryptedPassword, err := exec.Command("openssl", "passwd", "-apr1", password).Output()
-	if err != nil {
-		return "", newApplicationError(fmt.Errorf("encrypting password failed: %w", err), ErrFunctionDomain)
-	}
-	return string(encryptedPassword), nil
+// Since we are using SabreDAV, the specific format to follow: https://sabre.io/dav/authentication/#using-the-file-backend
+func encryptBasicAuthPassword(password string) string {
+	webdavHashPrefix := webDAVDefaultLogin + ":SabreDAV:"
+	hashedPassword := md5.Sum([]byte(webdavHashPrefix + password))
+	return webdavHashPrefix + hex.EncodeToString(hashedPassword[:])
 }
 
 // checkIfSiteIsInstalled outputs the command to check if a site is initialized or not
