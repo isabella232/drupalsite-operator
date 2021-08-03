@@ -493,8 +493,6 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	var jobsHistoryLimit int32 = 1
 	var jobBackoffLimit int32 = 1
 
-	addOwnerRefToObject(currentobject, asOwner(drupalsite))
-
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -507,6 +505,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 		currentobject.Labels[k] = v
 	}
 	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(drupalsite))
 		currentobject.Spec = batchbeta1.CronJobSpec{
 			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
 			Schedule: "*/30 * * * *",
