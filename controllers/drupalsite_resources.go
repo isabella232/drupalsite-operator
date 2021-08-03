@@ -193,24 +193,38 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	// 4. Ingress
 
 	if drp.ConditionTrue("Initialized") {
-		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
-		}
+		// each function below ensures 1 route per entry in `spec.siteUrl[]`. This is understandably part of the job of "ensuring resource X".
 		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
+		}
+		if transientErr := r.ensureResourceX(ctx, drp, "webdav_route", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Route"))
 		}
 		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
+
+		// each function below removes any unwanted routes
+		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "drupal", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra routes"))
+		}
+		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "webdav", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra webdav routes"))
+		}
+		if transientErr := r.ensureNoExtraOidcReturnUriResource(ctx, drp, "drupal", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra OidcReturnURIs"))
+		}
 	} else {
-		if transientErr := r.ensureNoWebDAVRoute(ctx, drp, log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the WebDAV Route"))
-		}
-		if transientErr := r.ensureNoRoute(ctx, drp, log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
-		}
-		if transientErr := r.ensureNoReturnURI(ctx, drp, log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
+		for _, url := range drp.Spec.SiteURL {
+			if transientErr := r.ensureNoWebDAVRoute(ctx, drp, string(url), log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the WebDAV Route"))
+			}
+			if transientErr := r.ensureNoRoute(ctx, drp, string(url), log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Route"))
+			}
+			if transientErr := r.ensureNoReturnURI(ctx, drp, string(url), log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the OidcReturnURI"))
+			}
 		}
 	}
 
@@ -324,34 +338,46 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "route":
-		route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
-			return routeForDrupalSite(route, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
-			return newApplicationError(err, ErrClientK8s)
+		routeRequestList := d.Spec.SiteURL
+		for _, req := range routeRequestList {
+			hash := md5.Sum([]byte(req))
+			route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
+				return routeForDrupalSite(route, d, string(req))
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
 		}
 		return nil
 	case "oidc_return_uri":
-		OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
-			log.Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
-			return newOidcReturnURI(OidcReturnURI, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+		routeRequestList := d.Spec.SiteURL
+		for _, req := range routeRequestList {
+			hash := md5.Sum([]byte(req))
+			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
+				log.Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+				return newOidcReturnURI(OidcReturnURI, d, string(req))
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+			}
 		}
 		return nil
 	case "webdav_route":
-		webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
-			log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
-			return routeForWebDAV(webdav_route, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
-			return newApplicationError(err, ErrClientK8s)
+		routeRequestList := d.Spec.SiteURL
+		for _, req := range routeRequestList {
+			hash := md5.Sum([]byte(req))
+			webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_route, func() error {
+				log.Info("Ensuring Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
+				return routeForWebDAV(webdav_route, d, string(req))
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", webdav_route.TypeMeta.Kind, "Resource.Namespace", webdav_route.Namespace, "Resource.Name", webdav_route.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
 		}
 		return nil
 	case "site_install_job":
@@ -467,8 +493,6 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	var jobsHistoryLimit int32 = 1
 	var jobBackoffLimit int32 = 1
 
-	addOwnerRefToObject(currentobject, asOwner(drupalsite))
-
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -481,6 +505,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 		currentobject.Labels[k] = v
 	}
 	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(drupalsite))
 		currentobject.Spec = batchbeta1.CronJobSpec{
 			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
 			Schedule: "*/30 * * * *",
@@ -543,8 +568,112 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	return nil
 }
 
-func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+// ensureNoExtraRouteResource uses the current SiteURL resource as reference and deletes any extra route
+func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d *webservicesv1a1.DrupalSite, label string, log logr.Logger) (transientErr reconcileError) {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	ls["route"] = label
+	existingRoutes := &routev1.RouteList{}
+	routeLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: ls,
+	})
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		Namespace:     d.Namespace,
+		LabelSelector: routeLabels,
+	}
+	err = r.Client.List(context.TODO(), existingRoutes, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query routes with the given labels")
+		return newApplicationError(err, ErrClientK8s)
+	}
+	routeRequestList := d.Spec.SiteURL
+	routesToRemove := []webservicesv1a1.Url{}
+	for _, route := range existingRoutes.Items {
+		flag := false
+		for _, req := range routeRequestList {
+			if label == "webdav" {
+				req = "webdav-" + req
+			}
+			if string(req) == route.Spec.Host {
+				flag = true
+				continue
+			}
+		}
+		if !flag {
+			routesToRemove = append(routesToRemove, webservicesv1a1.Url(route.Spec.Host))
+		}
+	}
+	for _, route := range routesToRemove {
+		if label == "webdav" {
+			if transientErr := r.ensureNoWebDAVRoute(ctx, d, string(route), log); transientErr != nil {
+				return transientErr
+			}
+		} else {
+			if transientErr := r.ensureNoRoute(ctx, d, string(route), log); transientErr != nil {
+				return transientErr
+			}
+		}
+	}
+	return nil
+}
+
+// ensureNoExtraOidcReturnUriResource uses the current SiteURL resource as reference and deletes any extra oidcReturnURI
+func (r *DrupalSiteReconciler) ensureNoExtraOidcReturnUriResource(ctx context.Context, d *webservicesv1a1.DrupalSite, label string, log logr.Logger) (transientErr reconcileError) {
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	ls["oidcReturnURI"] = label
+	existingOidcReturnUris := &authz.OidcReturnURIList{}
+	oidcReturnUriLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: ls,
+	})
+	if err != nil {
+		return newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		Namespace:     d.Namespace,
+		LabelSelector: oidcReturnUriLabels,
+	}
+	err = r.Client.List(context.TODO(), existingOidcReturnUris, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query oidcReturnUris with the given labels")
+		return newApplicationError(err, ErrClientK8s)
+	}
+	oidcReturnUriRequestList := d.Spec.SiteURL
+	oidcReturnUrisToRemove := []string{}
+	for _, route := range existingOidcReturnUris.Items {
+		flag := false
+		for _, req := range oidcReturnUriRequestList {
+			url, err := url.Parse(route.Spec.RedirectURI)
+			if err != nil {
+				return newApplicationError(err, ErrFunctionDomain)
+			}
+			if string(req) == url.Host {
+				flag = true
+				continue
+			}
+		}
+		if !flag {
+			url, err := url.Parse(route.Spec.RedirectURI)
+			if err != nil {
+				return newApplicationError(err, ErrFunctionDomain)
+			}
+			oidcReturnUrisToRemove = append(oidcReturnUrisToRemove, url.Host)
+		}
+	}
+	for _, oidcReturnURI := range oidcReturnUrisToRemove {
+		if transientErr := r.ensureNoReturnURI(ctx, d, oidcReturnURI, log); transientErr != nil {
+			return transientErr
+		}
+	}
+	return nil
+}
+
+func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
+	hash := md5.Sum([]byte(Url))
+	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 	if err := r.Get(ctx, types.NamespacedName{Name: route.Name, Namespace: route.Namespace}, route); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
@@ -559,8 +688,9 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 	return nil
 }
 
-func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
+	hash := md5.Sum([]byte(Url[len("webdav-"):]))
+	webdav_route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: "webdav-" + d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 	if err := r.Get(ctx, types.NamespacedName{Name: webdav_route.Name, Namespace: webdav_route.Namespace}, webdav_route); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
@@ -575,9 +705,10 @@ func (r *DrupalSiteReconciler) ensureNoWebDAVRoute(ctx context.Context, d *webse
 	return nil
 }
 
-func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
+	hash := md5.Sum([]byte(Url))
 	oidc_return_uri := &authz.OidcReturnURI{}
-	if err := r.Get(ctx, types.NamespacedName{Name: oidc_return_uri.Name, Namespace: oidc_return_uri.Namespace}, oidc_return_uri); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}, oidc_return_uri); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
@@ -1125,7 +1256,7 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 }
 
 // routeForDrupalSite returns a route object
-func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
+func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite, Url string) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = routev1.RouteSpec{
@@ -1152,6 +1283,8 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
+	ls["route"] = "drupal"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
@@ -1160,19 +1293,31 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
 	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
-	currentobject.Spec.Host = d.Spec.SiteURL
+	currentobject.Spec.Host = Url
 	return nil
 }
 
 // newOidcReturnURI returns a oidcReturnURI object
-func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite) error {
+func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite, Url string) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 	}
-	url, err := url.Parse(d.Spec.SiteURL)
+	url, err := url.Parse(Url)
 	if err != nil {
 		return err
 	}
+
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
+	ls["oidcReturnURI"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
 	// This will append `/openid-connect/*` to the URL, guaranteeing all subpaths of the link can be redirected
 	url.Path = path.Join(url.Path, "openid-connect")
 	returnURI := "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
@@ -1183,7 +1328,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 }
 
 // routeForWebDAV returns a route object
-func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite) error {
+func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite, Url string) error {
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = routev1.RouteSpec{
@@ -1210,6 +1355,8 @@ func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite)
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
+	// Adding a new label to be able to filter and remove extra resources when there are changes in Spec.SiteURL
+	ls["route"] = "webdav"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
@@ -1218,7 +1365,7 @@ func routeForWebDAV(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite)
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
 	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
-	currentobject.Spec.Host = "webdav-" + d.Spec.SiteURL
+	currentobject.Spec.Host = "webdav-" + Url
 	return nil
 }
 
