@@ -38,6 +38,7 @@ import (
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	batchbeta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -183,6 +184,11 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			}
 		}
 	}
+	if drp.ConditionTrue("Initialized") {
+		if transientErr := r.ensureResourceX(ctx, drp, "cronjob_crontask", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal Cronjob"))
+		}
+	}
 
 	// 4. Ingress
 
@@ -240,6 +246,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- webdav_route: Route for WebDAV
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
+	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -433,12 +440,107 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", rbac.TypeMeta.Kind, "Resource.Name", rbac.Name)
+		}
+		return nil
+	case "cronjob_crontask":
+		databaseSecret := databaseSecretName(d)
+		if len(databaseSecret) == 0 {
+			return nil
+		}
+		// This ensures we have cron function for the website, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
+		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cronjob-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cron, func() error {
+			log.Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
+			return cronjobForDrupalSite(cron, databaseSecret, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
+}
+
+func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
+	var jobsHistoryLimit int32 = 1
+	var jobBackoffLimit int32 = 1
+
+	addOwnerRefToObject(currentobject, asOwner(drupalsite))
+
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	ls := labelsForDrupalSite(drupalsite.Name)
+	ls["app"] = "cronjob"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.Spec = batchbeta1.CronJobSpec{
+			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
+			Schedule: "*/30 * * * *",
+			// The default is 3, last job should suffice
+			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
+			ConcurrencyPolicy:          batchbeta1.AllowConcurrent,
+			JobTemplate: batchbeta1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					BackoffLimit: &jobBackoffLimit,
+					Template: v1.PodTemplateSpec{
+						Spec: v1.PodSpec{
+							RestartPolicy: "Never",
+							Containers: []corev1.Container{
+								{
+									Name:            "cronjob",
+									Image:           sitebuilderImageRefToUse(drupalsite, releaseID(drupalsite)).Name,
+									ImagePullPolicy: "IfNotPresent",
+									Command: []string{
+										"sh",
+										"-c",
+										"/operations/run-cron.sh -s " + drupalsite.Name,
+									},
+									EnvFrom: []corev1.EnvFromSource{
+										{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: databaseSecret,
+												},
+											},
+										},
+										{
+											SecretRef: &corev1.SecretEnvSource{
+												LocalObjectReference: corev1.LocalObjectReference{
+													Name: oidcSecretName, //This is always set the same way
+												},
+											},
+										},
+									},
+									VolumeMounts: []corev1.VolumeMount{{
+										Name:      "drupal-directory-" + drupalsite.Name,
+										MountPath: "/drupal-data",
+									}},
+								},
+							},
+							Volumes: []corev1.Volume{
+								{
+									Name: "drupal-directory-" + drupalsite.Name,
+									VolumeSource: corev1.VolumeSource{
+										PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+											ClaimName: "pv-claim-" + drupalsite.Name,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}}
+	}
+	return nil
 }
 
 func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
