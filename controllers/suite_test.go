@@ -75,7 +75,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	NginxImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
 	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
-	VeleroNamespace = "openshift-cern-drupalbackups"
+	VeleroNamespace = "openshift-cern-drupal"
 	PhpFpmExporterImage = "test-phpfpmexporter"
 	WebDAVImage = "test-webdav"
 
