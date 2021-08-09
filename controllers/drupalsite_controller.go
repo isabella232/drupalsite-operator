@@ -94,7 +94,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=velero.io,resources=backups,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=velero.io,resources=schedules,verbs=*;
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=cronjobs,verbs=get;list;watch;create;
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=*;
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
