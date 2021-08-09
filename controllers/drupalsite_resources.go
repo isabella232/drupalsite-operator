@@ -1167,13 +1167,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 
 // secretForWebDAV returns a Secret object
 func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Type = "kubernetes.io/opaque"
-		encryptedOpaquePassword := encryptBasicAuthPassword(d.Spec.Configuration.WebDAVPassword)
-		currentobject.StringData = map[string]string{
-			"htdigest": encryptedOpaquePassword,
-		}
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Type = "kubernetes.io/opaque"
+	encryptedOpaquePassword := encryptBasicAuthPassword(d.Spec.Configuration.WebDAVPassword)
+	currentobject.StringData = map[string]string{
+		"htdigest": encryptedOpaquePassword,
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
