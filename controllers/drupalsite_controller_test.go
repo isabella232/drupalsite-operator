@@ -54,7 +54,7 @@ var _ = Describe("DrupalSite controller", func() {
 		Name      = "test"
 		Namespace = "default"
 
-		veleroNamespace = "openshift-cern-drupalbackups"
+		veleroNamespace = "openshift-cern-drupal"
 		timeout         = time.Second * 30
 		duration        = time.Second * 30
 		interval        = time.Millisecond * 250
@@ -232,18 +232,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check Routes
 				By("Expecting Drupal Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return route.ObjectMeta.OwnerReferences
-					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-				}
-
-				By("Expecting Webdav Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
-					Eventually(func() []metav1.OwnerReference {
-						hash := md5.Sum([]byte("webdav-" + url))
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -251,11 +243,12 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check OidcReturnUris
 				By("Expecting OidcReturnURIs created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
-						return route.ObjectMeta.OwnerReferences
+						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
@@ -494,21 +487,9 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check Routes
 				By("Expecting Drupal Route(s) recreated")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
 					hash := md5.Sum([]byte(url))
-					Eventually(func() error {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return k8sClient.Delete(ctx, &route)
-					}, timeout, interval).Should(Succeed())
-					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return route.ObjectMeta.OwnerReferences
-					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-				}
-
-				By("Expecting Webdav Route recreated")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
-					hash := md5.Sum([]byte("webdav-" + url))
 					Eventually(func() error {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return k8sClient.Delete(ctx, &route)
@@ -521,7 +502,8 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check OidcReturnUris
 				By("Expecting OidcReturnUri(s) recreated")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() error {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
@@ -529,7 +511,7 @@ var _ = Describe("DrupalSite controller", func() {
 					}, timeout, interval).Should(Succeed())
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
-						return route.ObjectMeta.OwnerReferences
+						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
@@ -565,18 +547,10 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				// Check Routes
-				By("Expecting Drupal Route created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				By("Expecting Drupal Route(s) created")
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
 					hash := md5.Sum([]byte(url))
-					Eventually(func() []metav1.OwnerReference {
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return route.ObjectMeta.OwnerReferences
-					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-				}
-
-				By("Expecting Webdav Route created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
-					hash := md5.Sum([]byte("webdav-" + url))
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
@@ -585,23 +559,18 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check OidcReturnUris
 				By("Expecting OidcReturnURIs created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
-						return route.ObjectMeta.OwnerReferences
+						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
 				// Check deleted entries
 				By("Expecting Drupal Route deleted")
 				hash := md5.Sum([]byte("test-3.webtest.cern.ch"))
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-				}, timeout, interval).ShouldNot(Succeed())
-
-				By("Expecting Webdav Route deleted")
-				hash = md5.Sum([]byte("webdav-test-3.webtest.cern.ch"))
 				Eventually(func() error {
 					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 				}, timeout, interval).ShouldNot(Succeed())
@@ -803,18 +772,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check Routes
 				By("Expecting Drupal Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
+					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
-						hash := md5.Sum([]byte(url))
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return route.ObjectMeta.OwnerReferences
-					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-				}
-
-				By("Expecting Webdav Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
-					Eventually(func() []metav1.OwnerReference {
-						hash := md5.Sum([]byte("webdav-" + url))
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -822,11 +783,12 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check OidcReturnUris
 				By("Expecting OidcReturnURIs created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
-						return route.ObjectMeta.OwnerReferences
+						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 			})
@@ -1185,18 +1147,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check Routes
 				By("Expecting Drupal Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
+					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
-						hash := md5.Sum([]byte(url))
-						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
-						return route.ObjectMeta.OwnerReferences
-					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-				}
-
-				By("Expecting Webdav Route(s) to be created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
-					Eventually(func() []metav1.OwnerReference {
-						hash := md5.Sum([]byte("webdav-" + url))
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
 						return route.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
@@ -1204,11 +1158,12 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check OidcReturnUris
 				By("Expecting OidcReturnURIs created")
-				for _, url := range drupalSiteObject.Spec.SiteURL {
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
 					hash := md5.Sum([]byte(url))
 					Eventually(func() []metav1.OwnerReference {
 						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
-						return route.ObjectMeta.OwnerReferences
+						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
