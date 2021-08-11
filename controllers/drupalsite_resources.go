@@ -501,7 +501,6 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 							Containers: []corev1.Container{
 								{
 									Name:            "cronjob",
-									Image:           sitebuilderImageRefToUse(drupalsite, releaseID(drupalsite)).Name,
 									ImagePullPolicy: "IfNotPresent",
 									Command: []string{
 										"sh",
@@ -544,6 +543,17 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 					},
 				},
 			}}
+	}
+
+	for i, container := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
+		switch container.Name {
+		case "cronjob":
+			if len(drupalsite.Status.Failsafe) > 0 {
+				currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(drupalsite, drupalsite.Status.Failsafe).Name
+			} else {
+				currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(drupalsite, releaseID(drupalsite)).Name
+			}
+		}
 	}
 	return nil
 }
