@@ -87,4 +87,4 @@ To run these tests locally, use `make test`
 ## Developed with [operator-sdk](https://sdk.operatorframework.io/)
 
 This project was generated with the [operator-sdk](https://sdk.operatorframework.io/)
-and has been updated to `operator-sdk-v1.3`.
+and has been updated to `operator-sdk-v1.9`.

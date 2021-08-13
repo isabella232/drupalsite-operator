@@ -12,9 +12,9 @@ require (
 	github.com/vmware-tanzu/velero v1.6.1
 	gitlab.cern.ch/drupal/paas/dbod-operator v0.0.0-20210525082629-c9e903df3b0e
 	gitlab.cern.ch/paas-tools/operators/authz-operator v0.0.0-20210512233547-21c01c7dd5e5
-	k8s.io/api v0.19.7
-	k8s.io/apimachinery v0.19.7
-	k8s.io/client-go v0.19.7
-	k8s.io/utils v0.0.0-20200912215256-4140de9c8800
-	sigs.k8s.io/controller-runtime v0.7.2
+	k8s.io/api v0.20.2
+	k8s.io/apimachinery v0.20.2
+	k8s.io/client-go v0.20.2
+	k8s.io/utils v0.0.0-20210111153108-fddb29f9d009
+	sigs.k8s.io/controller-runtime v0.8.3
 )
