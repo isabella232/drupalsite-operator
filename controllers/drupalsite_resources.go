@@ -1161,6 +1161,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] = releaseID
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/container"] = "php-fpm"
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/command"] = "[\"sh\",\"-c\", \"/operations/database-backup.sh -f database_backup.sql\"]"
+	// Since we have varying sizes of databases, the timeout needs to be large enough. Else the backups will fail.
+	// Ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/71
+	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
 	return nil
 }
