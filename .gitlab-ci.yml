@@ -1,16 +1,23 @@
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
 include:
   - project: 'paas-tools/infrastructure-ci'
     file: 'docker-images-ci-templates/DockerImages.gitlab-ci.yml'
 
 stages:
+  - test
   - build
-  - go_test
 
 variables:
   DEFAULT_DOMAIN: "webtest.cern.ch"
 
 GoTest:
-  stage: go_test
+  stage: test
   image: golang:1.15
   script:
     - make test
