@@ -1726,6 +1726,12 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 
 // addOwnerRefToObject appends the desired OwnerReference to the object
 func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
+	// If Owner already in object, we ignore
+	for _, o := range obj.GetOwnerReferences() {
+		if o.UID == ownerRef.UID {
+			return
+		}
+	}
 	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
 }
 
