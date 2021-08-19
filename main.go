@@ -25,8 +25,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
-	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
-	"gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
+	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1"
+	controllers "gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers/drupal.webservices"
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
