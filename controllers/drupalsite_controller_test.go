@@ -256,6 +256,60 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
+	Describe("Blocking and unblocking the drupalsite object", func() {
+		Context("With basic spec", func() {
+			It("Should be blocked and unblocked successfully", func() {
+				key = types.NamespacedName{
+					Name:      Name,
+					Namespace: Namespace,
+				}
+
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				namespace := corev1.Namespace{}
+
+				By("Expecting drupalSite object created")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Adding label to namespace")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace}, &namespace)
+					namespace.Labels = map[string]string{"drupal.cern.ch/user-project": "true"}
+					return k8sClient.Update(ctx, &namespace)
+				}, timeout, interval).Should(Succeed())
+
+				By("Adding annotations to namespace")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace}, &namespace)
+					namespace.Annotations = map[string]string{"blocked.webservices.cern.ch/blocked-timestamp": "2021-08-11T10:20:00+00:00", "blocked.webservices.cern.ch/reason": "Blocked due to security reason"}
+					return k8sClient.Update(ctx, &namespace)
+				}, timeout, interval).Should(Succeed())
+
+				deploy := appsv1.Deployment{}
+				By("Expecting to set deployment replicas to 0")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &deploy)
+					return *deploy.Spec.Replicas == 0
+				}, timeout, interval).Should(BeTrue())
+
+				By("Removing annotations to namespace")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace}, &namespace)
+					delete(namespace.Annotations, "blocked.webservices.cern.ch/blocked-timestamp")
+					delete(namespace.Annotations, "blocked.webservices.cern.ch/reason")
+					return k8sClient.Update(ctx, &namespace)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting to set deployment replicas to 1")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &deploy)
+					return *deploy.Spec.Replicas == 1
+				}, timeout, interval).Should(BeTrue())
+			})
+		})
+	})
+
 	Describe("Creating a new backup resource", func() {
 		Context("for the basic drupalSite", func() {
 			It("New velero backups created for the site should reflect in the drupalSite Status", func() {

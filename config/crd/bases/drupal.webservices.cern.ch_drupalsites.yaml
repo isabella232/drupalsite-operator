@@ -192,6 +192,11 @@ spec:
                   - type
                   type: object
                 type: array
+              expectedDeploymentReplicas:
+                description: ExpectedDeploymentReplicas specifies the deployment replicas
+                  for the current DrupalSite
+                format: int32
+                type: integer
               releaseID:
                 description: ReleaseID reports the actual release of CERN Drupal Distribution
                   that is being used in the deployment.

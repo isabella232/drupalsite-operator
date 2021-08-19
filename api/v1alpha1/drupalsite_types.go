@@ -135,6 +135,10 @@ type DrupalSiteStatus struct {
 	// AvailableBackups lists all the velero 'Backup' objects created for the current DrupalSite
 	// +optional
 	AvailableBackups []Backup `json:"availableBackups,omitempty"`
+
+	// ExpectedDeploymentReplicas specifies the deployment replicas for the current DrupalSite
+	// +optional
+	ExpectedDeploymentReplicas *int32 `json:"expectedDeploymentReplicas,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

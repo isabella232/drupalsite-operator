@@ -302,7 +302,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 				releaseID := releaseID(d)
 				return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID)
 			})
@@ -1165,6 +1165,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/71
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
+
+	currentobject.Spec.Replicas = d.Status.ExpectedDeploymentReplicas
+
 	return nil
 }
 
@@ -1829,4 +1832,23 @@ func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1
 		}
 	}
 	return statusBackupsList
+}
+
+// getCurrentNamespace checks for the given variable in the environment, if not exists
+func (r *DrupalSiteReconciler) getCurrentNamespace(ctx context.Context, d *webservicesv1a1.DrupalSite) (*corev1.Namespace, error) {
+	namespace := &corev1.Namespace{}
+	err := r.Get(ctx, types.NamespacedName{Name: d.Namespace}, namespace)
+	return namespace, err
+}
+
+// expectedDeploymentReplicas calculates expected replicas of deployment
+func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) *int32 {
+	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
+	_, isBlockedReasonAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/reason"]
+	if isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet {
+		return pointer.Int32Ptr(0)
+	} else if !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet {
+		return pointer.Int32Ptr(1)
+	}
+	return nil
 }
