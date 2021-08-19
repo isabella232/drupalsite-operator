@@ -95,6 +95,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=velero.io,resources=schedules,verbs=*;
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=*;
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -116,27 +117,42 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
 				projectName, exists := a.GetLabels()["drupal.webservices.cern.ch/project"]
 				if exists {
-					// Fetch all the Drupalsites in the given namespace
-					drupalSiteList := webservicesv1a1.DrupalSiteList{}
-					options := client.ListOptions{
-						Namespace: projectName,
-					}
-					err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
-					if err != nil {
-						log.Error(err, "Couldn't query drupalsites in the namespace")
-						return []reconcile.Request{}
-					}
-					requests := make([]reconcile.Request, len(drupalSiteList.Items))
-					for i, drupalSite := range drupalSiteList.Items {
-						requests[i].Name = drupalSite.Name
-						requests[i].Namespace = drupalSite.Namespace
-					}
-					return requests
+					return fetchDrupalSitesInNamespace(mgr, log, projectName)
+				}
+				return []reconcile.Request{}
+			}),
+		).
+		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in a given namespace
+			func(a client.Object) []reconcile.Request {
+				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetName())
+				_, exists := a.GetLabels()["drupal.cern.ch/user-project"]
+				if exists {
+					return fetchDrupalSitesInNamespace(mgr, log, a.GetName())
 				}
 				return []reconcile.Request{}
 			}),
 		).
 		Complete(r)
+}
+
+// fetchDrupalSitesInNamespace feteches all the Drupalsites in a given namespace
+func fetchDrupalSitesInNamespace(mgr ctrl.Manager, log logr.Logger, namespace string) []reconcile.Request {
+	drupalSiteList := webservicesv1a1.DrupalSiteList{}
+	options := client.ListOptions{
+		Namespace: namespace,
+	}
+	err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query drupalsites in the namespace")
+		return []reconcile.Request{}
+	}
+	requests := make([]reconcile.Request, len(drupalSiteList.Items))
+	for i, drupalSite := range drupalSiteList.Items {
+		requests[i].Name = drupalSite.Name
+		requests[i].Namespace = drupalSite.Namespace
+	}
+	return requests
 }
 
 func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -276,6 +292,27 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
+
+	// Expected deployment replicas
+	namespace, err := r.getCurrentNamespace(ctx, drupalSite)
+	if err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return reconcile.Result{Requeue: true}, nil
+		default:
+			return ctrl.Result{}, newApplicationError(err, ErrClientK8s)
+		}
+	}
+	deploymentReplicas := expectedDeploymentReplicas(namespace)
+	if drupalSite.Status.ExpectedDeploymentReplicas == nil {
+		drupalSite.Status.ExpectedDeploymentReplicas = expectedDeploymentReplicas(namespace)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	} else if deploymentReplicas != nil && *drupalSite.Status.ExpectedDeploymentReplicas != *deploymentReplicas {
+		drupalSite.Status.ExpectedDeploymentReplicas = expectedDeploymentReplicas(namespace)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	} else if deploymentReplicas == nil {
+		log.Info("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+	}
 
 	// Ensure all resources (server deployment is excluded here during updates)
 	if transientErrs := r.ensureResources(drupalSite, log); transientErrs != nil {
@@ -532,7 +569,7 @@ func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d 
 
 // ensureUpdatedDeployment runs the logic to do the base update for a new Drupal version
 // If it returns a reconcileError, if it's a permanent error it will set the condition reason and block retries.
-func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite) (controllerutil.OperationResult, reconcileError) {
+func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (controllerutil.OperationResult, reconcileError) {
 	// Update deployment with the new version
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
@@ -557,7 +594,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 // using the 'Failsafe' on the status and a 'CodeUpdateFailed' status is set on the CR
 func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, requeue bool, err reconcileError, errorMessage string) {
 	// Ensure the new deployment is rolledout
-	result, err := r.ensureUpdatedDeployment(ctx, d)
+	result, err := r.ensureUpdatedDeployment(ctx, d, log)
 	if err != nil {
 		return false, false, err, "%v while deploying the updated Drupal images of version"
 	}
@@ -575,7 +612,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 				// return false, true, nil, ""
 			} else {
 				err.Wrap("%v: Failed to update version " + releaseID(d))
-				rollBackErr := r.rollBackCodeUpdate(ctx, d)
+				rollBackErr := r.rollBackCodeUpdate(ctx, d, log)
 				if rollBackErr != nil {
 					return false, false, rollBackErr, "Error while rolling back version"
 				}
@@ -600,7 +637,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 		}
 	}
 	if sout != "" {
-		r.rollBackCodeUpdate(ctx, d)
+		r.rollBackCodeUpdate(ctx, d, log)
 		setConditionStatus(d, "CodeUpdateFailed", true, newApplicationError(nil, errors.New("Error clearing cache")), false)
 		return true, false, nil, ""
 	}
@@ -664,7 +701,7 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called
 // It restores the deployment's image to the value of the 'FailsafeDrupalVersion' field on the status
-func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) reconcileError {
 	// Restore the server deployment
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}

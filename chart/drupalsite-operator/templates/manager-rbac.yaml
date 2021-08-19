@@ -13,13 +13,13 @@ rules:
 - apiGroups:
   - batch
   resources:
-  - jobs
+  - cronjobs
   verbs:
   - '*'
 - apiGroups:
   - batch
   resources:
-  - cronjobs
+  - jobs
   verbs:
   - '*'
 - apiGroups:
@@ -32,6 +32,14 @@ rules:
   - build.openshift.io
   resources:
   - builds
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
   verbs:
   - get
   - list
