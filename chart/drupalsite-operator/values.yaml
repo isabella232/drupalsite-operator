@@ -18,3 +18,4 @@ resources:
 drupalsiteOperator:
   sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
   nginxImage:  "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx"
+  logLevel: 3

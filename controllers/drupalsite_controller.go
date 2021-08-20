@@ -158,7 +158,7 @@ func fetchDrupalSitesInNamespace(mgr ctrl.Manager, log logr.Logger, namespace st
 func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
-	log.Info("Reconciling request")
+	log.V(1).Info("Reconciling request")
 	var requeueFlag error
 
 	// Fetch the DrupalSite instance
@@ -169,7 +169,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("DrupalSite resource not found. Ignoring since object must be deleted")
+			log.V(3).Info("DrupalSite resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -217,7 +217,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if update {
-		log.Info("Initializing DrupalSite Spec")
+		log.V(3).Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 	if err := validateSpec(drupalSite.Spec); err != nil {
@@ -311,7 +311,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		drupalSite.Status.ExpectedDeploymentReplicas = expectedDeploymentReplicas(namespace)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if deploymentReplicas == nil {
-		log.Info("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+		log.V(1).Info("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
 	}
 
 	// Ensure all resources (server deployment is excluded here during updates)
@@ -456,7 +456,7 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
-	log.Info("Deleting DrupalSite")
+	log.V(1).Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
 	if err := r.ensureNoSchedule(ctx, drp, log); err != nil {
 		return ctrl.Result{}, err
@@ -477,7 +477,7 @@ func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 // then returns if it needs to be updated.
 func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError) {
 	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
-		log.Info("Adding finalizer")
+		log.V(3).Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
 	}
@@ -728,7 +728,7 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 func getenvOrDie(name string, log logr.Logger) string {
 	e := os.Getenv(name)
 	if e == "" {
-		log.Info(name + ": missing environment variable (unset or empty string)")
+		log.V(1).Info(name + ": missing environment variable (unset or empty string)")
 		os.Exit(1)
 	}
 	return e
