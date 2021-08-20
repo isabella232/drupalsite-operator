@@ -13,8 +13,3 @@ resources:
   limits:
     cpu: 1000m
     memory: 1500Mi
-
-# Operator-specific configuration
-drupalsiteOperator:
-  sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
-  nginxImage:  "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx"

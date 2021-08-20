@@ -21,11 +21,7 @@ spec:
       tolerations:
 {{ toYaml .Values.tolerations | indent 8 }}
       containers:
-      - args:
-        - --leader-elect
-        - --sitebuilder-image={{.Values.drupalsiteOperator.sitebuilderImage}}
-        - --nginx-image={{.Values.drupalsiteOperator.nginxImage}}
-        command:
+      - command:
         - /manager
         image: {{ .Values.image | quote }}
         imagePullPolicy: {{ .Values.imagePullPolicy | quote }}

@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	configv2 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/config/v2"
 	// +kubebuilder:scaffold:imports
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
@@ -54,6 +55,8 @@ func init() {
 	utilruntime.Must(drupalwebservicesv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(authz.AddToScheme(scheme))
 	utilruntime.Must(dbodv1a1.AddToScheme(scheme))
+	utilruntime.Must(configv2.AddToScheme(scheme))
+	utilruntime.Must(configv2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(routev1.AddToScheme(scheme))
@@ -63,20 +66,8 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&controllers.SiteBuilderImage, "sitebuilder-image", "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder", "The sitebuilder source image name.")
-	flag.StringVar(&controllers.NginxImage, "nginx-image", "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx", "The nginx source image name.")
-	flag.StringVar(&controllers.PhpFpmExporterImage, "php-fpm-exporter-image", "gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z", "The php-fpm-exporter source image name.")
-	flag.StringVar(&controllers.WebDAVImage, "webdav-image", "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.07.28T17-19-49Z", "The webdav source image name.")
-	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
-	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
+	var configFile string
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -85,20 +76,44 @@ func main() {
 	flag.Parse()
 
 	var err error
+	ctrlConfig := configv2.ProjectConfig{}
+	options := ctrl.Options{
+		Scheme:                  scheme,
+		MetricsBindAddress:      ":8080",
+		Port:                    9443,
+		HealthProbeBindAddress:  ":8081",
+		LeaderElection:          true,
+		LeaderElectionID:        "78d40201.cern.ch",
+		LeaderElectionNamespace: "openshift-cern-drupal",
+	}
+	// TODO: Set CONFIG_FILE env var through subscription
+	os.Setenv("CONFIG_FILE", "./config/manager/controller_manager_config.yaml")
+	configFile = os.Getenv("CONFIG_FILE")
+	if configFile != "" {
+		options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile).OfKind(&ctrlConfig))
+		if err != nil {
+			setupLog.Error(err, "unable to load the config file")
+			os.Exit(1)
+		}
+	} else {
+		setupLog.Error(err, "CONFIG_FILE enviroment variable is not defined")
+		os.Exit(1)
+	}
+
+	controllers.SiteBuilderImage = ctrlConfig.SiteBuilderImage
+	controllers.NginxImage = ctrlConfig.NginxImage
+	controllers.PhpFpmExporterImage = ctrlConfig.PhpFpmExporterImage
+	controllers.WebDAVImage = ctrlConfig.WebDAVImage
+	controllers.SMTPHost = ctrlConfig.SMTPHost
+	controllers.VeleroNamespace = ctrlConfig.VeleroNamespace
+
 	controllers.BuildResources, err = controllers.ResourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
 	if err != nil {
 		setupLog.Error(err, "Invalid configuration: can't parse build resources")
 		os.Exit(1)
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "78d40201.cern.ch",
-	})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)

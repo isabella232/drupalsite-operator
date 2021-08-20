@@ -16,6 +16,13 @@ resources:
   domain: cern.ch
   group: drupal.webservices
   kind: DrupalSite
-  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
+  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+  domain: cern.ch
+  group: config
+  kind: ProjectConfig
+  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/config/v2
+  version: v2
 version: "3"

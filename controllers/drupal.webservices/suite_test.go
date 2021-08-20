@@ -17,7 +17,6 @@ limitations under the License.
 package controllers
 
 import (
-	"flag"
 	"path/filepath"
 	"testing"
 
@@ -47,11 +46,6 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 var k8sClient client.Client
 var testEnv *envtest.Environment
-
-func init() {
-	flag.StringVar(&NginxImage, "sitebuilder-image", "", "The sitebuilder source image name.")
-	flag.StringVar(&SiteBuilderImage, "nginx-image", "", "The nginx source image name.")
-}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
