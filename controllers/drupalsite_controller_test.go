@@ -201,7 +201,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -531,11 +531,11 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job recreated")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return k8sClient.Delete(ctx, &job)
 				}, timeout, interval).Should(Succeed())
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -788,7 +788,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -1186,7 +1186,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush job
 				By("Expecting Drush job created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
 					return job.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
