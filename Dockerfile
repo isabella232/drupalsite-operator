@@ -27,6 +27,8 @@ FROM alpine:3.13
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
+COPY config/manager/controller_manager_config.yaml /config/manager/controller_manager_config.yaml
+
 # Pkg used for WebDAV password generation
 RUN apk add --no-cache openssl
 

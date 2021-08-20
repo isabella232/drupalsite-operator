@@ -87,7 +87,7 @@ func main() {
 		LeaderElectionNamespace: "openshift-cern-drupal",
 	}
 	// TODO: Set CONFIG_FILE env var through subscription
-	os.Setenv("CONFIG_FILE", "./config/manager/controller_manager_config.yaml")
+	os.Setenv("CONFIG_FILE", "/config/manager/controller_manager_config.yaml")
 	configFile = os.Getenv("CONFIG_FILE")
 	if configFile != "" {
 		options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile).OfKind(&ctrlConfig))
