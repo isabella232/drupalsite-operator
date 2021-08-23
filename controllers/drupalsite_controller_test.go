@@ -30,7 +30,7 @@ import (
 	"github.com/operator-framework/operator-lib/status"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
-	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1"
+	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"

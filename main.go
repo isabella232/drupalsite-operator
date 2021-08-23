@@ -25,8 +25,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
-	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1"
-	controllers "gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers/drupal.webservices"
+	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	controllers "gitlab.cern.ch/drupal/paas/drupalsite-operator/controllers"
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	configv2 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/config/v2"
 	// +kubebuilder:scaffold:imports
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
@@ -55,8 +54,6 @@ func init() {
 	utilruntime.Must(drupalwebservicesv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(authz.AddToScheme(scheme))
 	utilruntime.Must(dbodv1a1.AddToScheme(scheme))
-	utilruntime.Must(configv2.AddToScheme(scheme))
-	utilruntime.Must(configv2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(routev1.AddToScheme(scheme))
@@ -76,7 +73,7 @@ func main() {
 	flag.Parse()
 
 	var err error
-	ctrlConfig := configv2.ProjectConfig{}
+	ctrlConfig := drupalwebservicesv1alpha1.ProjectConfig{}
 	options := ctrl.Options{
 		Scheme:                  scheme,
 		MetricsBindAddress:      ":8080",
@@ -87,7 +84,7 @@ func main() {
 		LeaderElectionNamespace: "openshift-cern-drupal",
 	}
 	// TODO: Set CONFIG_FILE env var through subscription
-	os.Setenv("CONFIG_FILE", "/config/manager/controller_manager_config.yaml")
+	os.Setenv("CONFIG_FILE", "./config/manager/controller_manager_config.yaml")
 	configFile = os.Getenv("CONFIG_FILE")
 	if configFile != "" {
 		options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile).OfKind(&ctrlConfig))

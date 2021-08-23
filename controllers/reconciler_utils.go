@@ -26,7 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	buildv1 "github.com/openshift/api/build/v1"
 	"github.com/operator-framework/operator-lib/status"
-	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1"
+	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

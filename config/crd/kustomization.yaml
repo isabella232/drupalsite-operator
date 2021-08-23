@@ -3,7 +3,6 @@
 # It should be run by config/default
 resources:
 - bases/drupal.webservices.cern.ch_drupalsites.yaml
-- bases/config.cern.ch_projectconfigs.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

@@ -1,4 +1,4 @@
-apiVersion: config.cern.ch/v2
+apiVersion: drupal.webservices.cern.ch/v1alpha1
 kind: ProjectConfig
 health:
   healthProbeBindAddress: :8081

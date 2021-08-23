@@ -20,6 +20,7 @@ import (
 	"github.com/operator-framework/operator-lib/status"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	cfg "sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
 )
 
 const (
@@ -193,8 +194,25 @@ type DrupalSiteList struct {
 	Items           []DrupalSite `json:"items"`
 }
 
+//+kubebuilder:object:root=true
+
+// ProjectConfig is the Schema for the projectconfigs API
+type ProjectConfig struct {
+	metav1.TypeMeta `json:",inline"`
+
+	// ControllerManagerConfigurationSpec returns the contfigurations for controllers
+	cfg.ControllerManagerConfigurationSpec `json:",inline"`
+
+	SiteBuilderImage    string `json:"siteBuilderImage,omitempty"`
+	NginxImage          string `json:"nginxImage,omitempty"`
+	PhpFpmExporterImage string `json:"phpFpmExporterImage,omitempty"`
+	WebDAVImage         string `json:"webDAVImage,omitempty"`
+	SMTPHost            string `json:"smtpHost,omitempty"`
+	VeleroNamespace     string `json:"veleroNamespace,omitempty"`
+}
+
 func init() {
-	SchemeBuilder.Register(&DrupalSite{}, &DrupalSiteList{})
+	SchemeBuilder.Register(&DrupalSite{}, &DrupalSiteList{}, &ProjectConfig{})
 }
 
 // ConditionTrue reports if the condition is true

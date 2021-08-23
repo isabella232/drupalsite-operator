@@ -1,7 +1,6 @@
 domain: cern.ch
 layout:
 - go.kubebuilder.io/v3
-multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
@@ -10,19 +9,10 @@ repo: gitlab.cern.ch/drupal/paas/drupalsite-operator
 resources:
 - api:
     crdVersion: v1
-    # TODO(user): Uncomment the below line if this resource's CRD is namespace scoped, else delete it.
-    # namespaced: true
   controller: true
   domain: cern.ch
   group: drupal.webservices
   kind: DrupalSite
-  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/drupal.webservices/v1alpha1
+  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
   version: v1alpha1
-- api:
-    crdVersion: v1
-  domain: cern.ch
-  group: config
-  kind: ProjectConfig
-  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/apis/config/v2
-  version: v2
 version: "3"
