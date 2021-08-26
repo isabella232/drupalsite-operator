@@ -16,6 +16,10 @@ bases:
 - ../crd
 - ../rbac
 - ../manager
+- ../qos-critical
+- ../qos-eco
+- ../qos-standard
+- ../sitebuilder
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml
 #- ../webhook
@@ -33,6 +37,9 @@ patchesStrategicMerge:
 # Mount the controller config file for loading manager configurations
 # through a ComponentConfig type
 #- manager_config_patch.yaml
+
+- manager_runtime_config_patch.yaml
+- manager_resources_patch.yaml
 
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix including the one in
 # crd/kustomization.yaml

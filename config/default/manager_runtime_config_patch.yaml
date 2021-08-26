@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        volumeMounts:
+        - mountPath: /tmp/runtime-config/qos-critical
+          name: qos-critical
+        - mountPath: /tmp/runtime-config/qos-standard
+          name: qos-standard
+        - mountPath: /tmp/runtime-config/qos-eco
+          name: qos-eco
+        - mountPath: /tmp/runtime-config/sitebuilder
+          name: sitebuilder
+      volumes:
+      - name: qos-critical
+        configMap:
+          name: qos-critical
+      - name: qos-standard
+        configMap:
+          name: qos-standard
+      - name: qos-eco
+        configMap:
+          name: qos-eco
+      - name: sitebuilder
+        configMap:
+          name: sitebuilder
