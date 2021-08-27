@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sitebuilder
-data:
-  {{- (.Files.Glob "runtime-config/sitebuilder/*").AsConfig | nindent 2 }}

@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: qos-eco
-data:
-  {{- (.Files.Glob "runtime-config/qos-eco/*").AsConfig | nindent 2 }}

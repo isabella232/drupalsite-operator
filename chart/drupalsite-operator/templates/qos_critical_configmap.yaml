@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: qos-critical
-data:
-  {{- (.Files.Glob "runtime-config/qos-critical/*").AsConfig | nindent 2 }}
