@@ -21,7 +21,6 @@ variables:
   GOLANG_VERSION: 1.15.12
 
 stages:
-  - test
   - build-bundle
   - deploy-bundle-staging
   - deploy-bundle-production
@@ -71,20 +70,6 @@ stages:
     - make docker-build docker-push
     # Generate, build and push both bundle manifests and the catalog.
     - make bundle bundle-build bundle-push catalog-build catalog-push
-
-
-GoTest:
-  stage: test
-  image: golang:1.15
-  script:
-    - make test
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
-      when: never
-    - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG'
-      when: never
 
 # DEVELOPMENT PURPOSES #
 #
