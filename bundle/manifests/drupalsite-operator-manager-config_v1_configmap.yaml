@@ -1,0 +1,23 @@
+apiVersion: v1
+data:
+  controller_manager_config.yaml: |
+    apiVersion: drupal.webservices.cern.ch/v1alpha1
+    kind: ProjectConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: 127.0.0.1:8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: 78d40201.cern.ch
+    siteBuilderImage: gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder
+    nginxImage: gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx
+    phpFpmExporterImage: gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z
+    webDAVImage: gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.07.28T17-19-49Z
+    smtpHost: cernmx.cern.ch
+    veleroNamespace: openshift-cern-drupal
+kind: ConfigMap
+metadata:
+  name: drupalsite-operator-manager-config
