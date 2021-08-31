@@ -525,33 +525,6 @@ spec:
           verbs:
           - '*'
         - apiGroups:
-          - batch
-          resources:
-          - jobs
-          verbs:
-          - create
-          - get
-          - list
-          - watch
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - pods
-          - pods/log
-          verbs:
-          - get
-          - list
-        - apiGroups:
-          - velero.io
-          resources:
-          - backups
-          verbs:
-          - get
-          - list
-          - create
-          - watch
-        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
@@ -580,7 +553,7 @@ spec:
               containers:
               - command:
                 - /manager
-                image: controller:latest
+                image: registry.cern.ch/drupal/paas/drupalsite-operator-controller:0.0.1
                 livenessProbe:
                   httpGet:
                     path: /healthz

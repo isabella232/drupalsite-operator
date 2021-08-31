@@ -81,7 +81,7 @@ func main() {
 		HealthProbeBindAddress:  ":8081",
 		LeaderElection:          true,
 		LeaderElectionID:        "78d40201.cern.ch",
-		LeaderElectionNamespace: "openshift-cern-drupal",
+		LeaderElectionNamespace: "openshift-cern-drupalsite-operator",
 	}
 	// TODO: Set CONFIG_FILE env var through subscription
 	os.Setenv("CONFIG_FILE", "./config/manager/controller_manager_config.yaml")
