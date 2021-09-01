@@ -27,7 +27,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    operators.operatorframework.io/builder: operator-sdk-v1.6.1+git
+    operators.operatorframework.io/builder: operator-sdk-v1.8.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
   name: drupalsite-operator.v0.0.1
   namespace: placeholder
@@ -40,7 +40,8 @@ spec:
       kind: DrupalSite
       name: drupalsites.drupal.webservices.cern.ch
       version: v1alpha1
-  description: CERN Drupalsite Operator is a golong operator for creating Drupal sites at CERN.
+  description: CERN Drupalsite Operator is a golang operator for creating Drupal sites
+    at CERN.
   displayName: DrupalSite Operator
   icon:
   - base64data: |-

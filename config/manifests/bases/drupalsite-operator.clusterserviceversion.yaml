@@ -15,7 +15,8 @@ spec:
       kind: DrupalSite
       name: drupalsites.drupal.webservices.cern.ch
       version: v1alpha1
-  description: CERN Drupalsite Operator is a golong operator for creating Drupal sites at CERN.
+  description: CERN Drupalsite Operator is a golang operator for creating Drupal sites
+    at CERN.
   displayName: DrupalSite Operator
   icon:
   - base64data: |-

@@ -20,10 +20,14 @@ spec:
         description: DrupalSite is a website that deploys the CERN Drupal Distribution
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -35,14 +39,20 @@ spec:
                   databaseClass: standard
                   diskSize: 2000Mi
                   qosClass: standard
-                description: Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
+                description: Configuration of the DrupalSite for specific needs. A
+                  typical default value is given for every setting, so usually these
+                  won't need to change.
                 properties:
                   cloneFrom:
-                    description: CloneFrom initializes this environment by cloning the specified DrupalSite (usually the "live" site), instead of installing an empty CERN-themed website. Immutable.
+                    description: CloneFrom initializes this environment by cloning
+                      the specified DrupalSite (usually the "live" site), instead
+                      of installing an empty CERN-themed website. Immutable.
                     type: string
                   databaseClass:
                     default: standard
-                    description: DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
+                    description: DatabaseClass specifies the kind of database that
+                      the website needs, among those supported by the cluster. The
+                      default value is "standard".
                     enum:
                     - critical
                     - ssd
@@ -50,40 +60,55 @@ spec:
                     type: string
                   diskSize:
                     default: 2000Mi
-                    description: DiskSize is the max size of the site's files directory. The default value is "2000Mi".
+                    description: DiskSize is the max size of the site's files directory.
+                      The default value is "2000Mi".
                     type: string
                   extraConfigurationRepo:
-                    description: 'ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site, by building an image specific to this site from the generic CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
+                    description: 'ExtraConfigurationRepo injects the composer project
+                      and other supported configuration from the given git repo to
+                      the site, by building an image specific to this site from the
+                      generic CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
                   qosClass:
                     default: standard
-                    description: QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
+                    description: QoSClass specifies the website's performance and
+                      availability requirements.  The default value is "standard".
                     enum:
                     - critical
                     - test
                     - standard
                     type: string
                   webDAVPassword:
-                    description: WebDAVPassword sets the HTTP basic auth password for WebDAV file access. A default is auto-generated if a value isn't given. Changing this field updates the password.
+                    description: WebDAVPassword sets the HTTP basic auth password
+                      for WebDAV file access. A default is auto-generated if a value
+                      isn't given. Changing this field updates the password.
                     type: string
                 type: object
               siteUrl:
-                description: SiteURL is the URL where the site should be made available. Recommended to set `<environmentName>-<projectname>.web.cern.ch` or `<projectname>.web.cern.ch` if this is the "live" site
+                description: SiteURL is the URL where the site should be made available.
+                  Recommended to set `<environmentName>-<projectname>.web.cern.ch`
+                  or `<projectname>.web.cern.ch` if this is the "live" site
                 items:
                   description: Url refers to where the site should be made available.
                   pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                   type: string
                 type: array
               version:
-                description: Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website. Changing this value triggers the website's update process.
+                description: Version refers to the version and release of the CERN
+                  Drupal Distribution that will be deployed to serve this website.
+                  Changing this value triggers the website's update process.
                 properties:
                   name:
-                    description: Name specifies the "version" branch of CERN Drupal Distribution that will be deployed, eg `v8.9-1`
+                    description: Name specifies the "version" branch of CERN Drupal
+                      Distribution that will be deployed, eg `v8.9-1`
                     minLength: 1
                     type: string
                   releaseSpec:
-                    description: ReleaseSpec is the concrete release of the specified version, typically of the format `RELEASE.<timestamp>`. CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`, for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
+                    description: ReleaseSpec is the concrete release of the specified
+                      version, typically of the format `RELEASE.<timestamp>`. CERN
+                      Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
+                      for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
                     minLength: 1
                     type: string
                 required:
@@ -98,30 +123,46 @@ spec:
             description: DrupalSiteStatus defines the observed state of DrupalSite
             properties:
               availableBackups:
-                description: AvailableBackups lists all the velero 'Backup' objects created for the current DrupalSite
+                description: AvailableBackups lists all the velero 'Backup' objects
+                  created for the current DrupalSite
                 items:
-                  description: Backup item represents information of a single velero 'Backup' object
+                  description: Backup item represents information of a single velero
+                    'Backup' object
                   properties:
                     backupName:
-                      description: BackupName represents the name of a given velero 'Backup' resource
+                      description: BackupName represents the name of a given velero
+                        'Backup' resource
                       type: string
                     date:
-                      description: Date represents the created date of a given velero 'Backup' resource
+                      description: Date represents the created date of a given velero
+                        'Backup' resource
                       format: date-time
                       type: string
                     drupalSiteName:
-                      description: DrupalSiteName represents the name of the drupalSite for the given velero 'Backup' resource
+                      description: DrupalSiteName represents the name of the drupalSite
+                        for the given velero 'Backup' resource
                       type: string
                     expires:
-                      description: Expires represents the expiry date of a given velero 'Backup' resource
+                      description: Expires represents the expiry date of a given velero
+                        'Backup' resource
                       format: date-time
                       type: string
                   type: object
                 type: array
               conditions:
-                description: Conditions specifies different conditions based on the DrupalSite status
+                description: Conditions specifies different conditions based on the
+                  DrupalSite status
                 items:
-                  description: "Condition represents an observation of an object's state. Conditions are an extension mechanism intended to be used when the details of an observation are not a priori known or would not apply to all instances of a given Kind. \n Conditions should be added to explicitly convey properties that users and components care about rather than requiring those properties to be inferred from other observations. Once defined, the meaning of a Condition can not be changed arbitrarily - it becomes part of the API, and has the same backwards- and forwards-compatibility concerns of any other part of the API."
+                  description: "Condition represents an observation of an object's
+                    state. Conditions are an extension mechanism intended to be used
+                    when the details of an observation are not a priori known or would
+                    not apply to all instances of a given Kind. \n Conditions should
+                    be added to explicitly convey properties that users and components
+                    care about rather than requiring those properties to be inferred
+                    from other observations. Once defined, the meaning of a Condition
+                    can not be changed arbitrarily - it becomes part of the API, and
+                    has the same backwards- and forwards-compatibility concerns of
+                    any other part of the API."
                   properties:
                     lastTransitionTime:
                       format: date-time
@@ -129,12 +170,20 @@ spec:
                     message:
                       type: string
                     reason:
-                      description: ConditionReason is intended to be a one-word, CamelCase representation of the category of cause of the current status. It is intended to be used in concise output, such as one-line kubectl get output, and in summarizing occurrences of causes.
+                      description: ConditionReason is intended to be a one-word, CamelCase
+                        representation of the category of cause of the current status.
+                        It is intended to be used in concise output, such as one-line
+                        kubectl get output, and in summarizing occurrences of causes.
                       type: string
                     status:
                       type: string
                     type:
-                      description: "ConditionType is the type of the condition and is typically a CamelCased word or short phrase. \n Condition types should indicate state in the \"abnormal-true\" polarity. For example, if the condition indicates when a policy is invalid, the \"is valid\" case is probably the norm, so the condition should be called \"Invalid\"."
+                      description: "ConditionType is the type of the condition and
+                        is typically a CamelCased word or short phrase. \n Condition
+                        types should indicate state in the \"abnormal-true\" polarity.
+                        For example, if the condition indicates when a policy is invalid,
+                        the \"is valid\" case is probably the norm, so the condition
+                        should be called \"Invalid\"."
                       type: string
                   required:
                   - status
@@ -142,23 +191,28 @@ spec:
                   type: object
                 type: array
               expectedDeploymentReplicas:
-                description: ExpectedDeploymentReplicas specifies the deployment replicas for the current DrupalSite
+                description: ExpectedDeploymentReplicas specifies the deployment replicas
+                  for the current DrupalSite
                 format: int32
                 type: integer
               releaseID:
-                description: ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
+                description: ReleaseID reports the actual release of CERN Drupal Distribution
+                  that is being used in the deployment.
                 properties:
                   current:
-                    description: Current releaseID is the image tag that is in use by the site's deployment now
+                    description: Current releaseID is the image tag that is in use
+                      by the site's deployment now
                     minLength: 1
                     type: string
                   failsafe:
-                    description: Failsafe releaseID stores the image tag during the upgrade process to allow rollback operations
+                    description: Failsafe releaseID stores the image tag during the
+                      upgrade process to allow rollback operations
                     minLength: 1
                     type: string
                 type: object
               servingPodImage:
-                description: ServingPodImage reports the complete image name of the PHP-FPM container that is being used in the deployment.
+                description: ServingPodImage reports the complete image name of the
+                  PHP-FPM container that is being used in the deployment.
                 type: string
             type: object
         type: object
