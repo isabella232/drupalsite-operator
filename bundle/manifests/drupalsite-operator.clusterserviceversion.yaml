@@ -554,6 +554,7 @@ spec:
               - command:
                 - /manager
                 image: registry.cern.ch/drupal/paas/drupalsite-operator-controller:0.0.1
+                imagePullPolicy: Always
                 livenessProbe:
                   httpGet:
                     path: /healthz
