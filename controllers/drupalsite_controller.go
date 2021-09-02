@@ -96,6 +96,8 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=*;
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=pods/exec,verbs=create
+// +kubebuilder:rbac:groups=route.openshift.io,resources=routes/custom-host,verbs=create
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {

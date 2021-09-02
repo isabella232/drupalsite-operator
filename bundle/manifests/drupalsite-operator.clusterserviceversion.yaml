@@ -441,6 +441,12 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - pods/exec
+          verbs:
+          - create
+        - apiGroups:
+          - ""
+          resources:
           - secrets
           verbs:
           - '*'
@@ -505,6 +511,12 @@ spec:
           - routes
           verbs:
           - '*'
+        - apiGroups:
+          - route.openshift.io
+          resources:
+          - routes/custom-host
+          verbs:
+          - create
         - apiGroups:
           - velero.io
           resources:
@@ -641,9 +653,6 @@ spec:
   keywords:
   - drupalsite
   - operator
-  links:
-  - name: Drupalsite Operator
-    url: https://drupalsite-operator.domain
   maintainers:
   - email: drupal-admins@cern.ch
     name: CERN IT-CDA-WF

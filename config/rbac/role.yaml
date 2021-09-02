@@ -64,6 +64,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
   - '*'
@@ -128,6 +134,12 @@ rules:
   - routes
   verbs:
   - '*'
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes/custom-host
+  verbs:
+  - create
 - apiGroups:
   - velero.io
   resources:

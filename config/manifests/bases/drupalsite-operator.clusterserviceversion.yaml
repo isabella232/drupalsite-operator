@@ -370,9 +370,6 @@ spec:
   keywords:
   - drupalsite
   - operator
-  links:
-  - name: Drupalsite Operator
-    url: https://drupalsite-operator.domain
   maintainers:
   - email: drupal-admins@cern.ch
     name: CERN IT-CDA-WF
