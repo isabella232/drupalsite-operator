@@ -43,17 +43,18 @@ type DrupalSiteSpec struct {
 	// Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website.
 	// Changing this value triggers the website's update process.
 	// +kubebuilder:validation:Required
-	Version `json:"version"`
+	Version Version `json:"version"`
 
 	// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
 	// +kubebuilder:default={"databaseClass":"standard","qosClass":"standard","diskSize":"2000Mi"}
 	// +optional
-	Configuration `json:"configuration,omitempty"`
+	Configuration Configuration `json:"configuration,omitempty"`
 }
 
 // Version refers to the version and release of the CERN Drupal Distribution that will be deployed to serve this website
 type Version struct {
-	// Name specifies the "version" branch of CERN Drupal Distribution that will be deployed, eg `v8.9-1`
+	// Name specifies the version branch of [CERN Drupal Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) that will be deployed.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec, xDescriptors="urn:alm:descriptor:com.tectonic.ui:select:v8.9-1"
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
@@ -68,24 +69,25 @@ type Version struct {
 
 // Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
 type Configuration struct {
-	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
-	// by building an image specific to this site from the generic CERN one.
-	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+	// (advanced) Provide additional settings to your website in a git repository.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec, displayName="Extra configs repo", xDescriptors="urn:alm:descriptor:com.tectonic.ui:text"
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
 	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
+	// +operator-sdk:csv:customresourcedefinitions:type=spec, displayName="Quality of Service Class"
 	// +kubebuilder:validation:Enum:=critical;test;standard
 	// +kubebuilder:default=standard
 	// +optional
-	QoSClass `json:"qosClass,omitempty"`
+	QoSClass QoSClass `json:"qosClass,omitempty"`
 
 	// DatabaseClass specifies the kind of database that the website needs, among those supported by the cluster. The default value is "standard".
+	// +operator-sdk:csv:customresourcedefinitions:type=spec, displayName="Database Class"
 	// +kubebuilder:validation:Enum:=critical;ssd;standard
 	// +kubebuilder:default=standard
 	// +optional
-	DatabaseClass `json:"databaseClass,omitempty"`
+	DatabaseClass DatabaseClass `json:"databaseClass,omitempty"`
 
 	// CloneFrom initializes this environment by cloning the specified DrupalSite (usually the "live" site),
 	// instead of installing an empty CERN-themed website.

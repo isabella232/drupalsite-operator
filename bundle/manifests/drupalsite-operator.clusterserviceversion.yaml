@@ -39,6 +39,27 @@ spec:
       displayName: Drupal Site
       kind: DrupalSite
       name: drupalsites.drupal.webservices.cern.ch
+      specDescriptors:
+      - description: DatabaseClass specifies the kind of database that the website
+          needs, among those supported by the cluster. The default value is "standard".
+        displayName: Database Class
+        path: configuration.databaseClass
+      - description: (advanced) Provide additional settings to your website in a git
+          repository.
+        displayName: Extra configs repo
+        path: configuration.extraConfigurationRepo
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:text
+      - description: QoSClass specifies the website's performance and availability
+          requirements.  The default value is "standard".
+        displayName: Quality of Service Class
+        path: configuration.qosClass
+      - description: Name specifies the version branch of [CERN Drupal Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution)
+          that will be deployed.
+        displayName: Name
+        path: version.name
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:select:v8.9-1
       version: v1alpha1
   description: CERN Drupalsite Operator is a golang operator for creating Drupal sites
     at CERN.

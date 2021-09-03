@@ -66,10 +66,8 @@ spec:
                       The default value is "2000Mi".
                     type: string
                   extraConfigurationRepo:
-                    description: 'ExtraConfigurationRepo injects the composer project
-                      and other supported configuration from the given git repo to
-                      the site, by building an image specific to this site from the
-                      generic CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
+                    description: (advanced) Provide additional settings to your website
+                      in a git repository.
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
                   qosClass:
@@ -102,8 +100,9 @@ spec:
                   Changing this value triggers the website's update process.
                 properties:
                   name:
-                    description: Name specifies the "version" branch of CERN Drupal
-                      Distribution that will be deployed, eg `v8.9-1`
+                    description: Name specifies the version branch of [CERN Drupal
+                      Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution)
+                      that will be deployed.
                     minLength: 1
                     type: string
                   releaseSpec:
