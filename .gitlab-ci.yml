@@ -5,8 +5,6 @@ variables:
   IMAGE_TAG_BASE: "registry.cern.ch/drupal/paas/drupalsite-operator"
   # Image URL to use all building/pushing image targets
   IMG: "${IMAGE_TAG_BASE}-controller:${VERSION}"
-  # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
-  CATALOG_BASE_IMG: ${IMAGE_TAG_BASE}-catalog:latest
   BUNDLE_IMG: ${IMAGE_TAG_BASE}-bundle:v${VERSION}
   # Channel naming
   # c.f. https://olm.operatorframework.io/docs/best-practices/channel-naming/#recommended-channel-naming
@@ -21,9 +19,7 @@ variables:
   GOLANG_VERSION: 1.15.12
 
 stages:
-  - build-bundle
-  - deploy-bundle-staging
-  - deploy-bundle-production
+  - deploy-bundle
 
 .before_script:
   before_script:
@@ -71,13 +67,11 @@ stages:
     # Generate, build and push both bundle manifests and the catalog.
     - make bundle bundle-build bundle-push catalog-build catalog-push
 
-# DEVELOPMENT PURPOSES #
-#
-# Just use it for development purposes.
-Build and Push Bundle (for development purposes):
-  environment: dev
-  stage: build-bundle
-  extends: .before_script
+# DEV BRANCHES AND MERGE REQUESTS #
+# Builds/push the controller, the bundle and the catalog.
+OLM Deployment (for dev purposes):
+  stage: deploy-bundle
+  extends: .deploy_bundle
   tags:
   - docker-privileged
   services:
@@ -87,62 +81,25 @@ Build and Push Bundle (for development purposes):
     DOCKER_TLS_CERTDIR: "/certs"
   image:
       name: docker:19.03.1
-  script:
-    # Generate controller image and push it.
-    - make docker-build docker-push
-    # Generate, build and push the bundle manifests.
-    - make bundle bundle-build bundle-push
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
-      when: never
-    - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG'
-      when: never
-
-# STAGING #
-#
-# When pushing to any branch, this will trigger a deployment under the `stable` channel.
-# and to the `catalog:staging` tag (staging clusters)
-# i.e., changes are automatically deployed to https://drupal-stg.cern.ch
-# This process must be triggered manually and it will build/push the controller, the bundle and the catalog.
-OLM Deployment (staging):
-  environment: staging
-  stage: deploy-bundle-staging
-  extends: .deploy_bundle
   variables:
-    # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
-    # Use staging tag for staging clusters
-    CATALOG_IMG: ${IMAGE_TAG_BASE}-catalog:staging
-    CATALOG_BASE_IMG: ${IMAGE_TAG_BASE}-catalog:staging
+    CATALOG_IMG: ${IMAGE_TAG_BASE}-catalog:$CI_COMMIT_REF_NAME
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_COMMIT_BRANCH'
-      when: manual
     - if: '$CI_COMMIT_TAG'
       when: never
 
   
-# PRODUCTION #
-#
-# When generating a tag (e.g., 0.0.3), this will trigger a deployment under the `stable` channel.
-# and to the `catalog:latest` tag (production clusters)
-# i.e., changes are automatically deployed to https://drupal.cern.ch
-# This process must be triggered manually and it will build/push the controller, the bundle and the catalog.
-OLM Deployment (production):
-  environment: production
-  stage: deploy-bundle-production
+# TAGS #
+# Builds/push the controller, the bundle and the catalog when pushing a tag.
+OLM Deployment (stg/production):
+  stage: deploy-bundle
   extends: .deploy_bundle
+  variables:
+    CATALOG_IMG: ${IMAGE_TAG_BASE}-catalog:v${VERSION}
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
     - when: never
-  variables:
-    # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
-    # Use latest tag for production clusters
-    CATALOG_IMG: ${IMAGE_TAG_BASE}-catalog:latest
-    CATALOG_BASE_IMG: ${IMAGE_TAG_BASE}-catalog:latest
-
