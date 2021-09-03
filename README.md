@@ -99,23 +99,20 @@ cd /drupalsite-operator
 
 ### Develop a new version
 
-First version of the operator is a special case, so we will deal with it separately.
+Let's assume you want to deploy version `0.0.X`.
 
-Let's assume we are in the version `0.0.1` already deployed, and we want to change to version `0.0.2`. 
-
-First, let's deploy the new version in the staging clusters. For this purpose, we will use the channel `stable` for both staging and production clusters. We will add the bundles to the corresponding catalog which is pointing to `catalog:staging` for staging clusters, and `catalog:latest`, which is pointing to production clusters.
+First, you'll deploy the new version in a `dev` cluster. The new bundle will be be added to the corresponding catalog pointing to `catalog:$CI_COMMIT_REF_NAME`.
 
 For this change, we'll need to upate:
-- `metadata.annotations.olm.skipRange` value in `/config/manifests/bases/drupalsite-operator.clusterserviceversion.yaml` pointing to the previous `VERSION` (e.g., if now we are going to install `VERSION=0.0.2`, `metadata.annotations.olm.skipRange` must be `olm.skipRange: <0.0.2`).
 - `VERSION` variable in `.gitlab-ci.yaml` file.
 
 With the previous tool, let's generate the new bundle:
 ```bash
-export VERSION=0.0.<X>
+export VERSION=0.0.X
+export CI_COMMIT_REF_NAME=<BRANCH_NAME>
 export IMAGE_TAG_BASE="registry.cern.ch/drupal/paas/drupalsite-operator"
 export IMG="${IMAGE_TAG_BASE}-controller:${VERSION}"
-export CATALOG_IMG=${IMAGE_TAG_BASE}-catalog:dev
-export CATALOG_BASE_IMG=${IMAGE_TAG_BASE}-catalog:dev
+export CATALOG_IMG=${IMAGE_TAG_BASE}-catalog:${CI_COMMIT_REF_NAME}
 export BUNDLE_IMG=${IMAGE_TAG_BASE}-bundle:v${VERSION}
 export BUNDLE_CHANNELS="--channels='stable'"
 export BUNDLE_DEFAULT_CHANNEL="--default-channel='stable'"
@@ -136,13 +133,13 @@ make bundle bundle-build bundle-push
 make docker-build docker-push bundle bundle-build bundle-push
 ```
 
-At this point, we will be able to test our bundle in a dev cluster. 
+At this point, you will be able to test our bundle in a dev cluster. 
 
-Note that **is not recommended** to perform any change under the generated bundle folder.  Everything is auto-generated from the `config/` folder.
+Note that **is not recommended** to perform any change under the generated bundle folder. Everything is auto-generated from the `config/` folder.
 
 To test the bundle in a dev cluster:
 ```bash
-# Login into the dev cluster
+# Login into your dev cluster
 # export KUBECONFIG=...
 
 # Run the bundle on an OKD4 cluster.
@@ -174,17 +171,16 @@ operator-sdk cleanup drupalsite-operator --delete-all -n openshift-cern-drupalsi
 oc delete CatalogSource/drupalsite-operator -n openshift-cern-drupalsite-operator
 oc delete OperatorGroup/drupalsite-operator -n openshift-cern-drupalsite-operator
 oc delete Subscription/drupalsite-operator -n openshift-cern-drupalsite-operator
-# oc get csv -A
-# oc delete csv/drupalsite-operator.v0.0.<X> -n openshift-cern-drupalsite-operator
+oc get csv -A
+oc delete csv/drupalsite-operator.v0.0.<X> -n openshift-cern-drupalsite-operator
 
-# # To delete the CRD
-# kustomize build config/crd | kubectl delete -f -
+# To delete the CRD
+kustomize build config/crd | kubectl delete -f -
 ```
 
-If we are happy with our results, next steps are:
+If you are happy with your results, next steps are:
 
-- Ensure that `metadata.annotations.olm.skipRange` under `config/manifests/bases/drupalsite-operator.clusterserviceversion.yaml` is less than the current version. If it's the `0.0.1` first version, then there is no need to add the `metadata.annotations.olm.skipRange` element.
-- Before commit the changes, do not foreget to update the `.gitlab-ci.yaml` from:
+- Before commit the changes, do not forget to update the `.gitlab-ci.yaml` from:
   ```yaml
   variables:
     VERSION: 0.0.1
@@ -194,88 +190,77 @@ If we are happy with our results, next steps are:
   to:
   ```yaml
   variables:
-    VERSION: 0.0.2
+    VERSION: 0.0.X
     ...
   ```
-- Commit the changes and let the CI do the work for us, i.e., to build and push both the bundle and the catalog, this last containing the bundle we have generated.
+- Commit the changes and let the CI do the work, i.e., to build and push both the bundle and the catalog, this last containing the bundle we have generated.
 
-Once pushed, the CI will trigger the build of the bundle according to the variables we pass under `.gitlab-ci.yaml`, and after building, we **manually** will build and push the catalog with the new version.
+Once pushed, the CI will trigger the build of the bundle according to the variables we pass under `.gitlab-ci.yaml`, and after building, it will build and push the catalog with the new version to `catalog:$CI_COMMIT_REF_NAME`.
 
-### Simulate catalog provision in dev
-If we want to simulate how the new version will behave once we deployed, we can create a `catalog:dev` and play with it.
+### Simulate catalog provision in a dev cluster
 
-We just need to push the precedent bundles, and finally push the bundle we are working on.
+If you want to simulate how the new version will behave once we deployed, you can upgrade your dev cluster using the `catalog:$CI_COMMIT_REF_NAME` image.
 
-```bash
-# Assume we are working on version 0.0.3, that will substitute 0.0.2
-./bin/opm index add --container-tool docker --mode semver --tag registry.cern.ch/drupal/paas/drupalsite-operator-catalog:dev --bundles registry.cern.ch/drupal/paas/drupalsite-operator-bundle:v0.0.1,registry.cern.ch/drupal/paas/drupalsite-operator-bundle:v0.0.2
+Fisrt, you need to update the value `catalogSource.spec.image` in [values-dev-drupal.yaml](https://gitlab.cern.ch/paas-tools/okd4-install/-/blob/master/chart/values-dev-drupal.yaml) file:
 
-# Push the catalog
-make catalog-push
-```
-
-Now create the corresponding `CatalogSource`, `Subscription` and `OperatorGroup` in case they are not created in your dev environment:
 ```yaml
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: drupalsite-operator
-  namespace: openshift-cern-drupalsite-operator
-spec:
-  sourceType: grpc
-  image: registry.cern.ch/drupal/paas/drupalsite-operator-catalog:dev
-  displayName: DrupalSite Operator Catalog
-  publisher: Openshift Admins
-  updateStrategy:
-    registryPoll: 
-      interval: 5m
-
----
-
-apiVersion: operators.coreos.com/v1alpha1
-kind: Subscription
-metadata:
-  name: drupalsite-operator
-  namespace: openshift-cern-drupalsite-operator
-spec:
-  channel: stable
-  installPlanApproval: Automatic
-  name: drupalsite-operator
-  source: drupalsite-operator
-  sourceNamespace: openshift-cern-drupalsite-operator
-
----
-
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: drupalsite-operator
-  namespace: openshift-cern-drupalsite-operator
-spec: {}
+operators-catalogue:
+  operatorSources:
+    # CERN App Catalogue - Drupalsite Operator
+    drupalsite-operator:
+      catalogSource:
+        spec:
+          sourceType: grpc
+          displayName: "DrupalSite Operator"
+          image: registry.cern.ch/drupal/paas/drupalsite-operator-catalog:upgrade-operator-sdk-v1.9
+          publisher: "CERN Web Frameworks"
+          updateStrategy:
+            registryPoll:
+              interval: "30m"
+      subscription:
+        spec:
+          channel: "stable"
+          installPlanApproval: "Automatic"
+          name: drupalsite-operator
+          # source corresponds to the generated catalog source name
+          # this catalog source name is autogenerated based on the operatorSources.<nameOperator> element.
+          # e.g., for operatorSources.drupalsite-operator, catalog name will be drupalsite-operator
+          source: drupalsite-operator
+          sourceNamespace: openshift-cern-drupalsite-operator
+      operatorGroup:
+        # deploy to all namespaces by default
+        spec: {}
 ```
 
-And finally append the new bundle to see how the installation will behave.
+Then, you can upgrade your cluster following [Updating cluster configuration](https://okd-internal.docs.cern.ch/development/#updating-cluster-configuration) docs.
 
+Run integration tests for drupal on you dev cluster to validate your changes:
 ```bash
-# Now append the new bundle for version 0.0.3
-./bin/opm index add --container-tool docker --mode semver --tag registry.cern.ch/drupal/paas/drupalsite-operator-catalog:dev --bundles registry.cern.ch/drupal/paas/drupalsite-operator-bundle:v0.0.3 --from-index registry.cern.ch/drupal/paas/drupalsite-operator-catalog:dev
-
-# Push the catalog
-make catalog-push
+export CI_JOB_ID=${RANDOM}
+XTERM=term bats -trp tests/4-drupal/
 ```
 
-Create a Drupalsite site to verify it works properly and check the resources.
-
-If we want to try more changes, we need to clean up erverything and re-rerun it again:
+If you want to try more changes, you need to clean up erverything and re-rerun it again:
 ```bash
 operator-sdk cleanup drupalsite-operator --delete-all -n openshift-cern-drupalsite-operator
 ```
 
-For reference:
-- Working with bundle images: https://docs.okd.io/latest/operators/operator_sdk/osdk-working-bundle-images.html
-- Operator Framework packaging formats: https://access.redhat.com/documentation/en-us/openshift_container_platform/4.7/html-single/operators/index#olm-packaging-format
-- OLM: https://access.redhat.com/documentation/en-us/openshift_container_platform/4.7/html-single/operators/index#operator-lifecycle-manager-olm 
-- WordPress Operator: https://gitlab.cern.ch/wordpress/wordpress-operator
+You can also push your dev catalog image in order to test your changes before commiting:
+```
+# This should be run inside the same container you used to build/push the bundle before
+make catalog-build catalog-push
+```
+
+### Release a new version workflow
+
+1. Follow [Develop a new version](#develop-a-new-version) steps
+2. Follow [Simulate catalog provision in a dev cluster](#simulate-catalog-provision-in-a-dev-cluster) steps
+3. Open a `MR` in [okd4-install](https://gitlab.cern.ch/paas-tools/okd4-install/):
+    - Update the value `catalogSource.spec.image` in [values-dev-drupal.yaml](https://gitlab.cern.ch/paas-tools/okd4-install/-/blob/master/chart/values-dev-drupal.yaml) file using as a tag the name of your dev branch in `drupalsite-operator`.
+    - Trigger `Integration tests` job.
+4. When `Integration tests` are green, the `MR` in `drupalsite-operator` can be merged.
+5. Create a [tag](https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/tags/new) for the new version from master branch. For consistency, use as a tag name the version that you are going to release, i.e. if you release version `0.0.1`, the name of the tag should be `0.0.1`.
+6. In your `MR` in okd4-install, update the tag of `catalogSource.spec.image` in `values-dev-drupal.yaml`, `values-drupal-stg.yaml` and `values-drupal.yaml` with the new version and merge.
 
 ## Configmaps for each QoS class
 
@@ -299,3 +284,10 @@ To run these tests locally, use `make test`
 
 This project was generated with the [operator-sdk](https://sdk.operatorframework.io/)
 and has been updated to `operator-sdk-v1.9`.
+
+For reference:
+- Working with bundle images: https://docs.okd.io/latest/operators/operator_sdk/osdk-working-bundle-images.html
+- Operator Framework packaging formats: https://access.redhat.com/documentation/en-us/openshift_container_platform/4.7/html-single/operators/index#olm-packaging-format
+- OLM: https://access.redhat.com/documentation/en-us/openshift_container_platform/4.7/html-single/operators/index#operator-lifecycle-manager-olm
+- CSV and API Markers: https://v0-18-x.sdk.operatorframework.io/docs/golang/references/markers/
+- WordPress Operator: https://gitlab.cern.ch/wordpress/wordpress-operator
