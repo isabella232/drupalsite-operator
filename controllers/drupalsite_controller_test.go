@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"time"
 
@@ -452,6 +453,8 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
+					// DEBUG
+					fmt.Print("> status conditions:", cr.Status.Conditions.GetCondition("CodeUpdateFailed"), "\n")
 					return cr.ConditionTrue("CodeUpdateFailed")
 				}, timeout, interval).Should(BeTrue())
 
