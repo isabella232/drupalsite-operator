@@ -134,7 +134,7 @@ func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.
 */
-func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs []reconcileError) {
+func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, deploymentReplicas int32, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
 
 	// 1. BuildConfigs and ImageStreams
@@ -171,8 +171,8 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureResourceX(ctx, drp, "deploy_drupal", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal DC"))
+		if transientErr := r.ensureDrupalDeployment(ctx, drp, deploymentReplicas, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal deployment"))
 		}
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
@@ -244,7 +244,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- bc_s2i: BuildConfig for S2I sitebuilder
-	- deploy_drupal: Deployment for Nginx & PHP-FPM
+	- deploy_drupal: <moved to `ensureDrupalDeployment`>
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
@@ -289,27 +289,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
 			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "deploy_drupal":
-		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
-
-		// Check if a deployment exists & if any of the given conditions satisfy
-		// In scenarios where, the deployment is deleted during a failed upgrade, this check is needed to bring it back
-		if err == nil && (d.Annotations["updateInProgress"] == "true" || d.ConditionTrue("CodeUpdateFailed") || d.ConditionTrue("DBUpdatesFailed")) {
-			return nil
-		}
-		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
-			deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-			_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-				releaseID := releaseID(d)
-				return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID)
-			})
-			if err != nil {
-				log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
-				return newApplicationError(err, ErrClientK8s)
-			}
 		}
 		return nil
 	case "svc_nginx":
@@ -467,6 +446,32 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
+}
+
+/*
+ensureDrupalDeployment is similar to ensureResourceX, but for the Drupal server deployment, which requires extra information.
+*/
+func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, replicas int32, log logr.Logger) (transientErr reconcileError) {
+	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+	err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
+
+	// Check if a deployment exists & if any of the given conditions satisfy
+	// In scenarios where, the deployment is deleted during a failed upgrade, this check is needed to bring it back
+	if err == nil && (d.Annotations["updateInProgress"] == "true" || d.ConditionTrue("CodeUpdateFailed") || d.ConditionTrue("DBUpdatesFailed")) {
+		return nil
+	}
+	if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
+		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
+		_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
+			releaseID := releaseID(d)
+			return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID, replicas)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	return nil
 }
 
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
@@ -855,7 +860,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 }
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string) error {
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string, replicas int32) error {
 	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
@@ -895,7 +900,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
-		currentobject.Spec.Replicas = pointer.Int32Ptr(1)
+		currentobject.Spec.Replicas = &replicas
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
 		}
@@ -1176,7 +1181,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
 
-	currentobject.Spec.Replicas = d.Status.ExpectedDeploymentReplicas
+	currentobject.Spec.Replicas = &replicas
 
 	return nil
 }
@@ -1852,13 +1857,39 @@ func (r *DrupalSiteReconciler) getCurrentNamespace(ctx context.Context, d *webse
 }
 
 // expectedDeploymentReplicas calculates expected replicas of deployment
-func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) *int32 {
+func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, error) {
 	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
 	_, isBlockedReasonAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/reason"]
-	if isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet {
-		return pointer.Int32Ptr(0)
-	} else if !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet {
-		return pointer.Int32Ptr(1)
+	blocked := isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet
+	notBlocked := !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet
+	switch {
+	case !blocked && !notBlocked:
+		return 0, fmt.Errorf("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+	case blocked:
+		return 0, nil
+	default:
+		return 1, nil
 	}
-	return nil
+}
+
+func (r *DrupalSiteReconciler) getExpectedDeploymentReplicas(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (replicas int32, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+	namespace, err := r.getCurrentNamespace(ctx, drupalSite)
+	if err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return 0, true, false, nil
+		default:
+			return 0, false, false, newApplicationError(err, ErrClientK8s)
+		}
+	}
+	deploymentReplicas, err := expectedDeploymentReplicas(namespace)
+	if err != nil {
+		return 0, false, false, newApplicationError(err, ErrInvalidSpec)
+	}
+
+	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != deploymentReplicas {
+		drupalSite.Status.ExpectedDeploymentReplicas = &deploymentReplicas
+		return 0, false, true, nil
+	}
+	return deploymentReplicas, false, false, nil
 }
