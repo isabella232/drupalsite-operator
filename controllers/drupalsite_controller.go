@@ -328,6 +328,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return handleTransientErr(err, errorMessage, "")
 			} else {
 				// NOTE: If error is permanent, there's nothing more we can do.
+				log.Error(err, err.Unwrap().Error())
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		case update:
@@ -606,12 +607,12 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 				return false, false, err, "Temporary error while checking for version roll out"
 				// return false, true, nil, ""
 			} else {
+				setConditionStatus(d, "CodeUpdateFailed", true, err, false)
 				err.Wrap("%v: Failed to update version " + releaseID(d))
 				rollBackErr := r.rollBackCodeUpdate(ctx, d, deploymentReplicas)
 				if rollBackErr != nil {
 					return false, false, rollBackErr, "Error while rolling back version"
 				}
-				setConditionStatus(d, "CodeUpdateFailed", true, err, false)
 				return true, false, nil, ""
 			}
 		case requeue:
