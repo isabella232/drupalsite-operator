@@ -869,9 +869,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 
 	addOwnerRefToObject(currentobject, asOwner(d))
-	if currentobject.CreationTimestamp.IsZero() {
+	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
-		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
+	}
+	currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
+	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
 
@@ -1563,11 +1565,13 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 
 	addOwnerRefToObject(currentobject, asOwner(d))
 
-	// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
-	currentobject.Data = map[string]string{
-		"zz-docker.conf": string(content),
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
+		currentobject.Data = map[string]string{
+			"zz-docker.conf": string(content),
+		}
 	}
-
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
 	}
@@ -1617,8 +1621,11 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 
 	addOwnerRefToObject(currentobject, asOwner(d))
 
-	currentobject.Data = map[string]string{
-		"custom.conf": string(content),
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.Data = map[string]string{
+			"custom.conf": string(content),
+		}
 	}
 
 	if currentobject.Annotations == nil {
@@ -1668,8 +1675,11 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 
 	addOwnerRefToObject(currentobject, asOwner(d))
 
-	currentobject.Data = map[string]string{
-		"settings.php": string(content),
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.Data = map[string]string{
+			"settings.php": string(content),
+		}
 	}
 
 	if currentobject.Labels == nil {
