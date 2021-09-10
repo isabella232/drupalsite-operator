@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -34,6 +35,7 @@ import (
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	batchbeta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -140,6 +142,8 @@ var _ = Describe("DrupalSite controller", func() {
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
 				oidcReturnUri := authz.OidcReturnURI{}
+				schedule := velerov1.Schedule{}
+				cronjob := batchbeta1.CronJob{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -225,10 +229,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
-				schedule := velerov1.Schedule{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
-				}, timeout, interval).Should(Succeed())
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Routes
 				By("Expecting Drupal Route(s) to be created")
@@ -252,6 +256,12 @@ var _ = Describe("DrupalSite controller", func() {
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
+				// Check if the Cronjob resource is created
+				By("Expecting Cronjob to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
 	})
@@ -381,6 +391,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(Succeed())
 
 				deploy := appsv1.Deployment{}
+				cronjob := batchbeta1.CronJob{}
 
 				By("Updating the version")
 				Eventually(func() error {
@@ -444,6 +455,29 @@ var _ = Describe("DrupalSite controller", func() {
 					return cr.ConditionTrue("CodeUpdateFailed")
 				}, timeout, interval).Should(BeTrue())
 
+				// Update drupalSite Failsafe status to simulate a successful upgrade
+				By("Updating 'Failsafe' status field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Failsafe = newVersion + "-" + newReleaseSpec
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check the image version on the cronjob
+				By("Expecting the new drupal Version on the cronjob spec")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
+						switch container.Name {
+						case "cronjob":
+							return strings.Split(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image, ":")[1] == newVersion+"-"+newReleaseSpec
+						default:
+							return false
+						}
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
+
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest
 			})
 		})
@@ -472,6 +506,7 @@ var _ = Describe("DrupalSite controller", func() {
 				deploy := appsv1.Deployment{}
 				route := routev1.Route{}
 				oidcReturnUri := authz.OidcReturnURI{}
+				cronjob := batchbeta1.CronJob{}
 
 				// Check PHP-FPM configMap recreation
 				By("Expecting PHP_FPM configmaps recreated")
@@ -569,6 +604,16 @@ var _ = Describe("DrupalSite controller", func() {
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
 
+				// Check Drush cronjob
+				By("Expecting Drush cronjob recreated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return k8sClient.Delete(ctx, &cronjob)
+				}, timeout, interval).Should(Succeed())
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
 	})
@@ -721,6 +766,8 @@ var _ = Describe("DrupalSite controller", func() {
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
 				oidcReturnUri := authz.OidcReturnURI{}
+				schedule := velerov1.Schedule{}
+				cronjob := batchbeta1.CronJob{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -819,10 +866,10 @@ var _ = Describe("DrupalSite controller", func() {
 
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
-				schedule := velerov1.Schedule{}
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
-				}, timeout, interval).Should(Succeed())
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check Routes
 				By("Expecting Drupal Route(s) to be created")
@@ -845,6 +892,13 @@ var _ = Describe("DrupalSite controller", func() {
 						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
+
+				// Check if the Cronjob resource is created
+				By("Expecting Cronjob to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
 		})
 	})
@@ -929,6 +983,7 @@ var _ = Describe("DrupalSite controller", func() {
 				}
 				bc := buildv1.BuildConfig{}
 				deploy := appsv1.Deployment{}
+				cronjob := batchbeta1.CronJob{}
 
 				By("Updating the version")
 				Eventually(func() error {
@@ -1005,6 +1060,29 @@ var _ = Describe("DrupalSite controller", func() {
 					_, set := cr.Annotations["updateInProgress"]
 					return set
 				}, timeout, interval).Should(BeFalse())
+
+				// Update drupalSite Failsafe status to simulate a successful upgrade
+				By("Updating 'Failsafe' status field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Failsafe = newVersion + "-" + newReleaseSpec
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check the image version on the cronjob
+				By("Expecting the new drupal Version on the cronjob spec")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
+						switch container.Name {
+						case "cronjob":
+							return strings.Split(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image, ":")[1] == newVersion+"-"+newReleaseSpec
+						default:
+							return false
+						}
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
 
 				// Further tests need to be implemented, if we can bypass ExecErr with envtest
 			})
@@ -1125,6 +1203,7 @@ var _ = Describe("DrupalSite controller", func() {
 				dbod := dbodv1a1.Database{}
 				route := routev1.Route{}
 				oidcReturnUri := authz.OidcReturnURI{}
+				cronjob := batchbeta1.CronJob{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -1220,6 +1299,13 @@ var _ = Describe("DrupalSite controller", func() {
 						return oidcReturnUri.ObjectMeta.OwnerReferences
 					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				}
+
+				// Check if the Cronjob resource is created
+				By("Expecting Cronjob to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				By("Expecting to delete successfully")
 				Eventually(func() error {
