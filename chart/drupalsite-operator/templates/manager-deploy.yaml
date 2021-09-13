@@ -25,6 +25,8 @@ spec:
         - --leader-elect
         - --sitebuilder-image={{.Values.drupalsiteOperator.sitebuilderImage}}
         - --nginx-image={{.Values.drupalsiteOperator.nginxImage}}
+        - --zap-stacktrace-level={{.Values.drupalsiteOperator.logStacktraceLevel}}
+        - --zap-log-level={{.Values.drupalsiteOperator.logLevel}}
         command:
         - /manager
         image: {{ .Values.image | quote }}

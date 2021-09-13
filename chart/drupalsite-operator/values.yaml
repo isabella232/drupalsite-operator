@@ -18,3 +18,7 @@ resources:
 drupalsiteOperator:
   sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
   nginxImage:  "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx"
+  # Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error', or any integer value > 0 which corresponds to custom debug levels of increasing verbosity
+  logLevel: "3"
+  # Zap Level at and above which stacktraces are captured (one of 'info', 'error' or 'panic')
+  logStacktraceLevel: "panic"

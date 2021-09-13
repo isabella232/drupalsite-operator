@@ -158,7 +158,7 @@ func fetchDrupalSitesInNamespace(mgr ctrl.Manager, log logr.Logger, namespace st
 func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
-	log.Info("Reconciling request")
+	log.V(1).Info("Reconciling request")
 	var requeueFlag error
 
 	// Fetch the DrupalSite instance
@@ -169,7 +169,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			log.Info("DrupalSite resource not found. Ignoring since object must be deleted")
+			log.V(3).Info("DrupalSite resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -217,7 +217,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if update {
-		log.Info("Initializing DrupalSite Spec")
+		log.V(3).Info("Initializing DrupalSite Spec")
 		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 	if err := validateSpec(drupalSite.Spec); err != nil {
@@ -311,7 +311,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		drupalSite.Status.ExpectedDeploymentReplicas = expectedDeploymentReplicas(namespace)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if deploymentReplicas == nil {
-		log.Info("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+		log.V(1).Info("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
 	}
 
 	// Ensure all resources (server deployment is excluded here during updates)
@@ -327,7 +327,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// 3. set condition "CodeUpdateFailed" to true if there is an unrecoverable error & rollback
 
 	if isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesPending") {
-		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, log)
+		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite)
 		switch {
 		case err != nil:
 			if err.Temporary() {
@@ -456,7 +456,7 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
-	log.Info("Deleting DrupalSite")
+	log.V(1).Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
 	if err := r.ensureNoSchedule(ctx, drp, log); err != nil {
 		return ctrl.Result{}, err
@@ -477,7 +477,7 @@ func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 // then returns if it needs to be updated.
 func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError) {
 	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
-		log.Info("Adding finalizer")
+		log.V(3).Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
 		update = true
 	}
@@ -569,7 +569,7 @@ func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d 
 
 // ensureUpdatedDeployment runs the logic to do the base update for a new Drupal version
 // If it returns a reconcileError, if it's a permanent error it will set the condition reason and block retries.
-func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (controllerutil.OperationResult, reconcileError) {
+func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite) (controllerutil.OperationResult, reconcileError) {
 	// Update deployment with the new version
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
@@ -592,9 +592,9 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 // 4. If there is any temporary failure at any point, the process is repeated again after a timeout
 // 5. If there is a permanent unrecoverable error, the deployment is rolled back to the previous version
 // using the 'Failsafe' on the status and a 'CodeUpdateFailed' status is set on the CR
-func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, requeue bool, err reconcileError, errorMessage string) {
+func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite) (update bool, requeue bool, err reconcileError, errorMessage string) {
 	// Ensure the new deployment is rolledout
-	result, err := r.ensureUpdatedDeployment(ctx, d, log)
+	result, err := r.ensureUpdatedDeployment(ctx, d)
 	if err != nil {
 		return false, false, err, "%v while deploying the updated Drupal images of version"
 	}
@@ -612,7 +612,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 				// return false, true, nil, ""
 			} else {
 				err.Wrap("%v: Failed to update version " + releaseID(d))
-				rollBackErr := r.rollBackCodeUpdate(ctx, d, log)
+				rollBackErr := r.rollBackCodeUpdate(ctx, d)
 				if rollBackErr != nil {
 					return false, false, rollBackErr, "Error while rolling back version"
 				}
@@ -637,7 +637,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 		}
 	}
 	if sout != "" {
-		r.rollBackCodeUpdate(ctx, d, log)
+		r.rollBackCodeUpdate(ctx, d)
 		setConditionStatus(d, "CodeUpdateFailed", true, newApplicationError(nil, errors.New("Error clearing cache")), false)
 		return true, false, nil, ""
 	}
@@ -701,7 +701,7 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called
 // It restores the deployment's image to the value of the 'FailsafeDrupalVersion' field on the status
-func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) reconcileError {
+func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Restore the server deployment
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
@@ -728,7 +728,7 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 func getenvOrDie(name string, log logr.Logger) string {
 	e := os.Getenv(name)
 	if e == "" {
-		log.Info(name + ": missing environment variable (unset or empty string)")
+		log.V(1).Info(name + ": missing environment variable (unset or empty string)")
 		os.Exit(1)
 	}
 	return e

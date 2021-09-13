@@ -283,7 +283,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 	case "webdav_secret":
 		webdav_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "webdav-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_secret, func() error {
-			log.Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
+			log.V(3).Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
 			return secretForWebDAV(webdav_secret, d)
 		})
 		if err != nil {
@@ -352,7 +352,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			hash := md5.Sum([]byte(req))
 			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
-				log.Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+				log.V(3).Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
 				return newOidcReturnURI(OidcReturnURI, d, string(req))
 			})
 			if err != nil {
@@ -378,7 +378,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-				log.Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				log.V(3).Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
 				return jobForDrupalSiteClone(job, databaseSecret, d)
 			})
 			if err != nil {
@@ -456,7 +456,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		// This ensures we have cron function for the website, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
 		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cronjob-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cron, func() error {
-			log.Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
+			log.V(3).Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
 			return cronjobForDrupalSite(cron, databaseSecret, d)
 		})
 		if err != nil {
@@ -725,7 +725,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	case err != nil:
 		reconcileErr = newApplicationError(err, ErrClientK8s)
 	case len(backupList.Items) == 0:
-		log.V(5).Info("No backup found with given labels " + backupLabels.String())
+		log.V(3).Info("No backup found with given labels " + backupLabels.String())
 	default:
 		for i := range backupList.Items {
 			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
