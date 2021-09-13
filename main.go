@@ -66,6 +66,8 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var zapLogLevel string
+	var zapStacktraceLevel string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -77,8 +79,11 @@ func main() {
 	flag.StringVar(&controllers.WebDAVImage, "webdav-image", "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.07.28T17-19-49Z", "The webdav source image name.")
 	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
 	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
+	flag.StringVar(&zapLogLevel, "zap-log-level", "info", "Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error', or any integer value > 0 which corresponds to custom debug levels of increasing verbosity")
+	flag.StringVar(&zapStacktraceLevel, "zap-stacktrace-level", "panic", "Zap Level at and above which stacktraces are captured (one of 'info', 'error' or 'panic')")
+
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
