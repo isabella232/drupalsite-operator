@@ -239,7 +239,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 /*
 ensureResourceX ensure the requested resource is created, with the following valid values
 	- pvc_drupal: PersistentVolume for the drupalsite
-	- site_install_job: Kubernetes Job for the drush site-install
+	- site_install_job: Kubernetes Job for the drush ensure-site-install
 	- clone_job: Kubernetes Job for cloning a drupal site
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
@@ -365,7 +365,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if len(databaseSecretName) == 0 {
 			return nil
 		}
-		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-install-" + d.Name, Namespace: d.Namespace}}
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "ensure-site-install-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 			return jobForDrupalSiteInstallation(job, databaseSecretName, d)
 		})
@@ -1763,7 +1763,7 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
 func siteInstallJobForDrupalSite() []string {
 	// return []string{"sh", "-c", "echo"}
-	return []string{"/operations/site-install.sh"}
+	return []string{"/operations/ensure-site-install.sh"}
 }
 
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
