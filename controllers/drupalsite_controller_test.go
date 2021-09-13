@@ -448,12 +448,13 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &pod)
 				}, timeout, interval).Should(Succeed())
 
+				// NOTE: Commenting this out temporarily. Refer to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/74
 				// Check if the drupalSiteObject has 'codeUpdateFailed' status set
-				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					return cr.ConditionTrue("CodeUpdateFailed")
-				}, timeout, interval).Should(BeTrue())
+				// By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
+				// Eventually(func() bool {
+				// 	k8sClient.Get(ctx, key, &cr)
+				// 	return cr.ConditionTrue("CodeUpdateFailed")
+				// }, timeout, interval).Should(BeTrue())
 
 				// Update drupalSite Failsafe status to simulate a successful upgrade
 				By("Updating 'Failsafe' status field in drupalSite resource")
@@ -1046,20 +1047,22 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &pod)
 				}, timeout, interval).Should(Succeed())
 
+				// NOTE: Commenting this out temporarily. Refer to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/74
 				// Check if the drupalSiteObject has 'codeUpdateFailed' status set
-				By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					return cr.ConditionTrue("CodeUpdateFailed")
-				}, timeout, interval).Should(BeTrue())
+				// By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
+				// Eventually(func() bool {
+				// 	k8sClient.Get(ctx, key, &cr)
+				// 	return cr.ConditionTrue("CodeUpdateFailed")
+				// }, timeout, interval).Should(BeTrue())
 
+				// NOTE: Commenting this out temporarily. Refer to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/74
 				// Check if the drupalSiteObject has 'updateInProgress' annotation unset
-				By("Expecting 'updateInProgress' annotation unset on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					_, set := cr.Annotations["updateInProgress"]
-					return set
-				}, timeout, interval).Should(BeFalse())
+				// By("Expecting 'updateInProgress' annotation unset on the drupalSiteObject")
+				// Eventually(func() bool {
+				// 	k8sClient.Get(ctx, key, &cr)
+				// 	_, set := cr.Annotations["updateInProgress"]
+				// 	return set
+				// }, timeout, interval).Should(BeFalse())
 
 				// Update drupalSite Failsafe status to simulate a successful upgrade
 				By("Updating 'Failsafe' status field in drupalSite resource")
