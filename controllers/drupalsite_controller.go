@@ -332,8 +332,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		case update:
-			// DEBUG
-			fmt.Println("> reconcile / condition CodeUpdateFailed: ", drupalSite.Status.Conditions.GetCondition("CodeUpdateFailed"))
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		case requeue:
 			return ctrl.Result{Requeue: true}, nil
