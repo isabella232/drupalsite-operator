@@ -1008,6 +1008,29 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
 		currentobject.Spec.Replicas = &config.replicas
+
+		if d.Spec.QoSClass == "critical" {
+			currentobject.Spec.Template.Spec.Affinity.NodeAffinity = &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "topology.kubernetes.io/zone",
+									Operator: v1.NodeSelectorOperator("in"),
+									Values: []string{
+										"cern-geneva-a",
+										"cern-geneva-b",
+										"cern-geneva-c",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+		}
+
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
 		}
@@ -2021,7 +2044,7 @@ func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1
 }
 
 // expectedDeploymentReplicas calculates expected replicas of deployment
-func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, error) {
+func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, d *webservicesv1a1.DrupalSite) (int32, error) {
 	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
 	_, isBlockedReasonAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/reason"]
 	blocked := isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet
@@ -2032,6 +2055,9 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, erro
 	case blocked:
 		return 0, nil
 	default:
+		if d.Spec.QoSClass == "critical" {
+			return 3, nil
+		}
 		return 1, nil
 	}
 }
@@ -2054,7 +2080,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 			return DeploymentConfig{}, false, false, newApplicationError(err, ErrClientK8s)
 		}
 	}
-	replicas, err := expectedDeploymentReplicas(namespace)
+	replicas, err := expectedDeploymentReplicas(namespace, drupalSite)
 	if err != nil {
 		return DeploymentConfig{}, false, false, newApplicationError(err, ErrInvalidSpec)
 	}
