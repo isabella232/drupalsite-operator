@@ -518,6 +518,12 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		drp.Spec.Version.ReleaseSpec = DefaultReleaseSpec
 		update = true || update
 	}
+
+	// Default DatabaseClass to 'critical' when QosClass is 'critical'
+	// if drp.Spec.QoSClass == "critical" && drp.Spec.DatabaseClass != "critical" {
+	// 	drp.Spec.DatabaseClass = "critical"
+	// 	update = true || update
+	// }
 	return update, nil
 }
 
