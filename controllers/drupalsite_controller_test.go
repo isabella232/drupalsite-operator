@@ -87,9 +87,10 @@ var _ = Describe("DrupalSite controller", func() {
 					ReleaseSpec: "stable",
 				},
 				Configuration: drupalwebservicesv1alpha1.Configuration{
-					DiskSize:      "10Gi",
-					QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
-					DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
+					DiskSize:       "10Gi",
+					QoSClass:       drupalwebservicesv1alpha1.QoSStandard,
+					DatabaseClass:  drupalwebservicesv1alpha1.DBODStandard,
+					InstallProfile: string(drupalwebservicesv1alpha1.InstallProfileBlank),
 				},
 				SiteURL: []drupalwebservicesv1alpha1.Url{
 					"test-1.webtest.cern.ch",

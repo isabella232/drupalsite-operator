@@ -48,6 +48,8 @@ spec:
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "5Gi"
+    # "cern" or "easystart"
+    installProfile: "cern"
 ```
 
 ## Running the operator

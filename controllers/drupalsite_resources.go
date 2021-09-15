@@ -1369,7 +1369,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 				Name:            "drush",
 				ImagePullPolicy: "Always",
-				Command:         siteInstallJobForDrupalSite(),
+				Command:         siteInstallJobForDrupalSite(d.Spec.InstallProfile),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
@@ -1766,9 +1766,9 @@ func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
 }
 
 // siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
-func siteInstallJobForDrupalSite() []string {
+func siteInstallJobForDrupalSite(installProfile string) []string {
 	// return []string{"sh", "-c", "echo"}
-	return []string{"/operations/ensure-site-install.sh"}
+	return []string{"/operations/ensure-site-install.sh", "-p", installProfile}
 }
 
 // enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode

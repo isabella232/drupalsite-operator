@@ -12,3 +12,4 @@ spec:
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "1Gi"
+    installProfile: "cern"

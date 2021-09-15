@@ -23,12 +23,14 @@ import (
 )
 
 const (
-	QoSStandard  QoSClass      = "standard"
-	QoSCritical  QoSClass      = "critical"
-	QoSTest      QoSClass      = "test"
-	DBODStandard DatabaseClass = "standard"
-	DBODCritical DatabaseClass = "critical"
-	DBODSSD      DatabaseClass = "ssd"
+	QoSStandard             QoSClass       = "standard"
+	QoSCritical             QoSClass       = "critical"
+	QoSTest                 QoSClass       = "test"
+	DBODStandard            DatabaseClass  = "standard"
+	DBODCritical            DatabaseClass  = "critical"
+	DBODSSD                 DatabaseClass  = "ssd"
+	InstallProfileBlank     InstallProfile = "cern"
+	InstallProfileEasyStart InstallProfile = "easystart"
 )
 
 // DrupalSiteSpec defines the desired state of DrupalSite
@@ -102,6 +104,10 @@ type Configuration struct {
 	// Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
+
+	// InstallProfile specifies the site configuration that integrates it with the CERN environment.
+	// +kubebuilder:validation:Enum:=cern;easystart
+	InstallProfile string `json:"installProfile,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
@@ -116,6 +122,9 @@ type CloneFrom string
 // Url refers to where the site should be made available.
 // +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 type Url string
+
+// InsrallProfile specifies the CERN profile that will be installed.
+type InstallProfile string
 
 // DrupalSiteStatus defines the observed state of DrupalSite
 type DrupalSiteStatus struct {

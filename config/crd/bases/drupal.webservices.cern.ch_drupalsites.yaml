@@ -72,6 +72,13 @@ spec:
                       generic CERN one. TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28'
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
+                  installProfile:
+                    description: InstallProfile specifies the site configuration that
+                      integrates it with the CERN environment.
+                    enum:
+                    - cern
+                    - easystart
+                    type: string
                   qosClass:
                     default: standard
                     description: QoSClass specifies the website's performance and
