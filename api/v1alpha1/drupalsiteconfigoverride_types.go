@@ -17,25 +17,21 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // DrupalSiteConfigOverrideSpec defines the desired state of DrupalSiteConfigOverride
 type DrupalSiteConfigOverrideSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of DrupalSiteConfigOverride. Edit drupalsiteconfigoverride_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Php includes configuration for the PHP container of the DrupalSite server pods
+	Php `json:"php,omitempty"`
+}
+type Php struct {
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // DrupalSiteConfigOverrideStatus defines the observed state of DrupalSiteConfigOverride
 type DrupalSiteConfigOverrideStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 //+kubebuilder:object:root=true
