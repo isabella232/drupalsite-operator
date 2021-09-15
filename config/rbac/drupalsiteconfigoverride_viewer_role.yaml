@@ -1,0 +1,20 @@
+# permissions for end users to view drupalsiteconfigoverrides.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: drupalsiteconfigoverride-viewer-role
+rules:
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsiteconfigoverrides
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsiteconfigoverrides/status
+  verbs:
+  - get

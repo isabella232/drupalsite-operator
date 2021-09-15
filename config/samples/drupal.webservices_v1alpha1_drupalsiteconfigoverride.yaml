@@ -1,0 +1,7 @@
+apiVersion: drupal.webservices.cern.ch/v1alpha1
+kind: DrupalSiteConfigOverride
+metadata:
+  name: drupalsiteconfigoverride-sample
+spec:
+  # Add fields here
+  foo: bar

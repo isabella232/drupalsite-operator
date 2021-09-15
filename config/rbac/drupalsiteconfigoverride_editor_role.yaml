@@ -1,0 +1,24 @@
+# permissions for end users to edit drupalsiteconfigoverrides.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: drupalsiteconfigoverride-editor-role
+rules:
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsiteconfigoverrides
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalsiteconfigoverrides/status
+  verbs:
+  - get

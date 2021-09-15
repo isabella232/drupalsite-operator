@@ -1,5 +1,9 @@
 domain: cern.ch
-layout: go.kubebuilder.io/v3
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
 projectName: drupalsite-operator
 repo: gitlab.cern.ch/drupal/paas/drupalsite-operator
 resources:
@@ -12,7 +16,12 @@ resources:
   kind: DrupalSite
   path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: cern.ch
+  group: drupal.webservices
+  kind: DrupalSiteConfigOverride
+  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
-plugins:
-  manifests.sdk.operatorframework.io/v2: {}
-  scorecard.sdk.operatorframework.io/v2: {}
