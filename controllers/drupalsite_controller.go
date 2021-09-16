@@ -297,12 +297,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
 
-	// Expected deployment replicas
-	deploymentReplicas, requeue, updateStatus, reconcileErr := r.getExpectedDeploymentReplicas(ctx, drupalSite)
+	// Deployment replicas and resources
+	deploymentConfig, requeue, updateStatus, reconcileErr := r.getDeploymentConfiguration(ctx, drupalSite)
 	switch {
 	case reconcileErr != nil:
 		if reconcileErr.Temporary() {
-			return handleTransientErr(reconcileErr, "Failed to calculate deployment replicas: %v", "")
+			return handleTransientErr(reconcileErr, "Failed to calculate deployment configuration: %v", "")
 		} else {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
@@ -313,7 +313,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Ensure all resources (server deployment is excluded here during updates)
-	if transientErrs := r.ensureResources(drupalSite, deploymentReplicas, log); transientErrs != nil {
+	if transientErrs := r.ensureResources(drupalSite, deploymentConfig, log); transientErrs != nil {
 		transientErr := concat(transientErrs)
 		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
 	}
@@ -324,7 +324,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// 3. set condition "CodeUpdateFailed" to true if there is an unrecoverable error & rollback
 
 	if isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesPending") {
-		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, deploymentReplicas)
+		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, deploymentConfig)
 		switch {
 		case err != nil:
 			if err.Temporary() {

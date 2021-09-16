@@ -1877,24 +1877,39 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, erro
 	}
 }
 
-func (r *DrupalSiteReconciler) getExpectedDeploymentReplicas(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (replicas int32, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+// getDeploymentConfiguration precalculates all the configuration that the server deployment needs, including:
+// replicas, PHP resources
+func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config deploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+	requeue = false
+	updateStatus = false
+
+	// Get replicas
 	namespace, err := r.getCurrentNamespace(ctx, drupalSite)
 	if err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
-			return 0, true, false, nil
+			return deploymentConfig{}, true, false, nil
 		default:
-			return 0, false, false, newApplicationError(err, ErrClientK8s)
+			return deploymentConfig{}, false, false, newApplicationError(err, ErrClientK8s)
 		}
 	}
-	deploymentReplicas, err := expectedDeploymentReplicas(namespace)
+	replicas, err := expectedDeploymentReplicas(namespace)
 	if err != nil {
-		return 0, false, false, newApplicationError(err, ErrInvalidSpec)
+		return deploymentConfig{}, false, false, newApplicationError(err, ErrInvalidSpec)
+	}
+	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != replicas {
+		drupalSite.Status.ExpectedDeploymentReplicas = &replicas
+		replicas = 0
+		updateStatus = true
 	}
 
-	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != deploymentReplicas {
-		drupalSite.Status.ExpectedDeploymentReplicas = &deploymentReplicas
-		return 0, false, true, nil
-	}
-	return deploymentReplicas, false, false, nil
+	// Get resources
+	// TODO: get DrupalSiteConfigOverride with the same name
+
+	return deploymentConfig{replicas: replicas, phpResources:}, false, false, nil
+}
+
+type deploymentConfig struct {
+	replicas     int32
+	phpResources corev1.ResourceRequirements
 }
