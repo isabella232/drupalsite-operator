@@ -236,6 +236,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the drupal site is ready to serve requests
+	// We need to check for isDBODProvisioned explicitly here. Because if we don't, the status is put as Ready here considering the pod is running, but later on
+	// in the reconcile function, when DBOD provisioning is checked, the status is put as DBODError. There's a slight conflict here
 	if r.isDrupalSiteReady(ctx, drupalSite) && r.isDBODProvisioned(ctx, drupalSite) {
 		update = setReady(drupalSite) || update
 	} else {
