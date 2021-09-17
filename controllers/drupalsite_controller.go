@@ -574,13 +574,13 @@ func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d 
 
 // ensureUpdatedDeployment runs the logic to do the base update for a new Drupal version
 // If it returns a reconcileError, if it's a permanent error it will set the condition reason and block retries.
-func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentReplicas int32) (controllerutil.OperationResult, reconcileError) {
+func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig) (controllerutil.OperationResult, reconcileError) {
 	// Update deployment with the new version
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		result, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			releaseID := releaseID(d)
-			return deploymentForDrupalSite(deploy, dbodSecret, d, releaseID, int32(deploymentReplicas))
+			return deploymentForDrupalSite(deploy, dbodSecret, d, releaseID, deploymentConfig)
 		})
 		if err != nil {
 			return "", newApplicationError(err, ErrClientK8s)
@@ -597,9 +597,9 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 // 4. If there is any temporary failure at any point, the process is repeated again after a timeout
 // 5. If there is a permanent unrecoverable error, the deployment is rolled back to the previous version
 // using the 'Failsafe' on the status and a 'CodeUpdateFailed' status is set on the CR
-func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentReplicas int32) (update bool, requeue bool, err reconcileError, errorMessage string) {
+func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig) (update bool, requeue bool, err reconcileError, errorMessage string) {
 	// Ensure the new deployment is rolledout
-	result, err := r.ensureUpdatedDeployment(ctx, d, deploymentReplicas)
+	result, err := r.ensureUpdatedDeployment(ctx, d, deploymentConfig)
 	if err != nil {
 		return false, false, err, "%v while deploying the updated Drupal images of version"
 	}
@@ -618,7 +618,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 			} else {
 				setConditionStatus(d, "CodeUpdateFailed", true, err, false)
 				err.Wrap("%v: Failed to update version " + releaseID(d))
-				rollBackErr := r.rollBackCodeUpdate(ctx, d, deploymentReplicas)
+				rollBackErr := r.rollBackCodeUpdate(ctx, d, deploymentConfig)
 				if rollBackErr != nil {
 					return false, false, rollBackErr, "Error while rolling back version"
 				}
@@ -642,7 +642,7 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 		}
 	}
 	if sout != "" {
-		r.rollBackCodeUpdate(ctx, d, deploymentReplicas)
+		r.rollBackCodeUpdate(ctx, d, deploymentConfig)
 		setConditionStatus(d, "CodeUpdateFailed", true, newApplicationError(nil, errors.New("Error clearing cache")), false)
 		return true, false, nil, ""
 	}
@@ -706,12 +706,12 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called
 // It restores the deployment's image to the value of the 'FailsafeDrupalVersion' field on the status
-func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentReplicas int32) reconcileError {
+func (r *DrupalSiteReconciler) rollBackCodeUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig) reconcileError {
 	// Restore the server deployment
 	if dbodSecret := databaseSecretName(d); len(dbodSecret) != 0 {
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := ctrl.CreateOrUpdate(ctx, r.Client, deploy, func() error {
-			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.ReleaseID.Failsafe, int32(deploymentReplicas))
+			return deploymentForDrupalSite(deploy, dbodSecret, d, d.Status.ReleaseID.Failsafe, deploymentConfig)
 		})
 		if err != nil {
 			return newApplicationError(err, ErrClientK8s)
