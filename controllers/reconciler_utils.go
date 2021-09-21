@@ -28,6 +28,7 @@ import (
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -124,6 +125,10 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Update(ctx, drp); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			return reconcile.Result{Requeue: true}, nil
+		}
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
 		return reconcile.Result{}, err
 	}
@@ -134,6 +139,10 @@ func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log 
 func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Status().Update(ctx, drp); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			return reconcile.Result{Requeue: true}, nil
+		}
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
 		return reconcile.Result{}, err
 	}

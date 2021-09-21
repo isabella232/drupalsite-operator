@@ -236,7 +236,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the drupal site is ready to serve requests
-	if siteReady := r.isDrupalSiteReady(ctx, drupalSite); siteReady {
+	// We need to check for isDBODProvisioned explicitly here. Because if we don't, the status is put as Ready here considering the pod is running, but later on
+	// in the reconcile function, when DBOD provisioning is checked, the status is put as DBODError. There's a slight conflict here
+	if r.isDrupalSiteReady(ctx, drupalSite) && r.isDBODProvisioned(ctx, drupalSite) {
 		update = setReady(drupalSite) || update
 	} else {
 		update = setNotReady(drupalSite, nil) || update
@@ -311,7 +313,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Ensure all resources (server deployment is excluded here during updates)
 	if transientErrs := r.ensureResources(drupalSite, deploymentReplicas, log); transientErrs != nil {
 		transientErr := concat(transientErrs)
-		setNotReady(drupalSite, transientErr)
 		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
 	}
 
@@ -479,6 +480,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
 		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
+		update = true || update
 	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
