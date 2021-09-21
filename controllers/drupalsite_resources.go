@@ -976,7 +976,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Spec.Template.Spec.InitContainers = []corev1.Container{{
 			Name:            "nginx-init",
 			ImagePullPolicy: "Always",
-			Command:         []string{"/bin/sh", "-c", "cp -r /app /var/run/"},
+			Command:         syncDrupalFilesToEmptydir(),
 			VolumeMounts: []corev1.VolumeMount{{
 				Name:      "empty-dir",
 				MountPath: "/var/run/",
@@ -1822,6 +1822,11 @@ func checkIfSiteIsInstalled() []string {
 // cacheReload outputs the command to reload cache on the drupalSite
 func cacheReload() []string {
 	return []string{"/operations/clear-cache.sh"}
+}
+
+// syncDrupalFilesToEmptydir outputs the command to sync the files from /app to the emptyDir
+func syncDrupalFilesToEmptydir() []string {
+	return []string{"/operations/sync-drupal-emptydir.sh"}
 }
 
 // backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
