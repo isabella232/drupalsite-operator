@@ -1478,4 +1478,437 @@ var _ = Describe("DrupalSite controller", func() {
 			})
 		})
 	})
+
+	Describe("Creating a drupalSite object", func() {
+		Context("With critical QoS", func() {
+			It("All dependent resources should be created", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-critical",
+					Namespace: "critical",
+				}
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "v8.9-1",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:      "10Gi",
+							QoSClass:      drupalwebservicesv1alpha1.QoSCritical,
+							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
+						},
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
+					},
+				}
+
+				By("By creating the testing namespace")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+						Name: key.Namespace},
+					})
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a new drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				// Create drupalSite object
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+				trueVar := true
+				expectedOwnerReference := metav1.OwnerReference{
+					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+					Kind:       "DrupalSite",
+					Name:       key.Name,
+					UID:        cr.UID,
+					Controller: &trueVar,
+				}
+				configmap := corev1.ConfigMap{}
+				svc := corev1.Service{}
+				pvc := corev1.PersistentVolumeClaim{}
+				job := batchv1.Job{}
+				deploy := appsv1.Deployment{}
+				dbod := dbodv1a1.Database{}
+				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
+				schedule := velerov1.Schedule{}
+				cronjob := batchbeta1.CronJob{}
+				redis_deploy := appsv1.Deployment{}
+				redis_secret := corev1.Secret{}
+				redis_service := corev1.Service{}
+
+				// Check Redis deployment resource creation
+				By("Expecting Redis deployment created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_deploy)
+					return redis_deploy.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Redis service resource creation
+				By("Expecting Redis service created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_service)
+					return redis_service.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Redis secret resource creation
+				By("Expecting Redis secret created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_secret)
+					return redis_secret.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check DBOD resource creation
+				By("Expecting Database resource created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
+					return dbod.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update DBOD resource status field
+				By("Updating the DBOD instance in Database resource status")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
+					dbod.Status.DbodInstance = "test"
+					return k8sClient.Status().Update(ctx, &dbod)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting the drupal deployment to have at least 2 containers")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the drupal deployment to have 3 replicas")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return *deploy.Spec.Replicas == 3
+				}, timeout, interval).Should(BeTrue())
+
+				// Check PHP-FPM configMap creation
+				By("Expecting PHP_FPM configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Nginx configMap creation
+				By("Expecting Nginx configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal service
+				By("Expecting Drupal service created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
+					return svc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check drupal persistentVolumeClaim
+				By("Expecting drupal persistentVolumeClaim created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
+					return pvc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal deployments
+				By("Expecting Drupal deployments created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return deploy.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drush job
+				By("Expecting Drush job created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update drupalSite custom resource status fields to allow route conditions
+				By("Updating 'initialized' status field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Update deployment status fields to allow 'ready' status field to be set on the drupalSite resource
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the Schedule resource is created
+				By("Expecting Schedule to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Routes
+				By("Expecting Drupal Route(s) to be created")
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return oidcReturnUri.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check if the Cronjob resource is created
+				By("Expecting Cronjob to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+			})
+		})
+	})
+
+	Describe("Creating a new backup resource", func() {
+		Context("for the drupalSite with critical QoS", func() {
+			It("New velero backups created for the site should reflect in the drupalSite Status", func() {
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+				// Create a backup resource for the drupalSite
+				hash := md5.Sum([]byte(key.Namespace))
+				backup := velerov1.Backup{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "velero.io/v1",
+						Kind:       "Backup",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name + "backup",
+						Namespace: veleroNamespace,
+
+						Labels: map[string]string{
+							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
+							"drupal.webservices.cern.ch/project":     key.Namespace,
+							"drupal.webservices.cern.ch/drupalSite":  key.Name,
+						},
+						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+					},
+					Status: velerov1.BackupStatus{
+						Phase: velerov1.BackupPhaseCompleted,
+					},
+				}
+
+				By("By creating a backup resource for the drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &backup)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the backup resource is created
+				By("By creating a backup resource for the drupalSite")
+				backup1 := velerov1.Backup{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "backup", Namespace: veleroNamespace}, &backup1)
+				}, timeout, interval).Should(Succeed())
+
+				// Check for the Backup name in the Drupalsite Status
+				By("By checking for the Backup in the DrupalSite Status")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return len(cr.Status.AvailableBackups) > 0 && cr.Status.AvailableBackups[0].BackupName == backup.Name
+				}, timeout, interval).Should(BeTrue())
+			})
+		})
+	})
+
+	Describe("Update the drupalsite object with critical QoS", func() {
+		Context("With a different drupal Version", func() {
+			It("Should be updated successfully", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-critical",
+					Namespace: "critical",
+				}
+				newVersion := "v8.9-1"
+				newReleaseSpec := "new"
+
+				// Create drupalSite object
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				By("Expecting drupalSite object created")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				deploy := appsv1.Deployment{}
+				cronjob := batchbeta1.CronJob{}
+
+				By("Updating the version")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.Version.Name = newVersion
+					cr.Spec.Version.ReleaseSpec = newReleaseSpec
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check if the drupalSiteObject has 'updateInProgress' annotation set
+				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return cr.Annotations["updateInProgress"] == "true"
+				}, timeout, interval).Should(BeTrue())
+
+				// Check the annotation on the deployment
+				By("Expecting the new drupal Version on the pod annotation")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &deploy)
+					return deploy.Spec.Template.ObjectMeta.Annotations["releaseID"] == newVersion+"-"+newReleaseSpec
+				}, timeout, interval).Should(BeTrue())
+
+				pod := corev1.Pod{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "v1",
+						Kind:       "Pod",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        key.Name,
+						Namespace:   key.Namespace,
+						Labels:      map[string]string{"drupalSite": cr.Name, "app": "drupal"},
+						Annotations: map[string]string{"releaseID": cr.Spec.Version.Name + "-" + cr.Spec.Version.ReleaseSpec},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Image: "test-image",
+							Name:  "test-image",
+						}},
+					},
+				}
+
+				// Since there is no deployment controller for creating pods. Create a pod manually to simulate a error in the update process
+				By("Expecting a new pod with required labels to be created")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// Set the pod status phase to 'Failed' to simulate a error in the update process
+				By("Expecting a new pod status to be updated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &pod)
+					pod.Status.Phase = corev1.PodFailed
+					return k8sClient.Status().Update(ctx, &pod)
+				}, timeout, interval).Should(Succeed())
+
+				// NOTE: Commenting this out temporarily. Refer to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/74
+				// Check if the drupalSiteObject has 'codeUpdateFailed' status set
+				// By("Expecting 'codeUpdateFailed' status set on the drupalSiteObject")
+				// Eventually(func() bool {
+				// 	k8sClient.Get(ctx, key, &cr)
+				// 	return cr.ConditionTrue("CodeUpdateFailed")
+				// }, timeout, interval).Should(BeTrue())
+
+				// NOTE: Commenting this out temporarily. Refer to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/74
+				// Check if the drupalSiteObject has 'updateInProgress' annotation unset
+				// By("Expecting 'updateInProgress' annotation unset on the drupalSiteObject")
+				// Eventually(func() bool {
+				// 	k8sClient.Get(ctx, key, &cr)
+				// 	_, set := cr.Annotations["updateInProgress"]
+				// 	return set
+				// }, timeout, interval).Should(BeFalse())
+
+				// Update drupalSite Failsafe status to simulate a successful upgrade
+				By("Updating 'Failsafe' status field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Failsafe = newVersion + "-" + newReleaseSpec
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Check the image version on the cronjob
+				By("Expecting the new drupal Version on the cronjob spec")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
+						switch container.Name {
+						case "cronjob":
+							return strings.Split(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image, ":")[1] == newVersion+"-"+newReleaseSpec
+						default:
+							return false
+						}
+					}
+					return false
+				}, timeout, interval).Should(BeTrue())
+
+				// Further tests need to be implemented, if we can bypass ExecErr with envtest
+			})
+		})
+	})
+
+	Describe("Deleting the drupalsite object", func() {
+		Context("With critical QoS", func() {
+			It("Should be deleted successfully", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-critical",
+					Namespace: "critical",
+				}
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "v8.9-1",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:      "10Gi",
+							QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
+							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
+						},
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
+					},
+				}
+				By("Expecting to delete successfully")
+				Eventually(func() error {
+					return k8sClient.Delete(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting to delete finish")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, drupalSiteObject)
+				}, timeout, interval).ShouldNot(Succeed())
+			})
+		})
+	})
+
 })
