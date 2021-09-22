@@ -111,11 +111,9 @@ spec:
                       version, typically of the format `RELEASE.<timestamp>`. CERN
                       Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
                       for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
-                    minLength: 1
                     type: string
                 required:
                 - name
-                - releaseSpec
                 type: object
             required:
             - siteUrl

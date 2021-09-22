@@ -67,6 +67,8 @@ var (
 	SMTPHost string
 	// VeleroNamespace refers to the namespace of the velero server to create backups
 	VeleroNamespace string
+	// ReleaseSpec refers to the releaseSpec of the drupalSite to be defaulted incase it is empty
+	DefaultReleaseSpec string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -492,6 +494,11 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		case err != nil:
 			return false, newApplicationError(err, ErrClientK8s)
 		}
+	}
+	// Initialize 'spec.version.releaseSpec' if empty
+	if len(drp.Spec.Version.ReleaseSpec) == 0 {
+		drp.Spec.Version.ReleaseSpec = DefaultReleaseSpec
+		update = true || update
 	}
 	return update, nil
 }

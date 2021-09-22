@@ -60,8 +60,7 @@ type Version struct {
 	// typically of the format `RELEASE.<timestamp>`.
 	// CERN Drupal image tags take the form `<version.name>-<version.releaseSpec>`,
 	// for example `v8.9-1-RELEASE.2021.05.25T16-00-33Z`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
+	// +optional
 	ReleaseSpec string `json:"releaseSpec"`
 }
 
