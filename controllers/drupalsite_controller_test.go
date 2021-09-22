@@ -1136,7 +1136,7 @@ var _ = Describe("DrupalSite controller", func() {
 	})
 
 	Describe("Creating a drupalSite object", func() {
-		Context("Without 'configuration' field", func() {
+		Context("Without 'configuration' & 'releaseSpec' field", func() {
 			It("Default values should be used and the site should be created", func() {
 				key = types.NamespacedName{
 					Name:      Name + "-defaults",
@@ -1153,8 +1153,7 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "v8.9-1",
-							ReleaseSpec: "stable",
+							Name: "v8.9-1",
 						},
 						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
@@ -1188,6 +1187,12 @@ var _ = Describe("DrupalSite controller", func() {
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the default configuration values to be set")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
+					return cr.Spec.Version.ReleaseSpec != DefaultReleaseSpec
 				}, timeout, interval).Should(BeTrue())
 
 				trueVar := true
@@ -1332,8 +1337,7 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "v8.9-1",
-							ReleaseSpec: "stable",
+							Name: "v8.9-1",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
@@ -1387,8 +1391,7 @@ var _ = Describe("DrupalSite controller", func() {
 					},
 					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
 						Version: drupalwebservicesv1alpha1.Version{
-							Name:        "v8.9-1",
-							ReleaseSpec: "stable",
+							Name: "v8.9-1",
 						},
 						Configuration: drupalwebservicesv1alpha1.Configuration{
 							QoSClass: "randomval",

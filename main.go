@@ -77,7 +77,7 @@ func main() {
 	flag.StringVar(&controllers.WebDAVImage, "webdav-image", "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.07.28T17-19-49Z", "The webdav source image name.")
 	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
 	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
-
+	flag.StringVar(&controllers.DefaultReleaseSpec, "default-release-spec", "RELEASE-2021.09.13T09-24-02Z", "The default releaseSpec value to be passed to the DrupalSites")
 	opts := zap.Options{
 		Development: false,
 	}
