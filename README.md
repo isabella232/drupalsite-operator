@@ -40,7 +40,7 @@ spec:
   # Generates the image tags. Changing this triggers the upgrade workflow.
   version:
     name: "v8.9-1"
-    releaseSpec: "RELEASE-2021.05.31T09-39-10Z"
+    releaseSpec: <see a sample in config/sample/...>
   configuration:
     # Name of the DrupalSite (in the same namespace) to clone from, typically the "live"/production website
     cloneFrom: "<myproductionsite>"
