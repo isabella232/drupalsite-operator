@@ -1854,7 +1854,8 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, erro
 }
 
 // getDeploymentConfiguration precalculates all the configuration that the server deployment needs, including:
-// replicas, PHP resources
+// pod replicas, resource req/lim
+// NOTE: this includes the default resource limits for PHP
 func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
 	requeue = false
 	updateStatus = false
@@ -1879,34 +1880,39 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		updateStatus = true
 	}
 
-	// Get resources
-
-	// Get config override (currently only PHP resources)
-	// TODO: get resources and compose DeploymentConfiguration
-	phpResourceOverride, reconcileErr := r.getConfigOverride(ctx, drupalSite)
-	if err != nil {
-		return DeploymentConfig{}, false, false, reconcileErr
-	}
+	// Get resources (default)
 
 	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmexporterResources, err := ResourceRequestLimit("10Mi", "1m", "15Mi", "5m")
+	phpExporterResources, err := ResourceRequestLimit("10Mi", "1m", "15Mi", "5m")
 	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmResources, err := ResourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
+	phpResources, err := ResourceRequestLimit("260Mi", "60m", "320Mi", "1800m")
 	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
 	//TODO: Check best resource consumption
 	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
 	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
 
-	return DeploymentConfig{replicas: replicas, phpResources: phpResources}, false, false, nil
+	// Get config override (currently only PHP resources)
+
+	configOverride, reconcileErr := r.getConfigOverride(ctx, drupalSite)
+	if err != nil {
+		return DeploymentConfig{}, false, false, reconcileErr
+	}
+	if configOverride != nil {
+		phpResources = configOverride.Php.Resources
+	}
+
+	return DeploymentConfig{replicas: replicas, phpResources: phpResources,
+		nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
+	}, false, false, nil
 }
 
 type DeploymentConfig struct {
@@ -1917,7 +1923,7 @@ type DeploymentConfig struct {
 	webDAVResources      corev1.ResourceRequirements
 }
 
-func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*corev1.ResourceRequirements, reconcileError) {
+func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
 	configOverride := &webservicesv1a1.DrupalSiteConfigOverride{}
 	err := r.Get(ctx, types.NamespacedName{Name: drp.Name, Namespace: drp.Namespace}, configOverride)
 	switch {
@@ -1926,5 +1932,5 @@ func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webse
 	case err != nil:
 		return nil, newApplicationError(err, ErrClientK8s)
 	}
-	return &configOverride.Spec.Php.Resources, nil
+	return &configOverride.Spec, nil
 }
