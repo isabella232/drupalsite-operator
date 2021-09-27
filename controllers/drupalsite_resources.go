@@ -1886,7 +1886,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	if err != nil {
 		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
-	phpExporterResources, err := ResourceRequestLimit("10Mi", "1m", "15Mi", "5m")
+	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
 	if err != nil {
 		return DeploymentConfig{}, false, false, newApplicationError(err, ErrFunctionDomain)
 	}
