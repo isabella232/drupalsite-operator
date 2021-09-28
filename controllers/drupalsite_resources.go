@@ -865,7 +865,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
-	phpfpmexporterResources, err := ResourceRequestLimit("10Mi", "1m", "15Mi", "5m")
+	phpfpmexporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
 	if err != nil {
 		return newApplicationError(err, ErrFunctionDomain)
 	}
