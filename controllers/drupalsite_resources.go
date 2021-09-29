@@ -1857,7 +1857,7 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, erro
 // pod replicas, resource req/lim
 // NOTE: this includes the default resource limits for PHP
 func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
-  config= DeploymentConfig{}
+	config = DeploymentConfig{}
 	requeue = false
 	updateStatus = false
 
@@ -1884,24 +1884,24 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 
 	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	if err != nil {
-		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
 	if err != nil {
-		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	phpResources, err := ResourceRequestLimit("260Mi", "60m", "320Mi", "1800m")
 	if err != nil {
-		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	//TODO: Check best resource consumption
 	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
 	if err != nil {
-		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-  if reconcileErr != nil {
+	if reconcileErr != nil {
 		return
-  }
+	}
 
 	// Get config override (currently only PHP resources)
 
@@ -1913,10 +1913,10 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		phpResources = configOverride.Php.Resources
 	}
 
-	config= DeploymentConfig{replicas: replicas,
-    phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
+	config = DeploymentConfig{replicas: replicas,
+		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
 	}
-  return
+	return
 }
 
 type DeploymentConfig struct {

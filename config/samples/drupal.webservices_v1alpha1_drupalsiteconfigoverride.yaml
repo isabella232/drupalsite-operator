@@ -3,5 +3,11 @@ kind: DrupalSiteConfigOverride
 metadata:
   name: drupalsiteconfigoverride-sample
 spec:
-  # Add fields here
-  foo: bar
+  php:
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 1G
+      limits:
+        cpu: 1000m
+        memory: 1G

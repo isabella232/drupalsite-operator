@@ -6,7 +6,7 @@ spec:
   siteUrl: "drupalsite-extraconfig.webtest.cern.ch"
   version:
     name: "v8.9-1"
-    releaseSpec: "RELEASE-2021.09.21T14-40-03Z"
+    releaseSpec: "RELEASE-2021.09.29T13-36-15Z"
   configuration:
     extraConfigurationRepo: "https://gitlab.cern.ch/drupal/paas/example-drupalsite-d8-extraconfig.git"
     qosClass: "standard"
