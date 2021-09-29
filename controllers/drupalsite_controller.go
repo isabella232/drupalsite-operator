@@ -74,10 +74,10 @@ var (
 // DrupalSiteReconciler reconciles a DrupalSite object
 type DrupalSiteReconciler struct {
 	client.Client
-	Log                     logr.Logger
-	Scheme                  *runtime.Scheme
-	MaxRateLimiterSeconds   int
-	StartRateLimiterSeconds int
+	Log                    logr.Logger
+	Scheme                 *runtime.Scheme
+	StartRateLimiterMillis int
+	MaxRateLimiterSeconds  int
 }
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
@@ -105,7 +105,7 @@ type DrupalSiteReconciler struct {
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	exponentialFailure := workqueue.NewItemExponentialFailureRateLimiter(
-		time.Second*time.Duration(r.StartRateLimiterSeconds),
+		time.Millisecond*time.Duration(r.StartRateLimiterMillis),
 		time.Second*time.Duration(r.MaxRateLimiterSeconds),
 	)
 	return ctrl.NewControllerManagedBy(mgr).
