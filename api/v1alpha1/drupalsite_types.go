@@ -94,6 +94,7 @@ type Configuration struct {
 	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
 	// +kubebuilder:default="2000Mi"
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$`
 	DiskSize string `json:"diskSize,omitempty"`
 
 	// WebDAVPassword sets the HTTP basic auth password for WebDAV file access.
