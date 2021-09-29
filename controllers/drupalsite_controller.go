@@ -81,6 +81,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsiteconfigoverrides,verbs=get;list;watch
 // +kubebuilder:rbac:groups=app,resources=deployments,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=buildconfigs,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=builds,verbs=get;list;watch

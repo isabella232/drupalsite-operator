@@ -84,6 +84,14 @@ rules:
 - apiGroups:
   - drupal.webservices.cern.ch
   resources:
+  - drupalsiteconfigoverrides
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
   - drupalsites/finalizers
   verbs:
   - update

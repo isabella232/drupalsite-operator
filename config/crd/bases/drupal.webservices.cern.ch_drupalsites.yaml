@@ -64,6 +64,7 @@ spec:
                     default: 2000Mi
                     description: DiskSize is the max size of the site's files directory.
                       The default value is "2000Mi".
+                    pattern: ^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$
                     type: string
                   extraConfigurationRepo:
                     description: 'ExtraConfigurationRepo injects the composer project
