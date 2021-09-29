@@ -489,8 +489,8 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+	addOwnerRefToObject(currentobject, asOwner(drupalsite))
 	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(drupalsite))
 		currentobject.Spec = batchbeta1.CronJobSpec{
 			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
 			Schedule: "*/30 * * * *",
@@ -770,10 +770,8 @@ func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) c
 
 // imageStreamForDrupalSiteBuilderS2I returns a ImageStream object for Drupal SiteBuilder S2I
 func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *webservicesv1a1.DrupalSite) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec.LookupPolicy.Local = true
-	}
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Spec.LookupPolicy.Local = true
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -787,8 +785,8 @@ func imageStreamForDrupalSiteBuilderS2I(currentobject *imagev1.ImageStream, d *w
 
 // buildConfigForDrupalSiteBuilderS2I returns a BuildConfig object for Drupal SiteBuilder S2I
 func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *webservicesv1a1.DrupalSite) error {
+	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = buildv1.BuildConfigSpec{
 			CommonSpec: buildv1.CommonSpec{
 				Resources:                 BuildResources,
@@ -835,8 +833,8 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 
 // dbodForDrupalSite returns a DBOD resource for the the Drupal Site
 func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.DrupalSite) error {
+	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
 		dbID := md5.Sum([]byte(d.Namespace + "-" + d.Name))
 		currentobject.Spec = dbodv1a1.DatabaseSpec{
 			DatabaseClass: string(d.Spec.Configuration.DatabaseClass),
@@ -870,10 +868,12 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Labels[k] = v
 	}
 
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
+	addOwnerRefToObject(currentobject, asOwner(d))
+	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
-		currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
+	}
+	currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
+	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
 
@@ -1190,8 +1190,8 @@ func secretForWebDAV(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite
 
 // persistentVolumeClaimForDrupalSite returns a PVC object
 func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeClaim, d *webservicesv1a1.DrupalSite) error {
+	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Spec = corev1.PersistentVolumeClaimSpec{
 			// Selector: &metav1.LabelSelector{
 			// 	MatchLabels: ls,
@@ -1227,44 +1227,40 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 		currentobject.Labels[k] = v
 	}
 
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec.Selector = ls
-		currentobject.Spec.Ports = []corev1.ServicePort{
-			{
-				TargetPort: intstr.FromInt(8080),
-				Name:       "nginx",
-				Port:       80,
-				Protocol:   "TCP",
-			},
-			{
-				TargetPort: intstr.FromInt(9253),
-				Name:       "php-fpm-exporter",
-				Port:       9253,
-				Protocol:   "TCP",
-			}}
-	}
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Spec.Selector = ls
+	currentobject.Spec.Ports = []corev1.ServicePort{
+		{
+			TargetPort: intstr.FromInt(8080),
+			Name:       "nginx",
+			Port:       80,
+			Protocol:   "TCP",
+		},
+		{
+			TargetPort: intstr.FromInt(9253),
+			Name:       "php-fpm-exporter",
+			Port:       9253,
+			Protocol:   "TCP",
+		}}
 	return nil
 }
 
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite, Url string) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-		currentobject.Spec = routev1.RouteSpec{
-			TLS: &routev1.TLSConfig{
-				InsecureEdgeTerminationPolicy: "Redirect",
-				Termination:                   "edge",
-			},
-			To: routev1.RouteTargetReference{
-				Kind:   "Service",
-				Name:   d.Name,
-				Weight: pointer.Int32Ptr(100),
-			},
-			Port: &routev1.RoutePort{
-				TargetPort: intstr.FromInt(8080),
-			},
-		}
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Spec = routev1.RouteSpec{
+		TLS: &routev1.TLSConfig{
+			InsecureEdgeTerminationPolicy: "Redirect",
+			Termination:                   "edge",
+		},
+		To: routev1.RouteTargetReference{
+			Kind:   "Service",
+			Name:   d.Name,
+			Weight: pointer.Int32Ptr(100),
+		},
+		Port: &routev1.RoutePort{
+			TargetPort: intstr.FromInt(8080),
+		},
 	}
 
 	if currentobject.Annotations == nil {
@@ -1291,9 +1287,7 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 
 // newOidcReturnURI returns a oidcReturnURI object
 func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite, Url string) error {
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
-	}
+	addOwnerRefToObject(currentobject, asOwner(d))
 	url, err := url.Parse(Url)
 	if err != nil {
 		return err
@@ -1569,15 +1563,15 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 		return newApplicationError(fmt.Errorf("reading PHP-FPM configMap failed: %w", err), ErrFilesystemIO)
 	}
 
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
+	addOwnerRefToObject(currentobject, asOwner(d))
 
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
 		// Upstream PHP docker images use zz-docker.conf for configuration and this file gets loaded last (because of 'zz*') and overrides the default configuration loaded from www.conf
 		currentobject.Data = map[string]string{
 			"zz-docker.conf": string(content),
 		}
 	}
-
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
 	}
@@ -1625,9 +1619,10 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
 	}
 
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
+	addOwnerRefToObject(currentobject, asOwner(d))
 
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Data = map[string]string{
 			"custom.conf": string(content),
 		}
@@ -1678,13 +1673,13 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 		return newApplicationError(fmt.Errorf("reading settings.php failed: %w", err), ErrFilesystemIO)
 	}
 
-	if currentobject.CreationTimestamp.IsZero() {
-		addOwnerRefToObject(currentobject, asOwner(d))
+	addOwnerRefToObject(currentobject, asOwner(d))
 
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Data = map[string]string{
 			"settings.php": string(content),
 		}
-
 	}
 
 	if currentobject.Labels == nil {
