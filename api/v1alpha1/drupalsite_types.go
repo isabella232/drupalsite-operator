@@ -179,7 +179,7 @@ type DrupalSite struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DrupalSiteSpec   `json:"spec,omitempty"`
+	Spec   DrupalSiteSpec   `json:"spec"`
 	Status DrupalSiteStatus `json:"status,omitempty"`
 }
 
