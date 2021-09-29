@@ -134,7 +134,7 @@ func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.
 */
-func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, deploymentReplicas int32, log logr.Logger) (transientErrs []reconcileError) {
+func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
 
 	// 1. BuildConfigs and ImageStreams
@@ -171,7 +171,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
-		if transientErr := r.ensureDrupalDeployment(ctx, drp, deploymentReplicas, log); transientErr != nil {
+		if transientErr := r.ensureDrupalDeployment(ctx, drp, deploymentConfig, log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal deployment"))
 		}
 	}
@@ -451,7 +451,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 /*
 ensureDrupalDeployment is similar to ensureResourceX, but for the Drupal server deployment, which requires extra information.
 */
-func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, replicas int32, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, config DeploymentConfig, log logr.Logger) (transientErr reconcileError) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 	err := r.Get(ctx, types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, deploy)
 
@@ -464,7 +464,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 		deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, deploy, func() error {
 			releaseID := releaseID(d)
-			return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID, replicas)
+			return deploymentForDrupalSite(deploy, databaseSecret, d, releaseID, config)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
@@ -860,24 +860,7 @@ func dbodForDrupalSite(currentobject *dbodv1a1.Database, d *webservicesv1a1.Drup
 }
 
 // deploymentForDrupalSite defines the server runtime deployment of a DrupalSite
-func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string, replicas int32) error {
-	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
-	}
-	phpfpmexporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
-	}
-	phpfpmResources, err := ResourceRequestLimit("100Mi", "60m", "270Mi", "1800m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
-	}
-	//TODO: Check best resource consumption
-	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
-	if err != nil {
-		return newApplicationError(err, ErrFunctionDomain)
-	}
+func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret string, d *webservicesv1a1.DrupalSite, releaseID string, config DeploymentConfig) error {
 	ls := labelsForDrupalSite(d.Name)
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -900,7 +883,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
-		currentobject.Spec.Replicas = &replicas
+		currentobject.Spec.Replicas = &config.replicas
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
 		}
@@ -1015,7 +998,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = nginxResources
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 				currentobject.Spec.Template.Spec.Containers[i].ReadinessProbe = &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
@@ -1094,7 +1077,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						ReadOnly:  true,
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmResources
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 
 			case "php-fpm-exporter":
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
@@ -1117,7 +1100,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = phpfpmexporterResources
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 
 			case "webdav":
 				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
@@ -1150,7 +1133,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = webDAVResources
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 			}
 		}
 
@@ -1181,7 +1164,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
 
-	currentobject.Spec.Replicas = &replicas
+	currentobject.Spec.Replicas = &config.replicas
 
 	return nil
 }
@@ -1854,13 +1837,6 @@ func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1
 	return statusBackupsList
 }
 
-// getCurrentNamespace checks for the given variable in the environment, if not exists
-func (r *DrupalSiteReconciler) getCurrentNamespace(ctx context.Context, d *webservicesv1a1.DrupalSite) (*corev1.Namespace, error) {
-	namespace := &corev1.Namespace{}
-	err := r.Get(ctx, types.NamespacedName{Name: d.Namespace}, namespace)
-	return namespace, err
-}
-
 // expectedDeploymentReplicas calculates expected replicas of deployment
 func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, error) {
 	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
@@ -1877,24 +1853,88 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, erro
 	}
 }
 
-func (r *DrupalSiteReconciler) getExpectedDeploymentReplicas(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (replicas int32, requeue bool, updateStatus bool, reconcileErr reconcileError) {
-	namespace, err := r.getCurrentNamespace(ctx, drupalSite)
-	if err != nil {
+// getDeploymentConfiguration precalculates all the configuration that the server deployment needs, including:
+// pod replicas, resource req/lim
+// NOTE: this includes the default resource limits for PHP
+func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+  config= DeploymentConfig{}
+	requeue = false
+	updateStatus = false
+
+	// Get replicas
+	namespace := &corev1.Namespace{}
+	if err := r.Get(ctx, types.NamespacedName{Name: drupalSite.Namespace}, namespace); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
-			return 0, true, false, nil
+			return DeploymentConfig{}, true, false, nil
 		default:
-			return 0, false, false, newApplicationError(err, ErrClientK8s)
+			return DeploymentConfig{}, false, false, newApplicationError(err, ErrClientK8s)
 		}
 	}
-	deploymentReplicas, err := expectedDeploymentReplicas(namespace)
+	replicas, err := expectedDeploymentReplicas(namespace)
 	if err != nil {
-		return 0, false, false, newApplicationError(err, ErrInvalidSpec)
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrInvalidSpec)
+	}
+	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != replicas {
+		drupalSite.Status.ExpectedDeploymentReplicas = &replicas
+		updateStatus = true
 	}
 
-	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != deploymentReplicas {
-		drupalSite.Status.ExpectedDeploymentReplicas = &deploymentReplicas
-		return 0, false, true, nil
+	// Get resources (default)
+
+	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+	if err != nil {
+		reconcileErr= newApplicationError(err, ErrFunctionDomain)
 	}
-	return deploymentReplicas, false, false, nil
+	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
+	if err != nil {
+		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+	}
+	phpResources, err := ResourceRequestLimit("260Mi", "60m", "320Mi", "1800m")
+	if err != nil {
+		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+	}
+	//TODO: Check best resource consumption
+	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
+	if err != nil {
+		reconcileErr= newApplicationError(err, ErrFunctionDomain)
+	}
+  if reconcileErr != nil {
+		return
+  }
+
+	// Get config override (currently only PHP resources)
+
+	configOverride, reconcileErr := r.getConfigOverride(ctx, drupalSite)
+	if reconcileErr != nil {
+		return
+	}
+	if configOverride != nil {
+		phpResources = configOverride.Php.Resources
+	}
+
+	config= DeploymentConfig{replicas: replicas,
+    phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
+	}
+  return
+}
+
+type DeploymentConfig struct {
+	replicas             int32
+	phpResources         corev1.ResourceRequirements
+	nginxResources       corev1.ResourceRequirements
+	phpExporterResources corev1.ResourceRequirements
+	webDAVResources      corev1.ResourceRequirements
+}
+
+func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
+	configOverride := &webservicesv1a1.DrupalSiteConfigOverride{}
+	err := r.Get(ctx, types.NamespacedName{Name: drp.Name, Namespace: drp.Namespace}, configOverride)
+	switch {
+	case k8sapierrors.IsNotFound(err):
+		return nil, nil
+	case err != nil:
+		return nil, newApplicationError(err, ErrClientK8s)
+	}
+	return &configOverride.Spec, nil
 }

@@ -1,4 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
 - drupal.webservices_v1alpha1_drupalsite.yaml
+- drupal.webservices_v1alpha1_drupalsiteconfigoverride.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
