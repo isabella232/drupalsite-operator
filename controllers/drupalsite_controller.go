@@ -104,7 +104,10 @@ type DrupalSiteReconciler struct {
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	exponentialFailure := workqueue.NewItemExponentialFailureRateLimiter(time.Second*time.Duration(r.StartRateLimiterSeconds), time.Minute*time.Duration(r.MaxRateLimiterSeconds))
+	exponentialFailure := workqueue.NewItemExponentialFailureRateLimiter(
+		time.Second*time.Duration(r.StartRateLimiterSeconds),
+		time.Second*time.Duration(r.MaxRateLimiterSeconds),
+	)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
 		Owns(&appsv1.Deployment{}).
