@@ -7,7 +7,7 @@ spec:
   - "drupalsite-sample.webtest.cern.ch"
   version:
     name: "v8.9-1"
-    releaseSpec: "RELEASE-2021.09.29T13-36-15Z"
+    releaseSpec: "RELEASE-2021.09.29T20-21-57Z"
   configuration:
     qosClass: "standard"
     databaseClass: "standard"
