@@ -4,11 +4,11 @@ metadata:
   name: drupalsite-sample
 spec:
   siteUrl: 
-  - "drupalsite-ravineet.webtest.cern.ch"
+  - "drupalsite-ravineet-5.webtest.cern.ch"
   version:
     name: "v8.9-2"
     releaseSpec: "RELEASE-2021.10.26T15-33-59Z"
   configuration:
-    qosClass: "critical"
+    qosClass: "standard"
     databaseClass: "standard"
     diskSize: "1Gi"

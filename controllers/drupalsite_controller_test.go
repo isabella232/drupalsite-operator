@@ -1657,6 +1657,214 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &deploy)
 				}, timeout, interval).Should(Succeed())
 
+				// Check enable Redis job resource creation
+				By("Expecting enable Redis job created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "enable-redis-" + key.Name, Namespace: key.Namespace}, &job)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check if the Schedule resource is created
+				By("Expecting Schedule to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Namespace + "-" + key.Name, Namespace: veleroNamespace}, &schedule)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Routes
+				By("Expecting Drupal Route(s) to be created")
+				for _, url := range cr.Spec.SiteURL {
+					route = routev1.Route{}
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &route)
+						return route.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check OidcReturnUris
+				By("Expecting OidcReturnURIs created")
+				for _, url := range cr.Spec.SiteURL {
+					oidcReturnUri = authz.OidcReturnURI{}
+					hash := md5.Sum([]byte(url))
+					Eventually(func() []metav1.OwnerReference {
+						k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: key.Namespace}, &oidcReturnUri)
+						return oidcReturnUri.ObjectMeta.OwnerReferences
+					}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				}
+
+				// Check if the Cronjob resource is created
+				By("Expecting Cronjob to be created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					return cronjob.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+			})
+		})
+	})
+
+	Describe("Updating the critical QoS drupalSite object", func() {
+		Context("With standard QoS", func() {
+			It("All dependent resources should be created and redis resources should be removed", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-critical",
+					Namespace: "critical",
+				}
+
+				// Create drupalSite object
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Update drupalSite QoSClass fields to standard QoS
+				By("Updating 'qosClass' spec field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Spec.QoSClass = drupalwebservicesv1alpha1.QoSStandard
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				trueVar := true
+				expectedOwnerReference := metav1.OwnerReference{
+					APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+					Kind:       "DrupalSite",
+					Name:       key.Name,
+					UID:        cr.UID,
+					Controller: &trueVar,
+				}
+				configmap := corev1.ConfigMap{}
+				svc := corev1.Service{}
+				pvc := corev1.PersistentVolumeClaim{}
+				job := batchv1.Job{}
+				deploy := appsv1.Deployment{}
+				dbod := dbodv1a1.Database{}
+				route := routev1.Route{}
+				oidcReturnUri := authz.OidcReturnURI{}
+				schedule := velerov1.Schedule{}
+				cronjob := batchbeta1.CronJob{}
+				redis_deploy := appsv1.Deployment{}
+				redis_secret := corev1.Secret{}
+				redis_service := corev1.Service{}
+
+				// Check Redis deployment resource deleted
+				By("Expecting Redis deployment deleted")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_deploy)
+				}, timeout, interval).Should(Not(Succeed()))
+
+				// Check Redis service resource deleted
+				By("Expecting Redis service deleted")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_service)
+				}, timeout, interval).Should(Not(Succeed()))
+
+				// Check Redis secret resource creation
+				By("Expecting Redis secret created")
+				Eventually(func() error {
+					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_secret)
+				}, timeout, interval).Should(Not(Succeed()))
+
+				// Check DBOD resource creation
+				By("Expecting Database resource created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dbod)
+					return dbod.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				By("Expecting the drupal deployment to have at least 2 containers")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return len(deploy.Spec.Template.Spec.Containers) >= 2
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the drupal deployment to have 1 replicas")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return *deploy.Spec.Replicas == 1
+				}, timeout, interval).Should(BeTrue())
+
+				// Check PHP-FPM configMap creation
+				By("Expecting PHP_FPM configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-fpm-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Nginx configMap creation
+				By("Expecting Nginx configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal service
+				By("Expecting Drupal service created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &svc)
+					return svc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check drupal persistentVolumeClaim
+				By("Expecting drupal persistentVolumeClaim created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "pv-claim-" + key.Name, Namespace: key.Namespace}, &pvc)
+					return pvc.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drupal deployments
+				By("Expecting Drupal deployments created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return deploy.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Drush job
+				By("Expecting Drush job created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "ensure-site-install-" + key.Name, Namespace: key.Namespace}, &job)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Update drupalSite custom resource status fields to allow route conditions
+				By("Updating 'initialized' status field in drupalSite resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					cr.Status.Conditions.SetCondition(status.Condition{Type: "Initialized", Status: "True"})
+					return k8sClient.Status().Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				// Update deployment status fields to allow 'ready' status field to be set on the drupalSite resource
+				By("Updating 'ReadyReplicas' and 'AvailableReplicas' status fields in deployment resource")
+				Eventually(func() error {
+					k8sClient.Get(ctx, key, &deploy)
+					deploy.Status.Replicas = 1
+					deploy.Status.AvailableReplicas = 1
+					deploy.Status.ReadyReplicas = 1
+					return k8sClient.Status().Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				// Check 'isCriticalSite' annotation on drupalSite
+				By("Check 'isCriticalSite' annotation on drupalSite")
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					return cr.Annotations["isCriticalSite"] == "false"
+				}, timeout, interval).Should(BeTrue())
+
+				// // Check enable Redis job resource deleted
+				// By("Expecting enable Redis job deleted")
+				// Eventually(func() error {
+				// 	return k8sClient.Get(ctx, types.NamespacedName{Name: "enable-redis-" + key.Name, Namespace: key.Namespace}, &job)
+				// }, timeout, interval).Should(Not(Succeed()))
+
+				// Check disable Redis job resource creation
+				By("Expecting disable Redis job created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "disable-redis-" + key.Name, Namespace: key.Namespace}, &job)
+					return job.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
 				Eventually(func() []metav1.OwnerReference {

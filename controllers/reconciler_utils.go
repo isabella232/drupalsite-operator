@@ -122,6 +122,30 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 
+// setCriticalSiteAnnotation sets the 'isCriticalSite' annotation on the drupalSite object
+func setCriticalSiteAnnotation(drp *webservicesv1a1.DrupalSite) (update bool) {
+	if len(drp.Annotations) == 0 {
+		drp.Annotations = map[string]string{}
+	}
+	if drp.Annotations["isCriticalSite"] == "true" {
+		return false
+	}
+	drp.Annotations["isCriticalSite"] = "true"
+	return true
+}
+
+// unsetCriticalSiteAnnotation unsets the 'isCriticalSite' annotation on the drupalSite object
+func unsetCriticalSiteAnnotation(drp *webservicesv1a1.DrupalSite) (update bool) {
+	if len(drp.Annotations) == 0 {
+		drp.Annotations = map[string]string{}
+	}
+	if drp.Annotations["isCriticalSite"] == "false" {
+		return false
+	}
+	drp.Annotations["isCriticalSite"] = "false"
+	return true
+}
+
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
 func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
@@ -283,4 +307,24 @@ func createKeyValuePairs(m map[string]string) string {
 		fmt.Fprintf(b, "%s=\"%s\"\n", key, value)
 	}
 	return b.String()
+}
+
+// checkIfEnvVarExists checks if a given EnvVar array has the specific variable present or not
+func checkIfEnvVarExists(envVarArray []corev1.EnvVar, envVarName string) (flag bool) {
+	for _, item := range envVarArray {
+		if item.Name == envVarName {
+			return true
+		}
+	}
+	return false
+}
+
+// checkIfEnvFromSourceExists checks if a given EnvFromSource array has the specific source variable present or not
+func checkIfEnvFromSourceExists(envFromSourceArray []corev1.EnvFromSource, envVarName string) (flag bool) {
+	for _, item := range envFromSourceArray {
+		if item.SecretRef != nil && item.SecretRef.Name == envVarName {
+			return true
+		}
+	}
+	return false
 }
