@@ -320,8 +320,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Ensure that the server deployment has the configmap annotations
-	if transientErr := r.ensureDeploymentConfigmapHash(ctx, drupalSite, log); transientErr != nil {
+	requeue, transientErr := r.ensureDeploymentConfigmapHash(ctx, drupalSite, log)
+	switch {
+	case transientErr != nil:
 		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
+	case requeue:
+		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// Set "UpdateNeeded" and perform code update

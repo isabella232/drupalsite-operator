@@ -151,13 +151,13 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 
 // ensureDeploymentConfigmapHash ensures that the deployment has annotations with the content of each configmap.
 // If the content of the configmaps changes, this will ensure that the deployemnt rolls out.
-func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs reconcileError) {
+func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (requeue bool, transientErr reconcileError) {
 	deploy, cmPhp, cmNginx, cmSettings, err := r.getDeployConfigmap(ctx, d)
 	switch {
 	case k8sapierrors.IsNotFound(err):
-		return nil
+		return false, nil
 	case err != nil:
-		return newApplicationError(err, ErrClientK8s)
+		return false, newApplicationError(err, ErrClientK8s)
 	}
 	updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
 		hashPhp := md5.Sum([]byte(createKeyValuePairs(cmPhp.Data)))
@@ -172,10 +172,14 @@ func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context
 	_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, &deploy, func() error {
 		return updateDeploymentAnnotations(&deploy, d)
 	})
-	if err != nil {
-		return newApplicationError(fmt.Errorf("failed to annotate deployment with configmap hashes: %w", err), ErrClientK8s)
+	switch {
+	case k8sapierrors.IsConflict(err):
+		log.V(4).Info("Object changed while reconciling. Requeuing.")
+		return true, nil
+	case err != nil:
+		return false, newApplicationError(fmt.Errorf("failed to annotate deployment with configmap hashes: %w", err), ErrClientK8s)
 	}
-	return nil
+	return false, nil
 }
 
 /*
