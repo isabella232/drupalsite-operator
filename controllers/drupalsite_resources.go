@@ -1145,13 +1145,17 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			switch container.Name {
 			case "nginx":
 				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
 				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 			case "webdav":
 				currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
+				currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 			}
 		}
 	}
