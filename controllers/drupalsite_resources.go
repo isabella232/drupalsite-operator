@@ -49,6 +49,7 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
@@ -368,12 +369,15 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		return nil
 	case "cm_php":
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		updateStatus, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return newApplicationError(err, ErrClientK8s)
+		}
+		// TODO: If we ever UPDATE the configmap, we should also annotate the deployment with the configmap's content hash here.
+		if updateStatus == controllerutil.OperationResultUpdated {
 		}
 		return nil
 	case "cm_nginx":
@@ -1558,8 +1562,8 @@ func clusterRoleBindingForTektonExtraPermission(currentobject *rbacv1.ClusterRol
 	return nil
 }
 
-// updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file.
-// If the file contents change, it rolls out a new deployment.
+// updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file,
+// but only if it's freshly created
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Configuration.QoSClass) + "/php-fpm.conf"
 	content, err := ioutil.ReadFile(configPath)
@@ -1586,30 +1590,6 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 	ls["app"] = "php"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
-	}
-
-	if !currentobject.CreationTimestamp.IsZero() {
-		// Roll out a new deployment
-		deploy := &appsv1.Deployment{}
-		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap (deployment not found): %w", err), ErrClientK8s)
-		}
-		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
-			hash := md5.Sum([]byte(currentobject.Data["zz-docker.conf"]))
-			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"]
-			// NOTE: the following check is unnecessary, we can always perform the action
-			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
-				deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hash[:])
-			}
-			return nil
-		}
-		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
-			return updateDeploymentAnnotations(deploy, d)
-		})
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the PHP-FPM configMap: %w", err), ErrClientK8s)
-		}
 	}
 	return nil
 }
@@ -1643,29 +1623,6 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-
-	if !currentobject.CreationTimestamp.IsZero() {
-		// Roll out a new deployment
-		deploy := &appsv1.Deployment{}
-		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap (deployment not found): %w", err), ErrClientK8s)
-		}
-		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
-			hash := md5.Sum([]byte(currentobject.Data["custom.conf"]))
-			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"]
-			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
-				deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hash[:])
-			}
-			return nil
-		}
-		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
-			return updateDeploymentAnnotations(deploy, d)
-		})
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the Nginx configMap: %w", err), ErrClientK8s)
-		}
-	}
 	return nil
 }
 
@@ -1697,30 +1654,6 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-
-	if !currentobject.CreationTimestamp.IsZero() {
-		// Roll out a new deployment
-		deploy := &appsv1.Deployment{}
-		err = c.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the settings.php configMap (deployment not found): %w", err), ErrClientK8s)
-		}
-		updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
-			hash := md5.Sum([]byte(currentobject.Data["settings.php"]))
-			currentHash, flag := deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"]
-			if flag == false || hex.EncodeToString(hash[:]) != currentHash {
-				deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"] = hex.EncodeToString(hash[:])
-			}
-			return nil
-		}
-		_, err := controllerruntime.CreateOrUpdate(ctx, c, deploy, func() error {
-			return updateDeploymentAnnotations(deploy, d)
-		})
-		if err != nil {
-			return newApplicationError(fmt.Errorf("failed to roll out new deployment while updating the settings.php configMap: %w", err), ErrClientK8s)
-		}
-	}
-
 	return nil
 }
 
