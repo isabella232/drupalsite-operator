@@ -1880,8 +1880,10 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	}
 
 	// Get resources (default)
+	// TODO: rewrite this to access a dictionary (which can be in a function)
+	// res, err:= reqLimDict("critical","nginx")
 
-	nginxResources, err := ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+	nginxResources, err := ResourceRequestLimit("10Mi", "40m", "20Mi", "500m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
@@ -1889,7 +1891,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpResources, err := ResourceRequestLimit("260Mi", "60m", "320Mi", "1800m")
+	phpResources, err := ResourceRequestLimit("520Mi", "300m", "640Mi", "3000m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
