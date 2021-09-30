@@ -16,6 +16,7 @@ limitations under the License.
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
@@ -274,4 +275,12 @@ func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, n
 func generateWebDAVpassword() string {
 	hash := md5.Sum([]byte(time.Now().String()))
 	return hex.EncodeToString(hash[:])[0:10]
+}
+
+func createKeyValuePairs(m map[string]string) string {
+	b := new(bytes.Buffer)
+	for key, value := range m {
+		fmt.Fprintf(b, "%s=\"%s\"\n", key, value)
+	}
+	return b.String()
 }

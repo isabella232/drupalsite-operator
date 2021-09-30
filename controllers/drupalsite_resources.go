@@ -131,6 +131,53 @@ func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d
 	return stdout, nil
 }
 
+func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webservicesv1a1.DrupalSite) (deploy appsv1.Deployment,
+	cmPhp corev1.ConfigMap, cmNginx corev1.ConfigMap, cmSettings corev1.ConfigMap, err error) {
+	err = r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, &deploy)
+	if err != nil {
+		return
+	}
+	err = r.Get(ctx, types.NamespacedName{Name: "php-fpm-" + d.Name, Namespace: d.Namespace}, &cmPhp)
+	if err != nil {
+		return
+	}
+	err = r.Get(ctx, types.NamespacedName{Name: "nginx-" + d.Name, Namespace: d.Namespace}, &cmNginx)
+	if err != nil {
+		return
+	}
+	err = r.Get(ctx, types.NamespacedName{Name: "site-settings-" + d.Name, Namespace: d.Namespace}, &cmPhp)
+	return
+}
+
+// ensureDeploymentConfigmapHash ensures that the deployment has annotations with the content of each configmap.
+// If the content of the configmaps changes, this will ensure that the deployemnt rolls out.
+func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErrs reconcileError) {
+	deploy, cmPhp, cmNginx, cmSettings, err := r.getDeployConfigmap(ctx, d)
+	switch {
+	case k8sapierrors.IsNotFound(err):
+		return nil
+	case err != nil:
+		return newApplicationError(err, ErrClientK8s)
+	}
+	updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
+		hashPhp := md5.Sum([]byte(createKeyValuePairs(cmPhp.Data)))
+		hashNginx := md5.Sum([]byte(createKeyValuePairs(cmNginx.Data)))
+		hashSettings := md5.Sum([]byte(createKeyValuePairs(cmSettings.Data)))
+
+		deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hashPhp[:])
+		deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hashNginx[:])
+		deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"] = hex.EncodeToString(hashSettings[:])
+		return nil
+	}
+	_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, &deploy, func() error {
+		return updateDeploymentAnnotations(&deploy, d)
+	})
+	if err != nil {
+		return newApplicationError(fmt.Errorf("failed to annotate deployment with configmap hashes: %w", err), ErrClientK8s)
+	}
+	return nil
+}
+
 /*
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.

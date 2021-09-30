@@ -319,6 +319,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
 	}
 
+	// Ensure that the server deployment has the configmap annotations
+	if transientErr := r.ensureDeploymentConfigmapHash(ctx, drupalSite, log); transientErr != nil {
+		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
+	}
+
 	// Set "UpdateNeeded" and perform code update
 	// 1. set the Status.ReleaseID.Failsafe
 	// 2. ensure updated deployment
