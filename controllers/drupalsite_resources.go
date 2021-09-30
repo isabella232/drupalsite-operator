@@ -174,7 +174,7 @@ func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context
 	})
 	switch {
 	case k8sapierrors.IsConflict(err):
-		log.V(4).Info("Object changed while reconciling. Requeuing.")
+		log.V(4).Info("Server deployment changed while reconciling. Requeuing.")
 		return true, nil
 	case err != nil:
 		return false, newApplicationError(fmt.Errorf("failed to annotate deployment with configmap hashes: %w", err), ErrClientK8s)
@@ -371,6 +371,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, route, func() error {
 				return routeForDrupalSite(route, d, string(req))
 			})
+			// TODO: don't throw on conflict
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", route.TypeMeta.Kind, "Resource.Namespace", route.Namespace, "Resource.Name", route.Name)
 				return newApplicationError(err, ErrClientK8s)
