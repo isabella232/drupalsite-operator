@@ -145,7 +145,7 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 	if err != nil {
 		return
 	}
-	err = r.Get(ctx, types.NamespacedName{Name: "site-settings-" + d.Name, Namespace: d.Namespace}, &cmPhp)
+	err = r.Get(ctx, types.NamespacedName{Name: "site-settings-" + d.Name, Namespace: d.Namespace}, &cmSettings)
 	return
 }
 
@@ -428,8 +428,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
-		// TODO: If we ever UPDATE the configmap, we should also annotate the deployment with the configmap's content hash here.
-		if updateStatus == controllerutil.OperationResultUpdated {
 		}
 		return nil
 	case "cm_nginx":
