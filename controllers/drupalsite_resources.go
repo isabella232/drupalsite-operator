@@ -49,7 +49,6 @@ import (
 	"k8s.io/utils/pointer"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
@@ -421,13 +420,12 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		return nil
 	case "cm_php":
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-fpm-" + d.Name, Namespace: d.Namespace}}
-		updateStatus, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			return updateConfigMapForPHPFPM(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
 			return newApplicationError(err, ErrClientK8s)
-		}
 		}
 		return nil
 	case "cm_nginx":
