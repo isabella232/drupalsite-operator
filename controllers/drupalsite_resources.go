@@ -1864,20 +1864,20 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	// TODO: rewrite this to access a dictionary (which can be in a function)
 	// res, err:= reqLimDict("critical","nginx")
 
-	nginxResources, err := ResourceRequestLimit("10Mi", "40m", "20Mi", "500m")
+	nginxResources, err := ResourceRequestLimit("10Mi", "30m", "20Mi", "900m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "8m")
+	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpResources, err := ResourceRequestLimit("520Mi", "300m", "640Mi", "3000m")
+	phpResources, err := ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	//TODO: Check best resource consumption
-	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "100m")
+	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
