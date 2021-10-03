@@ -925,6 +925,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Annotations = map[string]string{}
 	}
 	currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
+
+	// Settings only on creation (not enforced)
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
@@ -1191,26 +1193,39 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 
 	}
 
+	// Settings on update
 	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"]
 	if !annotExists || d.Status.ReleaseID.Failsafe == "" || currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID {
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
 				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
 				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 			case "webdav":
 				currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 			}
 		}
 	}
+
+	// Settings enforced always
+
+	for i, container := range currentobject.Spec.Template.Spec.Containers {
+		switch container.Name {
+		case "nginx":
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
+		case "php-fpm":
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
+		case "php-fpm-exporter":
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
+		case "webdav":
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
+		}
+	}
+	currentobject.Spec.Replicas = &config.replicas
 	// Add an annotation to be able to verify what releaseID of pod is running. Did not use labels, as it will affect the labelselector for the deployment and might cause downtime
 	currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] = releaseID
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/container"] = "php-fpm"
@@ -1219,8 +1234,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/71
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
-
-	currentobject.Spec.Replicas = &config.replicas
 
 	return nil
 }
