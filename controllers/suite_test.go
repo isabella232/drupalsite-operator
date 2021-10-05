@@ -72,7 +72,7 @@ var _ = BeforeSuite(func(done Done) {
 	apiServerFlags := append([]string(nil), envtest.DefaultKubeAPIServerFlags...)
 	apiServerFlags = append(apiServerFlags, customApiServerFlags...)
 
-	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/nginx"
+	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder"
 	VeleroNamespace = "openshift-cern-drupal"
 	PhpFpmExporterImage = "test-phpfpmexporter"
 	WebDAVImage = "test-webdav"
