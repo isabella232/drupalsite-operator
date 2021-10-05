@@ -81,8 +81,8 @@ func main() {
 		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	flag.Parse()
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	var err error
 	controllers.BuildResources, err = controllers.ResourceRequestLimit("250Mi", "250m", "300Mi", "1000m")
