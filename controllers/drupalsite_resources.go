@@ -496,7 +496,8 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 			Schedule: "*/30 * * * *",
 			// The default is 3, last job should suffice
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
-			ConcurrencyPolicy:          batchbeta1.AllowConcurrent,
+			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
+			ConcurrencyPolicy: batchbeta1.ReplaceConcurrent,
 			JobTemplate: batchbeta1.JobTemplateSpec{
 				Spec: batchv1.JobSpec{
 					BackoffLimit: &jobBackoffLimit,
