@@ -57,8 +57,6 @@ const (
 var (
 	// SiteBuilderImage refers to the sitebuilder image name
 	SiteBuilderImage string
-	// NginxImage refers to the nginx image name
-	NginxImage string
 	// PhpFpmExporterImage refers to the php-fpm-exporter image name
 	PhpFpmExporterImage string
 	// WebDAVImage refers to the webdav image name
