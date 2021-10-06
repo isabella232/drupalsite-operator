@@ -1011,16 +1011,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			},
 		}
 
-		currentobject.Spec.Template.Spec.InitContainers = []corev1.Container{{
-			Name:            "nginx-init",
-			ImagePullPolicy: "Always",
-			Command:         syncDrupalFilesToEmptydir(),
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      "empty-dir",
-				MountPath: "/var/run/",
-			}},
-		}}
-
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
