@@ -1194,7 +1194,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
 				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
 			case "webdav":
