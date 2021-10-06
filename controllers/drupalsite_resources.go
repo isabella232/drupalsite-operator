@@ -1011,16 +1011,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			},
 		}
 
-		currentobject.Spec.Template.Spec.InitContainers = []corev1.Container{{
-			Name:            "nginx-init",
-			ImagePullPolicy: "Always",
-			Command:         syncDrupalFilesToEmptydir(),
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      "empty-dir",
-				MountPath: "/var/run/",
-			}},
-		}}
-
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
@@ -1200,10 +1190,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = NginxImage + ":" + releaseID
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-				currentobject.Spec.Template.Spec.InitContainers[0].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			case "php-fpm-exporter":
 				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
 			case "webdav":
@@ -1217,6 +1206,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
 		switch container.Name {
 		case "nginx":
+			// enforce nginx command
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
