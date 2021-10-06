@@ -1014,6 +1014,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
