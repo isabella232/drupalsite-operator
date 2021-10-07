@@ -24,6 +24,8 @@ spec:
       - args:
         - --leader-elect
         - --sitebuilder-image={{.Values.drupalsiteOperator.sitebuilderImage}}
+        - --php-fpm-exporter-image={{.Values.drupalsiteOperator.phpFpmExporterImage}}
+        - --webdav-image={{.Values.drupalsiteOperator.webdavImage}}
         - --zap-stacktrace-level={{.Values.drupalsiteOperator.logStacktraceLevel}}
         - --zap-log-level={{.Values.drupalsiteOperator.logLevel}}
         - --default-release-spec={{.Values.drupalsiteOperator.defaultReleaseSpec}}
