@@ -1047,24 +1047,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].ReadinessProbe = &v1.Probe{
 					Handler: v1.Handler{
 						HTTPGet: &v1.HTTPGetAction{
-							Path: "/user/login",
+							Path: "/",
 							Port: intstr.FromInt(8080),
 						},
 					},
 					InitialDelaySeconds: 40,
 					TimeoutSeconds:      15,
 				}
-				currentobject.Spec.Template.Spec.Containers[i].LivenessProbe = &v1.Probe{
-					Handler: v1.Handler{
-						HTTPGet: &v1.HTTPGetAction{
-							Path: "/user/login",
-							Port: intstr.FromInt(8080),
-						},
-					},
-					InitialDelaySeconds: 300,
-					TimeoutSeconds:      200,
-				}
-
 			case "php-fpm":
 				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
