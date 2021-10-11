@@ -29,6 +29,7 @@ spec:
         - --zap-stacktrace-level={{.Values.drupalsiteOperator.logStacktraceLevel}}
         - --zap-log-level={{.Values.drupalsiteOperator.logLevel}}
         - --default-release-spec={{.Values.drupalsiteOperator.defaultReleaseSpec}}
+        - --parallel-thread-count={{.Values.drupalsiteOperator.parallelThreadCount}}
         command:
         - /manager
         image: {{ .Values.image | quote }}
