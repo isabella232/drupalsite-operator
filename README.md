@@ -68,7 +68,10 @@ This reference is useful to run the operator locally.
 argument | example | description
 --- | --- | ---
 `sitebuilder-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder | The sitebuilder source image name
-`nginx-image` | gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/nginx | The nginx source image name
+`php-fpm-exporter-image` | gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z | The php-fpm-exporter source image name
+`velero-namespace` | openshift-cern-drupal | The namespace of the Velero server to create backups
+`webdav-image` | gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.10.07T13-46-43Z | The webdav source image name
+`parallel-thread-count` | 5 | The number of threads used by the main controller of DrupalSite Operator
 
 #### Configmaps for each QoS class
 

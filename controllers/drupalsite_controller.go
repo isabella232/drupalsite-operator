@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -65,8 +66,10 @@ var (
 	SMTPHost string
 	// VeleroNamespace refers to the namespace of the velero server to create backups
 	VeleroNamespace string
-	// ReleaseSpec refers to the releaseSpec of the drupalSite to be defaulted incase it is empty
+	// DefaultReleaseSpec refers to the releaseSpec of the drupalSite to be defaulted incase it is empty
 	DefaultReleaseSpec string
+	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
+	ParallelThreadCount int
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -134,6 +137,9 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{}
 			}),
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: ParallelThreadCount,
+		}).
 		Complete(r)
 }
 
