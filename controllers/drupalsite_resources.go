@@ -1009,6 +1009,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					},
 				},
 			},
+			{
+				// Tmp Dir storage to address issue https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
+				Name: "tmp-dir",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
+				},
+			},
 		}
 
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
@@ -1109,6 +1116,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/app/web/sites/default/settings.php",
 						SubPath:   "settings.php",
 						ReadOnly:  true,
+					},
+					{
+						// Tmp Dir storage to address issue https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
+						Name:      "tmp-dir",
+						MountPath: "/tmp",
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
