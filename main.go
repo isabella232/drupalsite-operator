@@ -76,7 +76,7 @@ func main() {
 	flag.StringVar(&controllers.WebDAVImage, "webdav-image", "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.10.07T13-46-43Z", "The webdav source image name.")
 	flag.StringVar(&controllers.SMTPHost, "smtp-host", "cernmx.cern.ch", "SMTP host used by Drupal server pods to send emails.")
 	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
-	flag.StringVar(&controllers.DefaultReleaseSpec, "default-release-spec", "RELEASE-2021.10.07T14-52-56Z", "The default releaseSpec value to be passed to the DrupalSites")
+	flag.StringVar(&controllers.DefaultReleaseSpec, "default-release-spec", "RELEASE-2021.10.13T12-49-25Z", "The default releaseSpec value to be passed to the DrupalSites")
 	flag.IntVar(&controllers.ParallelThreadCount, "parallel-thread-count", 1, "The default number of parallel threads executed by the DrupalSite Operator controllers")
 	opts := zap.Options{
 		Development: false,

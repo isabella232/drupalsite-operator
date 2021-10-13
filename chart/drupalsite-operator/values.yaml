@@ -23,5 +23,5 @@ drupalsiteOperator:
   logLevel: "3"
   # Zap Level at and above which stacktraces are captured (one of 'info', 'error')
   logStacktraceLevel: "error"
-  defaultReleaseSpec: "RELEASE-2021.09.13T09-24-02Z"
+  defaultReleaseSpec: "RELEASE-2021.10.13T12-49-25Z"
   parallelThreadCount: 1
