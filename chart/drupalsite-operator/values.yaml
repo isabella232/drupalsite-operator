@@ -18,7 +18,7 @@ resources:
 drupalsiteOperator:
   sitebuilderImage: "gitlab-registry.cern.ch/drupal/paas/cern-drupal-distribution/site-builder"
   phpFpmExporterImage: "gitlab-registry.cern.ch/drupal/paas/php-fpm-prometheus-exporter:RELEASE.2021.06.02T09-41-38Z"
-  webdavImage: "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.10.07T13-46-43Z"
+  webdavImage: "gitlab-registry.cern.ch/drupal/paas/sabredav/webdav:RELEASE-2021.10.12T17-55-06Z"
   # Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error', or any integer value > 0 which corresponds to custom debug levels of increasing verbosity
   logLevel: "3"
   # Zap Level at and above which stacktraces are captured (one of 'info', 'error')
