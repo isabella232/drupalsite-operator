@@ -223,6 +223,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_job", log); transientErr != nil {
+		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP Job CM"))
+	}
 	if r.isDBODProvisioned(ctx, drp) {
 		if transientErr := r.ensureDrupalDeployment(ctx, drp, deploymentConfig, log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal deployment"))
@@ -302,6 +305,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
 	- cm_settings: ConfigMap for `settings.php`
+	- cm_php_job: ConfigMap for 'config.ini' for PHP jobs
 	- route: Route for the drupalsite
 	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
@@ -450,6 +454,16 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
+	case "cm_php_job":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-job-config-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
+			return updateConfigMapForPHPJob(ctx, cm, d, r.Client)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	case "dbod_cr":
 		dbod := &dbodv1a1.Database{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, dbod, func() error {
@@ -588,10 +602,18 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 											},
 										},
 									},
-									VolumeMounts: []corev1.VolumeMount{{
-										Name:      "drupal-directory-" + drupalsite.Name,
-										MountPath: "/drupal-data",
-									}},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "drupal-directory-" + drupalsite.Name,
+											MountPath: "/drupal-data",
+										},
+										{
+											Name:      "php-job-config-volume",
+											MountPath: "/usr/local/etc/php/conf.d/config.ini",
+											SubPath:   "config.ini",
+											ReadOnly:  true,
+										},
+									},
 								},
 							},
 							Volumes: []corev1.Volume{
@@ -600,6 +622,16 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 									VolumeSource: corev1.VolumeSource{
 										PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 											ClaimName: "pv-claim-" + drupalsite.Name,
+										},
+									},
+								},
+								{
+									Name: "php-job-config-volume",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "php-job-config-" + drupalsite.Name,
+											},
 										},
 									},
 								},
@@ -1447,19 +1479,39 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						},
 					},
 				},
-				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "drupal-directory-" + d.Name,
-					MountPath: "/drupal-data",
-				}},
-			}},
-			Volumes: []corev1.Volume{{
-				Name: "drupal-directory-" + d.Name,
-				VolumeSource: corev1.VolumeSource{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "pv-claim-" + d.Name,
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "php-job-config-volume",
+						MountPath: "/usr/local/etc/php/conf.d/config.ini",
+						SubPath:   "config.ini",
+						ReadOnly:  true,
 					},
 				},
 			}},
+			Volumes: []corev1.Volume{
+				{
+					Name: "drupal-directory-" + d.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "php-job-config-volume",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "php-job-config-" + d.Name,
+							},
+						},
+					},
+				},
+			},
 		}
 		ls["app"] = "drush"
 		for k, v := range ls {
@@ -1540,7 +1592,14 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					{
 						Name:      "drupal-directory-" + d.Name,
 						MountPath: "/drupal-data",
-					}},
+					},
+					{
+						Name:      "php-job-config-volume",
+						MountPath: "/usr/local/etc/php/conf.d/config.ini",
+						SubPath:   "config.ini",
+						ReadOnly:  true,
+					},
+				},
 			}},
 			Volumes: []corev1.Volume{
 				{
@@ -1558,7 +1617,18 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 							ClaimName: "pv-claim-" + string(d.Spec.Configuration.CloneFrom),
 						},
 					},
-				}},
+				},
+				{
+					Name: "php-job-config-volume",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "php-job-config-" + d.Name,
+							},
+						},
+					},
+				},
+			},
 		}
 		ls["app"] = "clone"
 		for k, v := range ls {
@@ -1722,6 +1792,37 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	}
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "nginx"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
+}
+
+// updateConfigMapForPHPJob modifies the configmap to include the file config.ini for jobs
+func updateConfigMapForPHPJob(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	configPath := "/tmp/runtime-config/sitebuilder/config.ini"
+	content, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return newApplicationError(fmt.Errorf("reading config.ini failed: %w", err), ErrFilesystemIO)
+	}
+
+	addOwnerRefToObject(currentobject, asOwner(d))
+
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.Data = map[string]string{
+			"config.ini": string(content),
+		}
+	}
+
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	if currentobject.Annotations == nil {
+		currentobject.Annotations = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "php"
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
