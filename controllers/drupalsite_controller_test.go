@@ -181,6 +181,20 @@ var _ = Describe("DrupalSite controller", func() {
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
+				// Check Site settings configMap creation
+				By("Expecting Site settings configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-settings-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check PHP Cli configMap creation
+				By("Expecting PHP Cli configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
 				// Check Drupal service
 				By("Expecting Drupal service created")
 				Eventually(func() []metav1.OwnerReference {
@@ -531,6 +545,28 @@ var _ = Describe("DrupalSite controller", func() {
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
+				// Check Site settings configMap creation
+				By("Expecting Site settings configmaps recreated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-settings-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return k8sClient.Delete(ctx, &configmap)
+				}, timeout, interval).Should(Succeed())
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-settings-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check PHP Cli configMap creation
+				By("Expecting PHP Cli configmaps recreated")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return k8sClient.Delete(ctx, &configmap)
+				}, timeout, interval).Should(Succeed())
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
 				// Check Drupal service
 				By("Expecting Drupal service recreated")
 				Eventually(func() error {
@@ -805,6 +841,19 @@ var _ = Describe("DrupalSite controller", func() {
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
+				// Check Site settings configMap creation
+				By("Expecting Site settings configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-settings-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check PHP Cli configMap creation
+				By("Expecting PHP Cli configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 				// Check Drupal service
 				By("Expecting Drupal service created")
 				Eventually(func() []metav1.OwnerReference {
@@ -1246,6 +1295,20 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting Nginx configmaps created")
 				Eventually(func() []metav1.OwnerReference {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "nginx-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check Site settings configMap creation
+				By("Expecting Site settings configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "site-settings-" + key.Name, Namespace: key.Namespace}, &configmap)
+					return configmap.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
+
+				// Check PHP Cli configMap creation
+				By("Expecting PHP Cli configmaps created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + key.Name, Namespace: key.Namespace}, &configmap)
 					return configmap.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 

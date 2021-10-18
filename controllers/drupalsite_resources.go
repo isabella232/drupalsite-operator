@@ -133,7 +133,7 @@ func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d
 }
 
 func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webservicesv1a1.DrupalSite) (deploy appsv1.Deployment,
-	cmPhp corev1.ConfigMap, cmNginx corev1.ConfigMap, cmSettings corev1.ConfigMap, err error) {
+	cmPhp corev1.ConfigMap, cmNginx corev1.ConfigMap, cmSettings corev1.ConfigMap, cmPhpCli corev1.ConfigMap, err error) {
 	err = r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, &deploy)
 	if err != nil {
 		return
@@ -147,13 +147,17 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 		return
 	}
 	err = r.Get(ctx, types.NamespacedName{Name: "site-settings-" + d.Name, Namespace: d.Namespace}, &cmSettings)
+	if err != nil {
+		return
+	}
+	err = r.Get(ctx, types.NamespacedName{Name: "php-cli-config-" + d.Name, Namespace: d.Namespace}, &cmSettings)
 	return
 }
 
 // ensureDeploymentConfigmapHash ensures that the deployment has annotations with the content of each configmap.
 // If the content of the configmaps changes, this will ensure that the deployemnt rolls out.
 func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (requeue bool, transientErr reconcileError) {
-	deploy, cmPhp, cmNginx, cmSettings, err := r.getDeployConfigmap(ctx, d)
+	deploy, cmPhp, cmNginx, cmSettings, cmPhpCli, err := r.getDeployConfigmap(ctx, d)
 	switch {
 	case k8sapierrors.IsNotFound(err):
 		return false, nil
@@ -164,10 +168,12 @@ func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context
 		hashPhp := md5.Sum([]byte(createKeyValuePairs(cmPhp.Data)))
 		hashNginx := md5.Sum([]byte(createKeyValuePairs(cmNginx.Data)))
 		hashSettings := md5.Sum([]byte(createKeyValuePairs(cmSettings.Data)))
+		hashPhpCli := md5.Sum([]byte(createKeyValuePairs(cmPhpCli.Data)))
 
 		deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hashPhp[:])
 		deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hashNginx[:])
 		deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"] = hex.EncodeToString(hashSettings[:])
+		deploy.Spec.Template.ObjectMeta.Annotations["php-cli-configmap/hash"] = hex.EncodeToString(hashPhpCli[:])
 		return nil
 	}
 	_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, &deploy, func() error {
@@ -223,7 +229,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_job", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_cli", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP Job CM"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
@@ -305,7 +311,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- cm_php: ConfigMap for PHP-FPM
 	- cm_nginx: ConfigMap for Nginx
 	- cm_settings: ConfigMap for `settings.php`
-	- cm_php_job: ConfigMap for 'config.ini' for PHP jobs
+	- cm_php_cli: ConfigMap for 'config.ini' for PHP CLI
 	- route: Route for the drupalsite
 	- oidc_return_uri: Redirection URI for OIDC
 	- dbod_cr: DBOD custom resource to establish database & respective connection for the drupalsite
@@ -454,10 +460,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "cm_php_job":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-job-config-" + d.Name, Namespace: d.Namespace}}
+	case "cm_php_cli":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-cli-config-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			return updateConfigMapForPHPJob(ctx, cm, d, r.Client)
+			return updateConfigMapForPHPCLI(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -608,7 +614,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 											MountPath: "/drupal-data",
 										},
 										{
-											Name:      "php-job-config-volume",
+											Name:      "php-cli-config-volume",
 											MountPath: "/usr/local/etc/php/conf.d/config.ini",
 											SubPath:   "config.ini",
 											ReadOnly:  true,
@@ -626,11 +632,11 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 									},
 								},
 								{
-									Name: "php-job-config-volume",
+									Name: "php-cli-config-volume",
 									VolumeSource: corev1.VolumeSource{
 										ConfigMap: &corev1.ConfigMapVolumeSource{
 											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "php-job-config-" + drupalsite.Name,
+												Name: "php-cli-config-" + drupalsite.Name,
 											},
 										},
 									},
@@ -1055,6 +1061,16 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory},
 				},
 			},
+			{
+				Name: "php-cli-config-volume",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "php-cli-config-" + d.Name,
+						},
+					},
+				},
+			},
 		}
 
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
@@ -1160,6 +1176,12 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						// Tmp Dir storage to address issue https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
 						Name:      "tmp-dir",
 						MountPath: "/tmp",
+					},
+					{
+						Name:      "php-cli-config-volume",
+						MountPath: "/usr/local/etc/php/conf.d/config.ini",
+						SubPath:   "config.ini",
+						ReadOnly:  true,
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
@@ -1485,7 +1507,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						MountPath: "/drupal-data",
 					},
 					{
-						Name:      "php-job-config-volume",
+						Name:      "php-cli-config-volume",
 						MountPath: "/usr/local/etc/php/conf.d/config.ini",
 						SubPath:   "config.ini",
 						ReadOnly:  true,
@@ -1502,11 +1524,11 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 					},
 				},
 				{
-					Name: "php-job-config-volume",
+					Name: "php-cli-config-volume",
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "php-job-config-" + d.Name,
+								Name: "php-cli-config-" + d.Name,
 							},
 						},
 					},
@@ -1594,7 +1616,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						MountPath: "/drupal-data",
 					},
 					{
-						Name:      "php-job-config-volume",
+						Name:      "php-cli-config-volume",
 						MountPath: "/usr/local/etc/php/conf.d/config.ini",
 						SubPath:   "config.ini",
 						ReadOnly:  true,
@@ -1619,11 +1641,11 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				},
 				{
-					Name: "php-job-config-volume",
+					Name: "php-cli-config-volume",
 					VolumeSource: corev1.VolumeSource{
 						ConfigMap: &corev1.ConfigMapVolumeSource{
 							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "php-job-config-" + d.Name,
+								Name: "php-cli-config-" + d.Name,
 							},
 						},
 					},
@@ -1798,8 +1820,8 @@ func updateConfigMapForSiteSettings(ctx context.Context, currentobject *corev1.C
 	return nil
 }
 
-// updateConfigMapForPHPJob modifies the configmap to include the file config.ini for jobs
-func updateConfigMapForPHPJob(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+// updateConfigMapForPHPCLI modifies the configmap to include the file config.ini for php CLI
+func updateConfigMapForPHPCLI(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
 	configPath := "/tmp/runtime-config/sitebuilder/config.ini"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
