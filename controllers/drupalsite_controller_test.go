@@ -1006,7 +1006,7 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
-	Describe("Update the drupalsite object", func() {
+	Describe("Update the drupalsite object with s2i source", func() {
 		Context("With a different drupal Version", func() {
 			It("Should be updated successfully", func() {
 				key = types.NamespacedName{
@@ -1128,7 +1128,7 @@ var _ = Describe("DrupalSite controller", func() {
 					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
 						switch container.Name {
 						case "cronjob":
-							return strings.Split(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image, ":")[1] == newVersion+"-"+newReleaseSpec
+							return strings.Split(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image, ":")[2] == newVersion+"-"+newReleaseSpec
 						default:
 							return false
 						}
