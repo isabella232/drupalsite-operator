@@ -857,7 +857,7 @@ func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) c
 	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
 		return corev1.ObjectReference{
 			Kind: "ImageStreamTag",
-			Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID,
+			Name: "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/sitebuilder-s2i-" + d.Name + ":" + releaseID,
 		}
 	}
 	return corev1.ObjectReference{
