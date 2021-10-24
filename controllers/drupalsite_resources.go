@@ -1105,10 +1105,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
-                // TODO: add readiness probe. Tmp removed due to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/542
+				// TODO: add readiness probe. Tmp removed due to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/542
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -1175,7 +1173,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						ReadOnly:  true,
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 			case "php-fpm-exporter":
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
@@ -1197,10 +1194,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
-
 			case "webdav":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -1230,7 +1224,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 			}
 		}
 
@@ -1258,14 +1251,17 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
 		switch container.Name {
 		case "nginx":
-			// enforce nginx command
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
+			//TODO: once https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution/-/merge_requests/41 deploys, change command
+			//currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 		case "php-fpm-exporter":
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 		case "webdav":
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 		}
 	}
