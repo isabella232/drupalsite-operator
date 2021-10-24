@@ -1532,6 +1532,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 // jobForDrupalSiteClone returns a job object thats clones a drupalsite
 func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
+	var isCriticalSite string = "false"
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1542,7 +1543,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			InitContainers: []corev1.Container{
 				{
 					Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
-					Name:            "db-backup",
+					Name:            "src-db-backup",
 					ImagePullPolicy: "Always",
 					Command:         takeBackup("dbBackUp.sql"),
 					Resources: corev1.ResourceRequirements{
@@ -1574,13 +1575,18 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
 				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
-				Name:            "clone",
+				Name:            "dest-clone",
 				ImagePullPolicy: "Always",
 				Command:         cloneSource("dbBackUp.sql"),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
 						Value: "/drupal-data-source",
+					},
+					{
+						// Needed for https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution/-/merge_requests/41#note_4919578
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
 					},
 				},
 				EnvFrom: []corev1.EnvFromSource{
