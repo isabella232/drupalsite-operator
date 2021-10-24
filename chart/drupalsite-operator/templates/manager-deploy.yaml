@@ -30,6 +30,7 @@ spec:
         - --zap-log-level={{.Values.drupalsiteOperator.logLevel}}
         - --default-release-spec={{.Values.drupalsiteOperator.defaultReleaseSpec}}
         - --parallel-thread-count={{.Values.drupalsiteOperator.parallelThreadCount}}
+        - --enable-topology-spread={{.Values.drupalsiteOperator.enableTopologySpread}}
         command:
         - /manager
         image: {{ .Values.image | quote }}

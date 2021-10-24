@@ -25,3 +25,5 @@ drupalsiteOperator:
   logStacktraceLevel: "error"
   defaultReleaseSpec: "RELEASE-2021.10.13T12-49-25Z"
   parallelThreadCount: 1
+  # Topology spread adds an anti-affinity rule to the server deployment, spreading critical sites across availability zones
+  enableTopologySpread: false
