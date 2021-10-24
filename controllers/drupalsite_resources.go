@@ -1108,7 +1108,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
                 // TODO: add readiness probe. Tmp removed due to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/542
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
+				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -1176,7 +1176,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
-
 			case "php-fpm-exporter":
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
