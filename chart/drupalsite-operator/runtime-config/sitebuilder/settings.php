@@ -21,6 +21,8 @@ $settings['config_sync_directory'] = '../config/sync';
 // Private file paths.
 $settings['file_private_path'] = getenv('DRUPAL_SHARED_VOLUME') . '/private';
 // Configure tmp folder
+
+// See: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
 $settings['file_temp_path'] = '/tmp';
 
 // Configure feeds tmp folder
@@ -103,10 +105,10 @@ if (extension_loaded('redis') && (getenv('ENABLE_REDIS') == "true")) {
       ],
     ],
   ];
-  
+
   /** Optional prefix for cache entries */
   $settings['cache_prefix'] = getenv('NAMESPACE');
-  
+
   /** @see: https://pantheon.io/docs/redis/ */
   // Always set the fast backend for bootstrap, discover and config, otherwise
   // this gets lost when redis is enabled.
@@ -149,5 +151,3 @@ if (getenv('ENVIRONMENT') != 'production' && file_exists($app_root . '/' . $site
 // $databases['default']['default']['init_commands']['isolation'] = "SET SESSION tx_isolation='READ-COMMITTED'";
 $databases['default']['default']['init_commands']['lock_wait_timeout'] = "SET SESSION innodb_lock_wait_timeout = 20";
 $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION wait_timeout = 600";
-// }
-
