@@ -551,6 +551,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
 	var jobsHistoryLimit int32 = 1
 	var jobBackoffLimit int32 = 1
+	var isCriticalSite string = "false"
 
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -590,6 +591,12 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{
 											corev1.ResourceMemory: resource.MustParse(jobMemoryRequest),
+										},
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "ENABLE_REDIS",
+											Value: isCriticalSite,
 										},
 									},
 									EnvFrom: []corev1.EnvFromSource{
@@ -966,6 +973,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Labels[k] = v
 	}
 
+	var isCriticalSite string = "false"
 	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
@@ -1122,6 +1130,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					{
 						Name:  "SMTPHOST",
 						Value: SMTPHost,
+					},
+					{
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
@@ -1425,6 +1437,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 // jobForDrupalSiteInstallation returns a job object thats runs drush
 func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
+	var isCriticalSite string = "false"
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1469,6 +1482,10 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 					{
 						Name:  "SMTPHOST",
 						Value: SMTPHost,
+					},
+					{
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
 					},
 				},
 				EnvFrom: []corev1.EnvFromSource{
