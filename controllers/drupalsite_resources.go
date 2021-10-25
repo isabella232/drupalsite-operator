@@ -1515,6 +1515,12 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						SubPath:   "config.ini",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1523,6 +1529,16 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "site-settings-php",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "site-settings-" + d.Name,
+							},
 						},
 					},
 				},
@@ -1630,6 +1646,12 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						SubPath:   "config.ini",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1646,6 +1668,16 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 							ClaimName: "pv-claim-" + string(d.Spec.Configuration.CloneFrom),
+						},
+					},
+				},
+				{
+					Name: "site-settings-php",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "site-settings-" + d.Name,
+							},
 						},
 					},
 				},
