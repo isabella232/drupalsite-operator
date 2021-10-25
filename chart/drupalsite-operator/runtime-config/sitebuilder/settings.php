@@ -21,6 +21,8 @@ $settings['config_sync_directory'] = '../config/sync';
 // Private file paths.
 $settings['file_private_path'] = getenv('DRUPAL_SHARED_VOLUME') . '/private';
 // Configure tmp folder
+
+// See: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
 $settings['file_temp_path'] = '/tmp';
 
 // Configure feeds tmp folder
@@ -35,7 +37,7 @@ $trusted_host_pattern="^". str_replace(".","\.",getenv('HOSTNAME')) . "$";
 $settings['trusted_host_patterns'] = [ '.*' ];
 
 // Salt for one-time login links, cancel links, form tokens, etc.
-$settings['hash_salt'] = hash("sha256",getenv('dbName') . getenv('dbUser') . getenv('dbPasswordgit  '));
+$settings['hash_salt'] = hash("sha256",getenv('dbName') . getenv('dbUser') . getenv('dbPasswordgit'));
 /**
  * Load services definition file.
  */
@@ -61,13 +63,14 @@ $settings['file_scan_ignore_directories'] = [
  * @ See also https://docs.platform.sh/frameworks/drupal8/redis.html
  */
 
-if (extension_loaded('redis')) {
+if (extension_loaded('redis') && (getenv('ENABLE_REDIS') == "true")) {
   // Set Redis as the default backend for any cache bin not otherwise specified.
   $settings['cache']['default'] = 'cache.backend.redis';
   $settings['redis.connection']['interface'] = 'PhpRedis';
-  $settings['redis.connection']['host'] = 'redis.' . getenv('NAMESPACE') . '.svc.cluster.local';
+  $settings['redis.connection']['host'] = getenv('REDIS_SERVICE_HOST');
   $settings['redis.connection']['port'] = getenv('REDIS_SERVICE_PORT');
-  
+  // NOTE: env `REDIS_PASSWORD` needs to be manually exposed
+  $settings['redis.connection']['password'] = getenv('REDIS_PASSWORD');
   // Allow the services to work before the Redis module itself is enabled.
   $settings['container_yamls'][] = 'modules/contrib/redis/redis.services.yml';
   // Manually add the classloader path, this is required for the container cache bin definition below
@@ -102,10 +105,10 @@ if (extension_loaded('redis')) {
       ],
     ],
   ];
-  
+
   /** Optional prefix for cache entries */
   $settings['cache_prefix'] = getenv('NAMESPACE');
-  
+
   /** @see: https://pantheon.io/docs/redis/ */
   // Always set the fast backend for bootstrap, discover and config, otherwise
   // this gets lost when redis is enabled.
@@ -148,9 +151,3 @@ if (getenv('ENVIRONMENT') != 'production' && file_exists($app_root . '/' . $site
 // $databases['default']['default']['init_commands']['isolation'] = "SET SESSION tx_isolation='READ-COMMITTED'";
 $databases['default']['default']['init_commands']['lock_wait_timeout'] = "SET SESSION innodb_lock_wait_timeout = 20";
 $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION wait_timeout = 600";
-
-// We set tmp file path for all websites by default
-// See: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/600
-$settings['file_temp_path'] = '/tmp';
-// }
-

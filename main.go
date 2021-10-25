@@ -78,6 +78,7 @@ func main() {
 	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
 	flag.StringVar(&controllers.DefaultReleaseSpec, "default-release-spec", "RELEASE-2021.10.13T12-49-25Z", "The default releaseSpec value to be passed to the DrupalSites")
 	flag.IntVar(&controllers.ParallelThreadCount, "parallel-thread-count", 1, "The default number of parallel threads executed by the DrupalSite Operator controllers")
+	flag.BoolVar(&controllers.EnableTopologySpread, "enable-topology-spread", false, "Enable avaliability zone scheduling for critical site deployments")
 	opts := zap.Options{
 		Development: false,
 	}

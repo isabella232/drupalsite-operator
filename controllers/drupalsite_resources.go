@@ -551,6 +551,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
 	var jobsHistoryLimit int32 = 1
 	var jobBackoffLimit int32 = 1
+	var isCriticalSite string = "false"
 
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
@@ -590,6 +591,12 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 									Resources: corev1.ResourceRequirements{
 										Requests: corev1.ResourceList{
 											corev1.ResourceMemory: resource.MustParse(jobMemoryRequest),
+										},
+									},
+									Env: []corev1.EnvVar{
+										{
+											Name:  "ENABLE_REDIS",
+											Value: isCriticalSite,
 										},
 									},
 									EnvFrom: []corev1.EnvFromSource{
@@ -966,6 +973,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Labels[k] = v
 	}
 
+	var isCriticalSite string = "false"
 	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
@@ -1105,10 +1113,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
-                // TODO: add readiness probe. Tmp removed due to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/542
+				// TODO: add readiness probe. Tmp removed due to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/542
 			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -1124,6 +1130,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					{
 						Name:  "SMTPHOST",
 						Value: SMTPHost,
+					},
+					{
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
 					},
 				}
 				currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
@@ -1175,8 +1185,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						ReadOnly:  true,
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
-
 			case "php-fpm-exporter":
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
@@ -1198,10 +1206,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
-
 			case "webdav":
-				currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 				// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
 				currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
@@ -1231,7 +1236,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-				currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 			}
 		}
 
@@ -1259,14 +1263,17 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
 		switch container.Name {
 		case "nginx":
-			// enforce nginx command
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
+			//TODO: once https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution/-/merge_requests/41 deploys, change command
+			//currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 		case "php-fpm-exporter":
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 		case "webdav":
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 		}
 	}
@@ -1430,6 +1437,7 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 // jobForDrupalSiteInstallation returns a job object thats runs drush
 func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
+	var isCriticalSite string = "false"
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1475,6 +1483,10 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						Name:  "SMTPHOST",
 						Value: SMTPHost,
 					},
+					{
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
+					},
 				},
 				EnvFrom: []corev1.EnvFromSource{
 					{
@@ -1503,6 +1515,12 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						SubPath:   "config.ini",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1511,6 +1529,16 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "site-settings-php",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "site-settings-" + d.Name,
+							},
 						},
 					},
 				},
@@ -1537,6 +1565,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 // jobForDrupalSiteClone returns a job object thats clones a drupalsite
 func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
+	var isCriticalSite string = "false"
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1547,7 +1576,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			InitContainers: []corev1.Container{
 				{
 					Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
-					Name:            "db-backup",
+					Name:            "src-db-backup",
 					ImagePullPolicy: "Always",
 					Command:         takeBackup("dbBackUp.sql"),
 					Resources: corev1.ResourceRequirements{
@@ -1579,13 +1608,18 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 			RestartPolicy: "Never",
 			Containers: []corev1.Container{{
 				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
-				Name:            "clone",
+				Name:            "dest-clone",
 				ImagePullPolicy: "Always",
 				Command:         cloneSource("dbBackUp.sql"),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
 						Value: "/drupal-data-source",
+					},
+					{
+						// Needed for https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution/-/merge_requests/41#note_4919578
+						Name:  "ENABLE_REDIS",
+						Value: isCriticalSite,
 					},
 				},
 				EnvFrom: []corev1.EnvFromSource{
@@ -1612,6 +1646,12 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						SubPath:   "config.ini",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1628,6 +1668,16 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					VolumeSource: corev1.VolumeSource{
 						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 							ClaimName: "pv-claim-" + string(d.Spec.Configuration.CloneFrom),
+						},
+					},
+				},
+				{
+					Name: "site-settings-php",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "site-settings-" + d.Name,
+							},
 						},
 					},
 				},
@@ -1676,7 +1726,7 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 
 	currentobject.Spec = velerov1.ScheduleSpec{
 		// Schedule backup at 3AM every day
-		Schedule: "0 3 * * *",
+		Schedule: "0 3 */2 * *",
 		Template: velerov1.BackupSpec{
 			IncludedNamespaces: []string{d.Namespace},
 			IncludedResources:  []string{"pods"},

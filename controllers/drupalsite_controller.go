@@ -33,6 +33,7 @@ import (
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	batchv1b1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -70,6 +71,8 @@ var (
 	DefaultReleaseSpec string
 	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
 	ParallelThreadCount int
+	// EnableTopologySpread refers to enabling avaliability zone scheduling for critical site deployments
+	EnableTopologySpread bool
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -115,6 +118,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&batchv1b1.CronJob{}).
 		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {
