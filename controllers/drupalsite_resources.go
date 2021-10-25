@@ -568,7 +568,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec = batchbeta1.CronJobSpec{
 			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
-			Schedule: "*/30 * * * *",
+			Schedule: "*/40 * * * *",
 			// The default is 3, last job should suffice
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
 			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
@@ -626,6 +626,12 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 											SubPath:   "config.ini",
 											ReadOnly:  true,
 										},
+										{
+											Name:      "site-settings-php",
+											MountPath: "/app/web/sites/default/settings.php",
+											SubPath:   "settings.php",
+											ReadOnly:  true,
+										},
 									},
 								},
 							},
@@ -644,6 +650,16 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 										ConfigMap: &corev1.ConfigMapVolumeSource{
 											LocalObjectReference: corev1.LocalObjectReference{
 												Name: "php-cli-config-" + drupalsite.Name,
+											},
+										},
+									},
+								},
+								{
+									Name: "site-settings-php",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "site-settings-" + drupalsite.Name,
 											},
 										},
 									},
