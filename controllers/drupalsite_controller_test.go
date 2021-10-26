@@ -1657,13 +1657,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Status().Update(ctx, &deploy)
 				}, timeout, interval).Should(Succeed())
 
-				// Check enable Redis job resource creation
-				By("Expecting enable Redis job created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "enable-redis-" + key.Name, Namespace: key.Namespace}, &job)
-					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")
 				Eventually(func() []metav1.OwnerReference {
@@ -1844,26 +1837,6 @@ var _ = Describe("DrupalSite controller", func() {
 					deploy.Status.ReadyReplicas = 1
 					return k8sClient.Status().Update(ctx, &deploy)
 				}, timeout, interval).Should(Succeed())
-
-				// Check 'isCriticalSite' annotation on drupalSite
-				By("Check 'isCriticalSite' annotation on drupalSite")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
-					return cr.Annotations["isCriticalSite"] == "false"
-				}, timeout, interval).Should(BeTrue())
-
-				// // Check enable Redis job resource deleted
-				// By("Expecting enable Redis job deleted")
-				// Eventually(func() error {
-				// 	return k8sClient.Get(ctx, types.NamespacedName{Name: "enable-redis-" + key.Name, Namespace: key.Namespace}, &job)
-				// }, timeout, interval).Should(Not(Succeed()))
-
-				// Check disable Redis job resource creation
-				By("Expecting disable Redis job created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "disable-redis-" + key.Name, Namespace: key.Namespace}, &job)
-					return job.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check if the Schedule resource is created
 				By("Expecting Schedule to be created")

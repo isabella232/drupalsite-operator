@@ -290,14 +290,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// Add an annotation 'isCriticalSite' to drupalSite object as a reference when the site QoS class is changed from critical to any. The reference is used to delete redis resources & disable/ enable redis
-	_, isCriticalSiteAnnotationSet := drupalSite.Annotations["isCriticalSite"]
-	if !isCriticalSiteAnnotationSet && drupalSite.Spec.QoSClass == webservicesv1a1.QoSCritical {
-		if setCriticalSiteAnnotation(drupalSite) {
-			return r.updateCRorFailReconcile(ctx, log, drupalSite)
-		}
-	}
-
 	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 	updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
@@ -409,13 +401,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// When 'isCriticalSite' annotation is true and when the site QoS class is changed from standard, set the annotation to false
-	// in order for the disable redis job to be created
-	if isCriticalSiteAnnotationSet && drupalSite.Annotations["isCriticalSite"] == "true" && drupalSite.Spec.QoSClass != webservicesv1a1.QoSCritical {
-		if unsetCriticalSiteAnnotation(drupalSite) {
-			return r.updateCRorFailReconcile(ctx, log, drupalSite)
-		}
-	}
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
 	// Ref https://gitlab.cern.ch/paas-tools/operators/authz-operator/-/merge_requests/76#note_4501887
 	return ctrl.Result{}, requeueFlag
@@ -534,12 +519,6 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		update = true || update
 	}
 
-	// NOTE: We can't do this, as this conflicts with OPA rule to change QoS class after creation of drupalSite CR
-	// Default DatabaseClass to 'critical' when QosClass is 'critical'
-	// if drp.Spec.QoSClass == "critical" && drp.Spec.DatabaseClass != "critical" {
-	// 	drp.Spec.DatabaseClass = "critical"
-	// 	update = true || update
-	// }
 	return update, nil
 }
 

@@ -4,7 +4,7 @@ metadata:
   name: drupalsite-sample
 spec:
   siteUrl: 
-  - "drupalsite-ravineet-5.webtest.cern.ch"
+  - "drupalsite-sample.webtest.cern.ch"
   version:
     name: "v8.9-2"
     releaseSpec: "RELEASE-2021.10.26T15-33-59Z"
@@ -12,3 +12,5 @@ spec:
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "1Gi"
+    # Use the cloneFrom field to clone from an existing drupalsite
+    # cloneFrom: "drupalsite-sample"

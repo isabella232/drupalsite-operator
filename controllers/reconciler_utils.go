@@ -122,30 +122,6 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 
-// setCriticalSiteAnnotation sets the 'isCriticalSite' annotation on the drupalSite object
-func setCriticalSiteAnnotation(drp *webservicesv1a1.DrupalSite) (update bool) {
-	if len(drp.Annotations) == 0 {
-		drp.Annotations = map[string]string{}
-	}
-	if drp.Annotations["isCriticalSite"] == "true" {
-		return false
-	}
-	drp.Annotations["isCriticalSite"] = "true"
-	return true
-}
-
-// unsetCriticalSiteAnnotation unsets the 'isCriticalSite' annotation on the drupalSite object
-func unsetCriticalSiteAnnotation(drp *webservicesv1a1.DrupalSite) (update bool) {
-	if len(drp.Annotations) == 0 {
-		drp.Annotations = map[string]string{}
-	}
-	if drp.Annotations["isCriticalSite"] == "false" {
-		return false
-	}
-	drp.Annotations["isCriticalSite"] = "false"
-	return true
-}
-
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
 func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
@@ -236,15 +212,40 @@ func ResourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.Resourc
 	}, nil
 }
 
-// ------ POTENTIALLY UNUSED FUNCTIONS -------
-
-// resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
-func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
-	lims, err := resourceList(memLim, cpuLim)
-	if err != nil {
-		return corev1.ResourceRequirements{}, err
+// reqLimDict returns the resource requests and limits for a given QoS class and container.
+// TODO: this should be part of operator configuration, read from a YAML file with format
+// defaultResources:
+//   critical:
+//     phpFpm:
+//       resources:
+//         # normal K8s req/lim
+//     nginx:
+//       # ...
+//   standard:
+//     # ...
+//   eco:
+//     # ...
+func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.ResourceRequirements, error) {
+	switch container {
+	case "php-fpm":
+		if qosClass == webservicesv1a1.QoSCritical {
+			return ResourceRequestLimit("1Gi", "500m", "2Gi", "5000m")
+		}
+		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
+	case "nginx":
+		if qosClass == webservicesv1a1.QoSCritical {
+			return ResourceRequestLimit("500Mi", "500m", "1Gi", "2000m")
+		}
+		return ResourceRequestLimit("10Mi", "30m", "20Mi", "900m")
+	case "php-fpm-exporter":
+		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+	case "webdav":
+		return ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
 	}
-	return corev1.ResourceRequirements{Limits: lims}, nil
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{},
+		Limits:   corev1.ResourceList{},
+	}, newApplicationError(fmt.Errorf("invalid input provided for the reqLimDict function"), ErrFunctionDomain)
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
@@ -274,6 +275,17 @@ func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservi
 	}
 	// iterate through the list and return the first pod that has the status condition ready
 	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+}
+
+// ------ POTENTIALLY UNUSED FUNCTIONS -------
+
+// resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
+func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
+	lims, err := resourceList(memLim, cpuLim)
+	if err != nil {
+		return corev1.ResourceRequirements{}, err
+	}
+	return corev1.ResourceRequirements{Limits: lims}, nil
 }
 
 // getSecretDataDecoded fetches the given secret and decodes the data for the given string.

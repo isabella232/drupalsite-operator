@@ -309,8 +309,14 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis secret"))
 		}
 	} else {
-		if transientErr := r.ensureNoRedisResources(ctx, drp, log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis resources"))
+		if transientErr := r.ensureNoRedisDeployment(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis deployment"))
+		}
+		if transientErr := r.ensureNoRedisService(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis service"))
+		}
+		if transientErr := r.ensureNoRedisSecret(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis secret"))
 		}
 	}
 	return transientErrs
@@ -837,6 +843,7 @@ func (r *DrupalSiteReconciler) ensureNoExtraOidcReturnUriResource(ctx context.Co
 	return nil
 }
 
+// ensureNoRoute ensures there is no route object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
 	hash := md5.Sum([]byte(Url))
 	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
@@ -854,6 +861,7 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 	return nil
 }
 
+// ensureNoReturnURI ensures there is no OIDC Return URI object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
 	hash := md5.Sum([]byte(Url))
 	oidc_return_uri := &authz.OidcReturnURI{}
@@ -871,6 +879,7 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 	return nil
 }
 
+// ensureNoSchedule ensures there is no Schedule object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	schedule := &velerov1.Schedule{}
 	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
@@ -887,8 +896,8 @@ func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservi
 	return nil
 }
 
-func (r *DrupalSiteReconciler) ensureNoRedisResources(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	// ensure no redis deployment
+// ensureNoRedisDeployment ensures there is no redis deployment object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	deployment := &appsv1.Deployment{}
 	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, deployment); err != nil {
 		switch {
@@ -901,8 +910,11 @@ func (r *DrupalSiteReconciler) ensureNoRedisResources(ctx context.Context, d *we
 	if err := r.Delete(ctx, deployment); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
+	return nil
+}
 
-	// ensure no redis service
+// ensureNoRedisService ensures there is no redis service object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisService(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	service := &corev1.Service{}
 	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, service); err != nil {
 		switch {
@@ -915,8 +927,11 @@ func (r *DrupalSiteReconciler) ensureNoRedisResources(ctx context.Context, d *we
 	if err := r.Delete(ctx, service); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
+	return nil
+}
 
-	// ensure no redis secret
+// ensureNoRedisSecret ensures there is no redis secret object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisSecret(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, secret); err != nil {
 		switch {
@@ -929,35 +944,6 @@ func (r *DrupalSiteReconciler) ensureNoRedisResources(ctx context.Context, d *we
 	if err := r.Delete(ctx, secret); err != nil {
 		return newApplicationError(err, ErrClientK8s)
 	}
-
-	return nil
-}
-
-func (r *DrupalSiteReconciler) ensureNoRedisJob(ctx context.Context, d *webservicesv1a1.DrupalSite, name string, log logr.Logger) (transientErr reconcileError) {
-	var resourceName string
-	if name == "enable" {
-		resourceName = "enable-redis-" + d.Name
-	} else if name == "disable" {
-		resourceName = "disable-redis-" + d.Name
-	}
-
-	// ensure no redis job
-	job := &batchv1.Job{}
-	if err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: d.Namespace}, job); err != nil {
-		switch {
-		case k8sapierrors.IsNotFound(err):
-			return nil
-		default:
-			return newApplicationError(err, ErrClientK8s)
-		}
-	}
-	propagationPolicy := metav1.DeletePropagationBackground
-	if err := r.Delete(ctx, job, &client.DeleteOptions{
-		PropagationPolicy: &propagationPolicy,
-	}); err != nil {
-		return newApplicationError(err, ErrClientK8s)
-	}
-
 	return nil
 }
 
@@ -1419,11 +1405,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 			for j, item := range currentobject.Spec.Template.Spec.Containers[i].Env {
 				if item.Name == "ENABLE_REDIS" {
-					if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
-						currentobject.Spec.Template.Spec.Containers[i].Env[j].Value = "true"
-					} else {
-						currentobject.Spec.Template.Spec.Containers[i].Env[j].Value = "false"
-					}
+					currentobject.Spec.Template.Spec.Containers[i].Env[j].Value = isCriticalSite
 				}
 			}
 		case "php-fpm-exporter":
@@ -1581,7 +1563,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
-	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
 	currentobject.Spec.Host = Url
 	return nil
 }
@@ -2381,24 +2362,20 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		updateStatus = true
 	}
 
-	// Get resources (default)
-	// TODO: rewrite this to access a dictionary (which can be in a function)
-	// res, err:= reqLimDict("critical","nginx")
-
-	nginxResources, err := ResourceRequestLimit("10Mi", "30m", "20Mi", "900m")
+	nginxResources, err := reqLimDict("nginx", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+	phpExporterResources, err := reqLimDict("php-fpm-exporter", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpResources, err := ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
+	phpResources, err := reqLimDict("php-fpm", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	//TODO: Check best resource consumption
-	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
+	webDAVResources, err := reqLimDict("webdav", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
@@ -2442,6 +2419,8 @@ func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webse
 	return &configOverride.Spec, nil
 }
 
+// addOrRemoveRedisEnvironment adds or removes the redis environment variables like REDIS_SERVICE_HOST, REDIS_SERVICE_PORT and redis secret
+// depending on the QoSClass
 func addOrRemoveRedisEnvironment(container *v1.Container, drupalSite *webservicesv1a1.DrupalSite) error {
 	if drupalSite.Spec.QoSClass == webservicesv1a1.QoSCritical {
 		if !checkIfEnvVarExists(container.Env, "REDIS_SERVICE_HOST") {
