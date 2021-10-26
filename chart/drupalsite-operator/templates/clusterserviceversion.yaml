@@ -30,7 +30,7 @@ metadata:
             "publish": true,
             "version": {
               "name": "v8.9-2",
-              "releaseSpec": "RELEASE-2021.10.13T12-49-25Z",
+              "releaseSpec": "RELEASE-2021.10.26T15-33-59Z",
             },
             "environment": {
               "name": "dev",
@@ -59,12 +59,6 @@ spec:
       name: drupalsites.drupal.webservices.cern.ch
       resources: []
       specDescriptors:
-        - description: Should the site become accessible to the internet?
-          displayName: Publish
-          path: publish
-          x-descriptors:
-            - 'urn:alm:descriptor:com.tectonic.ui:booleanSwitch'
-
         - description: Request appropriate default configurations and resources for the requirements of your website.
                        Is this a "critical", "standard", or "eco" website?
           displayName: Quality of Service class
@@ -90,7 +84,12 @@ spec:
           displayName: Name
           path: version.name
           x-descriptors:
-            - 'urn:alm:descriptor:com.tectonic.ui:select:v8.9-1'
+            - 'urn:alm:descriptor:com.tectonic.ui:select:v8.9-2'
+        - description: Specify the release of [CERN Drupal Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) that will be deployed.
+          displayName: Name
+          path: version.releaseSpec
+          x-descriptors:
+            - 'urn:alm:descriptor:com.tectonic.ui:select:RELEASE-2021.10.26T15-33-59Z'
 
       statusDescriptors: [] # TODO
       description: >-
