@@ -628,11 +628,13 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
+	rand.Seed(time.Now().UnixNano())
 	addOwnerRefToObject(currentobject, asOwner(drupalsite))
 	if currentobject.CreationTimestamp.IsZero() {
+		randomMinute := rand.Intn(30)
 		currentobject.Spec = batchbeta1.CronJobSpec{
-			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
-			Schedule: "*/40 * * * *",
+			// Every random'th min, random'th min + 30  every hour, this is based on https://en.wikipedia.org/wiki/Cron
+			Schedule: strconv.Itoa(randomMinute) + "," + strconv.Itoa(randomMinute+30) + " * * * *",
 			// The default is 3, last job should suffice
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
 			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
