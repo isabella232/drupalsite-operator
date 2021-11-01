@@ -200,37 +200,37 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	// 1. BuildConfigs and ImageStreams
 
 	if len(drp.Spec.Configuration.ExtraConfigurationRepo) > 0 {
-		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder ImageStream"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "bc_s2i", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "bc_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
 	}
 	// 2. Data layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal PVC"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "dbod_cr", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "dbod_cr", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for DBOD resource"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "webdav_secret", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "webdav_secret", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Secret"))
 	}
 
 	// 3. Serving layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP-FPM CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_cli", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_cli", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP Job CM"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
@@ -238,22 +238,22 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal deployment"))
 		}
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
 		if drp.Spec.Configuration.CloneFrom == "" {
-			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", deploymentConfig, log); transientErr != nil {
+			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
 		} else {
-			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", deploymentConfig, log); transientErr != nil {
+			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
 			}
 		}
 	}
 	if drp.ConditionTrue("Initialized") {
-		if transientErr := r.ensureResourceX(ctx, drp, "cronjob_crontask", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "cronjob_crontask", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal Cronjob"))
 		}
 	}
@@ -262,10 +262,10 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	if drp.ConditionTrue("Initialized") {
 		// each function below ensures 1 route per entry in `spec.siteUrl[]`. This is understandably part of the job of "ensuring resource X".
-		if transientErr := r.ensureResourceX(ctx, drp, "route", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
 
@@ -289,23 +289,23 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
 
-	if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", deploymentConfig, log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
 	}
 
 	// 6. Redis cache for critical QoS Class sites
 
 	if drp.Spec.QoSClass == webservicesv1a1.QoSCritical {
-		if transientErr := r.ensureResourceX(ctx, drp, "deploy_redis", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureRedisDeployment(ctx, drp, deploymentConfig, log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis deployment"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "svc_redis", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "svc_redis", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis service"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "secret_redis", deploymentConfig, log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, "secret_redis", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis secret"))
 		}
 	} else {
@@ -343,7 +343,6 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
-	- deploy_redis: Redis deployment for a critical QoS site
 	- svc_redis: Redis Service for a critical QoS site
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
@@ -540,16 +539,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
-	case "deploy_redis":
-		deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "redis-" + d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deployment, func() error {
-			return deploymentForRedis(deployment, d, config)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", deployment.TypeMeta.Kind, "Resource.Namespace", deployment.Namespace, "Resource.Name", deployment.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
