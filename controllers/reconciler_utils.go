@@ -239,11 +239,13 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
 	case "webdav":
 		return ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
+	case "redis":
+		return ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
 		Limits:   corev1.ResourceList{},
-	}, newApplicationError(fmt.Errorf("Undefined keys for the reqLimDict function"), ErrFunctionDomain)
+	}, newApplicationError(fmt.Errorf("undefined keys for the reqLimDict function"), ErrFunctionDomain)
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
@@ -275,8 +277,8 @@ func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservi
 	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }
 
-// generateWebDAVpassword generates the password for WebDAV
-func generateWebDAVpassword() string {
+// generateRandomPassword generates a random password of length 10 by creating a hash of the current time
+func generateRandomPassword() string {
 	hash := md5.Sum([]byte(time.Now().String()))
 	return hex.EncodeToString(hash[:])[0:10]
 }

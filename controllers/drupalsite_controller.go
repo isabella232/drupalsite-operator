@@ -499,7 +499,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		update = true
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
-		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
+		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
 		update = true || update
 	}
 	// Validate that CloneFrom is an existing DrupalSite
