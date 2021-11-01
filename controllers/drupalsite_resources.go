@@ -2444,6 +2444,7 @@ func addOrRemoveRedisEnvironment(container *v1.Container, drupalSite *webservice
 				},
 			})
 		}
+		// Sort the container's env var array
 		sort.Slice(container.Env, func(i, j int) bool {
 			return container.Env[i].Name < container.Env[j].Name
 		})
