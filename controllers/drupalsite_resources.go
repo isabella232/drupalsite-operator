@@ -728,7 +728,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 				},
 			}}
 	}
-	for i, _ := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
+	for i := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
 		addOrRemoveRedisEnvironment(&currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i], drupalsite)
 	}
 
@@ -1718,7 +1718,7 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 				},
 			},
 		}
-		for i, _ := range currentobject.Spec.Template.Spec.Containers {
+		for i := range currentobject.Spec.Template.Spec.Containers {
 			addOrRemoveRedisEnvironment(&currentobject.Spec.Template.Spec.Containers[i], d)
 		}
 		ls["app"] = "drush"
@@ -1863,7 +1863,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 				},
 			},
 		}
-		for i, _ := range currentobject.Spec.Template.Spec.Containers {
+		for i := range currentobject.Spec.Template.Spec.Containers {
 			addOrRemoveRedisEnvironment(&currentobject.Spec.Template.Spec.Containers[i], d)
 		}
 		ls["app"] = "clone"
@@ -2324,7 +2324,7 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, d *webservic
 	notBlocked := !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet
 	switch {
 	case !blocked && !notBlocked:
-		return 0, fmt.Errorf("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+		return 0, fmt.Errorf("both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
 	case blocked:
 		return 0, nil
 	default:
