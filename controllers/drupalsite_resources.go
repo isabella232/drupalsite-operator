@@ -346,7 +346,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- deploy_redis: Redis deployment for a critical QoS site
 	- svc_redis: Redis Service for a critical QoS site
 */
-func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, config DeploymentConfig, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
 	case "is_s2i":
 		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + d.Name, Namespace: d.Namespace}}
@@ -600,6 +600,21 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 			log.Error(err, "Failed to ensure Resource", "Kind", deploy.TypeMeta.Kind, "Resource.Namespace", deploy.Namespace, "Resource.Name", deploy.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
+	}
+	return nil
+}
+
+/*
+ensureRedisDeployment is similar to ensureResourceX, but for the Redis deployment, which requires extra information.
+*/
+func (r *DrupalSiteReconciler) ensureRedisDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, config DeploymentConfig, log logr.Logger) (transientErr reconcileError) {
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "redis-" + d.Name, Namespace: d.Namespace}}
+	_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		return deploymentForRedis(deployment, d, config)
+	})
+	if err != nil {
+		log.Error(err, "Failed to ensure Resource", "Kind", deployment.TypeMeta.Kind, "Resource.Namespace", deployment.Namespace, "Resource.Name", deployment.Name)
+		return newApplicationError(err, ErrClientK8s)
 	}
 	return nil
 }
