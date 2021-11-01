@@ -2380,10 +2380,6 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	if reconcileErr != nil {
-		return
-	}
-
 	redisResources, err := reqLimDict("redis", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
@@ -2455,6 +2451,8 @@ func addOrRemoveRedisEnvironment(container *v1.Container, drupalSite *webservice
 			})
 		}
 		// Sort the container's env var array
+		// If we create an unsorted array, Kubernetes sorts it and there's a new reconciliation and new rollout of the deployment
+		// Better to avoid that
 		sort.Slice(container.Env, func(i, j int) bool {
 			return container.Env[i].Name < container.Env[j].Name
 		})
