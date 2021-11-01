@@ -277,36 +277,6 @@ func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservi
 	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }
 
-// ------ POTENTIALLY UNUSED FUNCTIONS -------
-
-// resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
-func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
-	lims, err := resourceList(memLim, cpuLim)
-	if err != nil {
-		return corev1.ResourceRequirements{}, err
-	}
-	return corev1.ResourceRequirements{Limits: lims}, nil
-}
-
-// getSecretDataDecoded fetches the given secret and decodes the data for the given string.
-// Returns nil in case the secret isn't found or the data can't be base64-decoded.
-func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	if err != nil {
-		return nil
-	}
-	data := make(map[string]string, len(keys))
-	for _, key := range keys {
-		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
-		if err != nil {
-			return nil
-		}
-		data[key] = string(val)
-	}
-	return data
-}
-
 // generateWebDAVpassword generates the password for WebDAV
 func generateWebDAVpassword() string {
 	hash := md5.Sum([]byte(time.Now().String()))
