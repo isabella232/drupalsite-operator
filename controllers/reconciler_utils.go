@@ -243,7 +243,7 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
 		Limits:   corev1.ResourceList{},
-	}, newApplicationError(fmt.Errorf("invalid input provided for the reqLimDict function"), ErrFunctionDomain)
+	}, newApplicationError(fmt.Errorf("Undefined keys for the reqLimDict function"), ErrFunctionDomain)
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list

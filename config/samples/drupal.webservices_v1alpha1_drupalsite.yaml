@@ -3,7 +3,7 @@ kind: DrupalSite
 metadata:
   name: drupalsite-sample
 spec:
-  siteUrl: 
+  siteUrl:
   - "drupalsite-sample.webtest.cern.ch"
   version:
     name: "v8.9-2"
