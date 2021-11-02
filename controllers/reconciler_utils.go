@@ -240,7 +240,7 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	case "webdav":
 		return ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
 	case "redis":
-		return ResourceRequestLimit("10Mi", "20m", "20Mi", "500m")
+		return ResourceRequestLimit("256Mi", "50m", "500Mi", "500m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
