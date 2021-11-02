@@ -1405,7 +1405,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
-			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 			for j, item := range currentobject.Spec.Template.Spec.Containers[i].Env {
 				if item.Name == "ENABLE_REDIS" {
