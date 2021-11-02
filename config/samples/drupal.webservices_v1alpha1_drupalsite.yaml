@@ -12,3 +12,5 @@ spec:
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "1Gi"
+    # Use the cloneFrom field to clone from an existing drupalsite
+    # cloneFrom: "drupalsite-sample"

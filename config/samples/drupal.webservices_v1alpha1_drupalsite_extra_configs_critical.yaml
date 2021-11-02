@@ -4,12 +4,12 @@ metadata:
   name: drupalsite-extraconfig
 spec:
   siteUrl:
-  - "drupalsite-extraconfig.webtest.cern.ch"
+  - "drupalsite-extraconfig-critical.webtest.cern.ch"
   version:
     name: "v8.9-2"
-    releaseSpec: "RELEASE-2021.10.26T15-33-59Z"
+    releaseSpec: "RELEASE-2021.10.13T12-49-25Z"
   configuration:
     extraConfigurationRepo: "https://gitlab.cern.ch/drupal/paas/example-drupalsite-d8-extraconfig.git"
-    qosClass: "standard"
+    qosClass: "critical"
     databaseClass: "standard"
     diskSize: "1Gi"

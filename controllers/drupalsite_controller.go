@@ -499,7 +499,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		update = true
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
-		drp.Spec.Configuration.WebDAVPassword = generateWebDAVpassword()
+		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
 		update = true || update
 	}
 	// Validate that CloneFrom is an existing DrupalSite
@@ -518,6 +518,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		drp.Spec.Version.ReleaseSpec = DefaultReleaseSpec
 		update = true || update
 	}
+
 	return update, nil
 }
 
@@ -535,14 +536,14 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 		return false, newApplicationError(err, ErrClientK8s)
 	}
 	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
-		return false, newApplicationError(errors.New("Pod did not roll out successfully"), ErrDeploymentUpdateFailed)
+		return false, newApplicationError(errors.New("pod did not roll out successfully"), ErrDeploymentUpdateFailed)
 	}
 	if pod.Status.Phase == corev1.PodPending {
 		currentTime := time.Now()
 		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < 3 {
-			return true, newApplicationError(errors.New("Waiting for pod to start"), ErrPodNotRunning)
+			return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
 		}
-		return false, newApplicationError(errors.New("Pod failed to start after grace period"), ErrDeploymentUpdateFailed)
+		return false, newApplicationError(errors.New("pod failed to start after grace period"), ErrDeploymentUpdateFailed)
 	}
 	return false, nil
 }
@@ -605,7 +606,7 @@ func (r *DrupalSiteReconciler) ensureUpdatedDeployment(ctx context.Context, d *w
 		}
 		return result, nil
 	}
-	return "", newApplicationError(fmt.Errorf("Database secret value empty"), ErrDBOD)
+	return "", newApplicationError(fmt.Errorf("database secret value empty"), ErrDBOD)
 }
 
 // updateDrupalVersion updates the drupal version of the running site to the modified value in the spec

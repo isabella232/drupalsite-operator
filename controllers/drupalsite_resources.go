@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"path"
+	"sort"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -295,6 +296,29 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
 	}
 
+	// 6. Redis cache for critical QoS Class sites
+
+	if drp.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		if transientErr := r.ensureRedisDeployment(ctx, drp, deploymentConfig, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis deployment"))
+		}
+		if transientErr := r.ensureResourceX(ctx, drp, "svc_redis", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis service"))
+		}
+		if transientErr := r.ensureResourceX(ctx, drp, "secret_redis", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Redis secret"))
+		}
+	} else {
+		if transientErr := r.ensureNoRedisDeployment(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis deployment"))
+		}
+		if transientErr := r.ensureNoRedisService(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis service"))
+		}
+		if transientErr := r.ensureNoRedisSecret(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the redis secret"))
+		}
+	}
 	return transientErrs
 }
 
@@ -319,6 +343,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
+	- svc_redis: Redis Service for a critical QoS site
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -517,6 +542,26 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
+	case "svc_redis":
+		service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "redis-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, service, func() error {
+			return serviceForRedis(service, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", service.TypeMeta.Kind, "Resource.Namespace", service.Namespace, "Resource.Name", service.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "secret_redis":
+		secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "redis-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, secret, func() error {
+			return secretForRedis(secret, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", secret.TypeMeta.Kind, "Resource.Namespace", secret.Namespace, "Resource.Name", secret.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
 	default:
 		return newApplicationError(nil, ErrFunctionDomain)
 	}
@@ -548,11 +593,28 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 	return nil
 }
 
+/*
+ensureRedisDeployment is similar to ensureResourceX, but for the Redis deployment, which requires extra information.
+*/
+func (r *DrupalSiteReconciler) ensureRedisDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, config DeploymentConfig, log logr.Logger) (transientErr reconcileError) {
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "redis-" + d.Name, Namespace: d.Namespace}}
+	_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		return deploymentForRedis(deployment, d, config)
+	})
+	if err != nil {
+		log.Error(err, "Failed to ensure Resource", "Kind", deployment.TypeMeta.Kind, "Resource.Namespace", deployment.Namespace, "Resource.Name", deployment.Name)
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
 	var jobsHistoryLimit int32 = 1
 	var jobBackoffLimit int32 = 1
 	var isCriticalSite string = "false"
-
+	if drupalsite.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		isCriticalSite = "true"
+	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -670,6 +732,9 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 				},
 			}}
 	}
+	for i := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
+		addOrRemoveRedisEnvironment(&currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i], drupalsite)
+	}
 
 	for i, container := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
 		switch container.Name {
@@ -681,6 +746,7 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -781,6 +847,7 @@ func (r *DrupalSiteReconciler) ensureNoExtraOidcReturnUriResource(ctx context.Co
 	return nil
 }
 
+// ensureNoRoute ensures there is no route object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
 	hash := md5.Sum([]byte(Url))
 	route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
@@ -798,6 +865,7 @@ func (r *DrupalSiteReconciler) ensureNoRoute(ctx context.Context, d *webservices
 	return nil
 }
 
+// ensureNoReturnURI ensures there is no OIDC Return URI object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webservicesv1a1.DrupalSite, Url string, log logr.Logger) (transientErr reconcileError) {
 	hash := md5.Sum([]byte(Url))
 	oidc_return_uri := &authz.OidcReturnURI{}
@@ -815,6 +883,7 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 	return nil
 }
 
+// ensureNoSchedule ensures there is no Schedule object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	schedule := &velerov1.Schedule{}
 	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
@@ -831,6 +900,58 @@ func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservi
 	return nil
 }
 
+// ensureNoRedisDeployment ensures there is no redis deployment object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, deployment); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, deployment); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+// ensureNoRedisService ensures there is no redis service object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisService(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	service := &corev1.Service{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, service); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, service); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+// ensureNoRedisSecret ensures there is no redis secret object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoRedisSecret(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: "redis-" + d.Name, Namespace: d.Namespace}, secret); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, secret); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+// checkNewBackups returns the list of velero backups that exist for a given site
 func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
 	backupList := velerov1.BackupList{}
 	backups = make([]velerov1.Backup, 0)
@@ -990,6 +1111,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 
 	var isCriticalSite string = "false"
+	if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		isCriticalSite = "true"
+	}
 	addOwnerRefToObject(currentobject, asOwner(d))
 	if currentobject.Annotations == nil {
 		currentobject.Annotations = map[string]string{}
@@ -1007,7 +1131,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
 		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
 
-		currentobject.Spec.Replicas = &config.replicas
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
 		}
@@ -1282,10 +1405,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
-			//TODO: once https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution/-/merge_requests/41 deploys, change command
-			//currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
-			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
+			for j, item := range currentobject.Spec.Template.Spec.Containers[i].Env {
+				if item.Name == "ENABLE_REDIS" {
+					currentobject.Spec.Template.Spec.Containers[i].Env[j].Value = isCriticalSite
+				}
+			}
 		case "php-fpm-exporter":
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 		case "webdav":
@@ -1302,6 +1428,32 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/71
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
+
+	for i, container := range currentobject.Spec.Template.Spec.Containers {
+		switch container.Name {
+		case "php-fpm":
+			addOrRemoveRedisEnvironment(&currentobject.Spec.Template.Spec.Containers[i], d)
+		}
+	}
+
+	// Ensure availability zones for critical sites if enabled
+	if d.Spec.QoSClass == webservicesv1a1.QoSCritical && EnableTopologySpread {
+		currentobject.Annotations["critical-site"] = "true"
+		currentobject.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{
+			{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"drupalSite": d.Name,
+					},
+				},
+				TopologyKey:       "topology.kubernetes.io/zone",
+				MaxSkew:           1,
+				WhenUnsatisfiable: v1.UnsatisfiableConstraintAction("DoNotSchedule"),
+			},
+		}
+	} else {
+		currentobject.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{}
+	}
 
 	return nil
 }
@@ -1385,19 +1537,17 @@ func serviceForDrupalSite(currentobject *corev1.Service, d *webservicesv1a1.Drup
 // routeForDrupalSite returns a route object
 func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalSite, Url string) error {
 	addOwnerRefToObject(currentobject, asOwner(d))
-	currentobject.Spec = routev1.RouteSpec{
-		TLS: &routev1.TLSConfig{
-			InsecureEdgeTerminationPolicy: "Redirect",
-			Termination:                   "edge",
-		},
-		To: routev1.RouteTargetReference{
-			Kind:   "Service",
-			Name:   d.Name,
-			Weight: pointer.Int32Ptr(100),
-		},
-		Port: &routev1.RoutePort{
-			TargetPort: intstr.FromInt(8080),
-		},
+	currentobject.Spec.TLS = &routev1.TLSConfig{
+		InsecureEdgeTerminationPolicy: "Redirect",
+		Termination:                   "edge",
+	}
+	currentobject.Spec.To = routev1.RouteTargetReference{
+		Kind:   "Service",
+		Name:   d.Name,
+		Weight: pointer.Int32Ptr(100),
+	}
+	currentobject.Spec.Port = &routev1.RoutePort{
+		TargetPort: intstr.FromInt(8080),
 	}
 
 	if currentobject.Annotations == nil {
@@ -1417,7 +1567,6 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
-	// Route host is placed outside of currentobject.CreationTimestamp.IsZero to ensure it is updated, when the respective field in the DrupalSite CR is modified
 	currentobject.Spec.Host = Url
 	return nil
 }
@@ -1454,6 +1603,9 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	var isCriticalSite string = "false"
+	if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		isCriticalSite = "true"
+	}
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1570,6 +1722,9 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 				},
 			},
 		}
+		for i := range currentobject.Spec.Template.Spec.Containers {
+			addOrRemoveRedisEnvironment(&currentobject.Spec.Template.Spec.Containers[i], d)
+		}
 		ls["app"] = "drush"
 		for k, v := range ls {
 			currentobject.Labels[k] = v
@@ -1582,6 +1737,9 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
 	var isCriticalSite string = "false"
+	if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		isCriticalSite = "true"
+	}
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1708,6 +1866,9 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					},
 				},
 			},
+		}
+		for i := range currentobject.Spec.Template.Spec.Containers {
+			addOrRemoveRedisEnvironment(&currentobject.Spec.Template.Spec.Containers[i], d)
 		}
 		ls["app"] = "clone"
 		for k, v := range ls {
@@ -1908,6 +2069,137 @@ func updateConfigMapForPHPCLI(ctx context.Context, currentobject *corev1.ConfigM
 	return nil
 }
 
+// deploymentForRedis defines the redis deployment needed for a DrupalSite with critical QoS
+func deploymentForRedis(currentobject *appsv1.Deployment, d *webservicesv1a1.DrupalSite, config DeploymentConfig) error {
+	ls := labelsForDrupalSite(d.Name)
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls["app"] = "redis"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Annotations = map[string]string{}
+		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+
+	}
+	currentobject.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: ls,
+	}
+	currentobject.Spec.Replicas = pointer.Int32Ptr(1)
+	currentobject.Spec.Template.ObjectMeta.Labels = ls
+
+	currentobject.Spec.Template.Spec.Volumes = []corev1.Volume{
+		{
+			Name:         "empty-dir",
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		},
+	}
+	currentobject.Spec.Template.Spec.Containers = []corev1.Container{{
+		Name:            "redis",
+		ImagePullPolicy: "IfNotPresent",
+		Image:           "redis:6.2.5",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			"redis-server --requirepass ${REDIS_PASSWORD}",
+		},
+		EnvFrom: []corev1.EnvFromSource{
+			{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "redis-" + d.Name,
+					},
+				},
+			},
+		},
+		Ports: []corev1.ContainerPort{{
+			ContainerPort: 6379,
+			Name:          "redis",
+			Protocol:      "TCP",
+		}},
+		Resources: config.redisResources,
+		ReadinessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						"redis-cli -a $REDIS_PASSWORD ping",
+					},
+				},
+			},
+			InitialDelaySeconds: 30,
+			TimeoutSeconds:      15,
+		},
+		LivenessProbe: &v1.Probe{
+			Handler: v1.Handler{
+				TCPSocket: &v1.TCPSocketAction{
+					Port: intstr.FromInt(6379),
+				},
+			},
+			InitialDelaySeconds: 30,
+			TimeoutSeconds:      5,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "empty-dir",
+				MountPath: "/data",
+			},
+		},
+	}}
+	return nil
+}
+
+// serviceForRedis returns a service object for Redis deployment
+func serviceForRedis(currentobject *corev1.Service, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "redis"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Spec.Selector = ls
+		currentobject.Spec.Ports = []corev1.ServicePort{
+			{
+				TargetPort: intstr.FromInt(6379),
+				Name:       "redis",
+				Port:       6379,
+				Protocol:   "TCP",
+			},
+		}
+	}
+	return nil
+}
+
+// secretForRedis returns a Secret object for Redis deployment
+func secretForRedis(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Type = "kubernetes.io/opaque"
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.StringData = map[string]string{
+			"REDIS_PASSWORD": generateRandomPassword(),
+		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "redis"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
+	}
+	return nil
+}
+
 // addOwnerRefToObject appends the desired OwnerReference to the object
 func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
 	// If Owner already in object, we ignore
@@ -1995,6 +2287,11 @@ func syncDrupalFilesToEmptydir() []string {
 	return []string{"/operations/sync-drupal-emptydir.sh"}
 }
 
+// enableOrDisableRedis outputs the command to enable/ disable redis module for the site
+func enableOrDisableRedis() []string {
+	return []string{"/operations/enable-or-disable-redis.sh"}
+}
+
 // backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
 // A nil argument is equivalent to an empty slice.
 func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsList []webservicesv1a1.Backup) bool {
@@ -2021,17 +2318,20 @@ func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1
 }
 
 // expectedDeploymentReplicas calculates expected replicas of deployment
-func expectedDeploymentReplicas(currentnamespace *corev1.Namespace) (int32, error) {
+func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, qosClass webservicesv1a1.QoSClass) (int32, error) {
 	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
 	_, isBlockedReasonAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/reason"]
 	blocked := isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet
 	notBlocked := !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet
 	switch {
 	case !blocked && !notBlocked:
-		return 0, fmt.Errorf("Both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+		return 0, fmt.Errorf("both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
 	case blocked:
 		return 0, nil
 	default:
+		if qosClass == webservicesv1a1.QoSCritical {
+			return 3, nil
+		}
 		return 1, nil
 	}
 }
@@ -2054,7 +2354,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 			return DeploymentConfig{}, false, false, newApplicationError(err, ErrClientK8s)
 		}
 	}
-	replicas, err := expectedDeploymentReplicas(namespace)
+	replicas, err := expectedDeploymentReplicas(namespace, drupalSite.Spec.QoSClass)
 	if err != nil {
 		return DeploymentConfig{}, false, false, newApplicationError(err, ErrInvalidSpec)
 	}
@@ -2063,24 +2363,24 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		updateStatus = true
 	}
 
-	// Get resources (default)
-	// TODO: rewrite this to access a dictionary (which can be in a function)
-	// res, err:= reqLimDict("critical","nginx")
-
-	nginxResources, err := ResourceRequestLimit("10Mi", "30m", "20Mi", "900m")
+	nginxResources, err := reqLimDict("nginx", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpExporterResources, err := ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+	phpExporterResources, err := reqLimDict("php-fpm-exporter", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
-	phpResources, err := ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
+	phpResources, err := reqLimDict("php-fpm", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	//TODO: Check best resource consumption
-	webDAVResources, err := ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
+	webDAVResources, err := reqLimDict("webdav", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	redisResources, err := reqLimDict("redis", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
@@ -2099,7 +2399,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	}
 
 	config = DeploymentConfig{replicas: replicas,
-		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
+		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources, redisResources: redisResources,
 	}
 	return
 }
@@ -2110,6 +2410,7 @@ type DeploymentConfig struct {
 	nginxResources       corev1.ResourceRequirements
 	phpExporterResources corev1.ResourceRequirements
 	webDAVResources      corev1.ResourceRequirements
+	redisResources       corev1.ResourceRequirements
 }
 
 func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
@@ -2122,4 +2423,57 @@ func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webse
 		return nil, newApplicationError(err, ErrClientK8s)
 	}
 	return &configOverride.Spec, nil
+}
+
+// addOrRemoveRedisEnvironment adds or removes the redis environment variables like REDIS_SERVICE_HOST, REDIS_SERVICE_PORT and redis secret
+// depending on the QoSClass
+func addOrRemoveRedisEnvironment(container *v1.Container, drupalSite *webservicesv1a1.DrupalSite) error {
+	if drupalSite.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		if !checkIfEnvVarExists(container.Env, "REDIS_SERVICE_HOST") {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "REDIS_SERVICE_HOST",
+				Value: "redis-" + drupalSite.Name,
+			})
+		}
+		if !checkIfEnvVarExists(container.Env, "REDIS_SERVICE_PORT") {
+			container.Env = append(container.Env, corev1.EnvVar{
+				Name:  "REDIS_SERVICE_PORT",
+				Value: "6379",
+			})
+		}
+		if !checkIfEnvFromSourceExists(container.EnvFrom, "redis-"+drupalSite.Name) {
+			container.EnvFrom = append(container.EnvFrom, corev1.EnvFromSource{
+				SecretRef: &corev1.SecretEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "redis-" + drupalSite.Name,
+					},
+				},
+			})
+		}
+		// Sort the container's env var array
+		// If we create an unsorted array, Kubernetes sorts it and there's a new reconciliation and new rollout of the deployment
+		// Better to avoid that
+		sort.Slice(container.Env, func(i, j int) bool {
+			return container.Env[i].Name < container.Env[j].Name
+		})
+		sort.Slice(container.EnvFrom, func(i, j int) bool {
+			return container.EnvFrom[i].SecretRef.Name < container.EnvFrom[j].SecretRef.Name
+		})
+	} else {
+		for index := 0; index < len(container.Env); index++ {
+			// index, value := range container.Env {
+			value := container.Env[index]
+			if value.Name == "REDIS_SERVICE_HOST" || value.Name == "REDIS_SERVICE_PORT" {
+				container.Env = append(container.Env[:index], container.Env[index+1:]...)
+			}
+		}
+		for index := 0; index < len(container.EnvFrom); index++ {
+			// for index, value := range container.EnvFrom {
+			value := container.EnvFrom[index]
+			if value.SecretRef.Name == "redis-"+drupalSite.Name {
+				container.EnvFrom = append(container.EnvFrom[:index], container.EnvFrom[index+1:]...)
+			}
+		}
+	}
+	return nil
 }

@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -32,7 +31,6 @@ import (
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -212,15 +210,42 @@ func ResourceRequestLimit(memReq, cpuReq, memLim, cpuLim string) (corev1.Resourc
 	}, nil
 }
 
-// ------ POTENTIALLY UNUSED FUNCTIONS -------
-
-// resourceLimit is a k8s API object representing the resource limits given as strings. The requests are defaulted to the limits.
-func resourceLimit(memLim, cpuLim string) (corev1.ResourceRequirements, error) {
-	lims, err := resourceList(memLim, cpuLim)
-	if err != nil {
-		return corev1.ResourceRequirements{}, err
+// reqLimDict returns the resource requests and limits for a given QoS class and container.
+// TODO: this should be part of operator configuration, read from a YAML file with format
+// defaultResources:
+//   critical:
+//     phpFpm:
+//       resources:
+//         # normal K8s req/lim
+//     nginx:
+//       # ...
+//   standard:
+//     # ...
+//   eco:
+//     # ...
+func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.ResourceRequirements, error) {
+	switch container {
+	case "php-fpm":
+		if qosClass == webservicesv1a1.QoSCritical {
+			return ResourceRequestLimit("1Gi", "500m", "2Gi", "5000m")
+		}
+		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
+	case "nginx":
+		if qosClass == webservicesv1a1.QoSCritical {
+			return ResourceRequestLimit("500Mi", "500m", "1Gi", "2000m")
+		}
+		return ResourceRequestLimit("10Mi", "30m", "20Mi", "900m")
+	case "php-fpm-exporter":
+		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+	case "webdav":
+		return ResourceRequestLimit("10Mi", "5m", "100Mi", "150m")
+	case "redis":
+		return ResourceRequestLimit("256Mi", "50m", "500Mi", "500m")
 	}
-	return corev1.ResourceRequirements{Limits: lims}, nil
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{},
+		Limits:   corev1.ResourceList{},
+	}, newApplicationError(fmt.Errorf("undefined keys for the reqLimDict function"), ErrFunctionDomain)
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
@@ -252,27 +277,8 @@ func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservi
 	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }
 
-// getSecretDataDecoded fetches the given secret and decodes the data for the given string.
-// Returns nil in case the secret isn't found or the data can't be base64-decoded.
-func (r *DrupalSiteReconciler) getSecretDataDecoded(ctx context.Context, name, namespace string, keys []string) map[string]string {
-	secret := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, secret)
-	if err != nil {
-		return nil
-	}
-	data := make(map[string]string, len(keys))
-	for _, key := range keys {
-		val, err := base64.URLEncoding.DecodeString(string(secret.Data[key]))
-		if err != nil {
-			return nil
-		}
-		data[key] = string(val)
-	}
-	return data
-}
-
-// generateWebDAVpassword generates the password for WebDAV
-func generateWebDAVpassword() string {
+// generateRandomPassword generates a random password of length 10 by creating a hash of the current time
+func generateRandomPassword() string {
 	hash := md5.Sum([]byte(time.Now().String()))
 	return hex.EncodeToString(hash[:])[0:10]
 }
@@ -283,4 +289,24 @@ func createKeyValuePairs(m map[string]string) string {
 		fmt.Fprintf(b, "%s=\"%s\"\n", key, value)
 	}
 	return b.String()
+}
+
+// checkIfEnvVarExists checks if a given EnvVar array has the specific variable present or not
+func checkIfEnvVarExists(envVarArray []corev1.EnvVar, envVarName string) (flag bool) {
+	for _, item := range envVarArray {
+		if item.Name == envVarName {
+			return true
+		}
+	}
+	return false
+}
+
+// checkIfEnvFromSourceExists checks if a given EnvFromSource array has the specific source variable present or not
+func checkIfEnvFromSourceExists(envFromSourceArray []corev1.EnvFromSource, envVarName string) (flag bool) {
+	for _, item := range envFromSourceArray {
+		if item.SecretRef != nil && item.SecretRef.Name == envVarName {
+			return true
+		}
+	}
+	return false
 }
