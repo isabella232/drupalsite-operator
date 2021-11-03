@@ -1968,9 +1968,12 @@ func clusterRoleBindingForTektonExtraPermission(currentobject *rbacv1.ClusterRol
 func secretForS2iGitlabTrigger(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
 	addOwnerRefToObject(currentobject, asOwner(d))
 	currentobject.Type = "kubernetes.io/opaque"
-	encryptedOpaquePassword := encryptBasicAuthPassword(generateRandomPassword())
-	currentobject.StringData = map[string]string{
-		"WebHookSecretKey": encryptedOpaquePassword,
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		encryptedOpaquePassword := encryptBasicAuthPassword(generateRandomPassword())
+		currentobject.StringData = map[string]string{
+			"WebHookSecretKey": encryptedOpaquePassword,
+		}
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
