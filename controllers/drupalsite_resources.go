@@ -1567,6 +1567,8 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
+  // Set timeout to 60sec: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/642
+  currentobject.Annotations["haproxy.router.openshift.io/timeout"] = "60s"
 	currentobject.Spec.Host = Url
 	return nil
 }
