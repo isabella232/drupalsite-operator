@@ -240,6 +240,33 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// 2. Check all conditions and update if needed
 	update := false
 
+	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
+	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
+		// drupalSite.Status.GitlabWebhookURL = r.Client.Get().Namespace(drupalSite.Namespace).Resource("buildconfig")
+		// https://api-int.clu-ravineet.okd.cern.ch:6443/apis/build.openshift.io/v1/namespaces/ravineet-2/buildconfigs/sitebuilder-s2i-1e3eeeb2f24ab3/webhooks/<secret>/gitlab
+		cfg, err := ctrl.GetConfig()
+		if err != nil {
+			statusUpdateError := newApplicationError(errors.New("fetching API server URL failed"), ErrTemporary)
+			log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
+		} else {
+			gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + drupalSite.Name, Namespace: drupalSite.Namespace}}
+			err := r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
+			if err != nil {
+				statusUpdateError := newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrTemporary)
+				log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
+			} else {
+				if len(gitlabTriggerSecret.Data["WebHookSecretKey"]) > 0 {
+					secret := string(gitlabTriggerSecret.Data["WebHookSecretKey"])
+					drupalSite.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + drupalSite.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drupalSite) + "/webhooks/" + secret + "/gitlab"
+					update = true || update
+				} else {
+					statusUpdateError := newApplicationError(errors.New("gitlabTriggerSecret value is empty"), ErrTemporary)
+					log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
+				}
+			}
+		}
+	}
+
 	// Set Current version
 	if drupalSite.Status.ReleaseID.Current != releaseID(drupalSite) {
 		drupalSite.Status.ReleaseID.Current = releaseID(drupalSite)

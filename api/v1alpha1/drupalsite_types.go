@@ -139,6 +139,10 @@ type DrupalSiteStatus struct {
 	// ExpectedDeploymentReplicas specifies the deployment replicas for the current DrupalSite
 	// +optional
 	ExpectedDeploymentReplicas *int32 `json:"expectedDeploymentReplicas,omitempty"`
+
+	// GitlabWebhookURL reports the S2I buildconfig webhook URL
+	// +optional
+	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

@@ -1970,7 +1970,7 @@ func secretForS2iGitlabTrigger(currentobject *corev1.Secret, d *webservicesv1a1.
 	currentobject.Type = "kubernetes.io/opaque"
 	// All configurations that we do not want to enforce, we set here
 	if currentobject.CreationTimestamp.IsZero() {
-		encryptedOpaquePassword := encryptBasicAuthPassword(generateRandomPassword())
+		encryptedOpaquePassword := generateRandomPassword()
 		currentobject.StringData = map[string]string{
 			"WebHookSecretKey": encryptedOpaquePassword,
 		}
