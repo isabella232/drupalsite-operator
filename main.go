@@ -18,7 +18,9 @@ package main
 
 import (
 	"flag"
+	"math/rand"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -92,6 +94,9 @@ func main() {
 		setupLog.Error(err, "Invalid configuration: can't parse build resources")
 		os.Exit(1)
 	}
+
+	// Seed value for generating random Cron values in Velero backup objects & cronjobs
+	rand.Seed(time.Now().UnixNano())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

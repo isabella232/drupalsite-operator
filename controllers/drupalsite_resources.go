@@ -628,7 +628,6 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	for k, v := range ls {
 		currentobject.Labels[k] = v
 	}
-	rand.Seed(time.Now().UnixNano())
 	addOwnerRefToObject(currentobject, asOwner(drupalsite))
 	if currentobject.CreationTimestamp.IsZero() {
 		randomMinute := rand.Intn(30)
@@ -1908,10 +1907,12 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
 	if currentobject.CreationTimestamp.IsZero() || len(currentobject.Spec.Schedule) == 0 {
-		rand.Seed(time.Now().UnixNano())
+		acceptedHoursForBackup := []string{"20", "21", "22", "23", "0", "1", "2", "3", "4", "5"}
 		oddOrEven := []string{"1", "2"}
+		randomHour := acceptedHoursForBackup[rand.Intn(len(acceptedHoursForBackup))]
+		randomMinute := strconv.Itoa(rand.Intn(60))
 		randomAlternateDay := oddOrEven[rand.Intn(len(oddOrEven))]
-		currentobject.Spec.Schedule = "* * " + randomAlternateDay + "-31/2 * *"
+		currentobject.Spec.Schedule = randomMinute + " " + randomHour + " " + randomAlternateDay + "-31/2 * *"
 	}
 
 	currentobject.Spec.Template = velerov1.BackupSpec{
