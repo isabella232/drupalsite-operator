@@ -197,8 +197,9 @@ spec:
                 format: int32
                 type: integer
               gitlabWebhookURL:
-                description: GitlabWebhookURL reports the S2I buildconfig webhook
-                  URL
+                description: GitlabWebhookURL is the URL that triggers a new build
+                  of the site's image after changes on its source Gitlab "extraConfigurationRepo".
+                  It should be copied to Gitlab.
                 type: string
               releaseID:
                 description: ReleaseID reports the actual release of CERN Drupal Distribution
