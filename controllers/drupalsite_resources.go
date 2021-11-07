@@ -1924,9 +1924,9 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 				"drupalSite": d.Name,
 			},
 		},
-		// TTL is 7 days. The backups are deleted automatically after this duration
+		// TTL is 14 days. The backups are deleted automatically after this duration
 		TTL: metav1.Duration{
-			Duration: 168 * time.Hour,
+			Duration: 14 * 24 * time.Hour,
 		},
 	}
 	currentobject.Spec.UseOwnerReferencesInBackup = pointer.BoolPtr(true)
