@@ -240,33 +240,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// 2. Check all conditions and update if needed
 	update := false
 
-	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
-	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
-		// drupalSite.Status.GitlabWebhookURL = r.Client.Get().Namespace(drupalSite.Namespace).Resource("buildconfig")
-		// https://api-int.clu-ravineet.okd.cern.ch:6443/apis/build.openshift.io/v1/namespaces/ravineet-2/buildconfigs/sitebuilder-s2i-1e3eeeb2f24ab3/webhooks/<secret>/gitlab
-		cfg, err := ctrl.GetConfig()
-		if err != nil {
-			statusUpdateError := newApplicationError(errors.New("fetching API server URL failed"), ErrTemporary)
-			log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
-		} else {
-			gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + drupalSite.Name, Namespace: drupalSite.Namespace}}
-			err := r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
-			if err != nil {
-				statusUpdateError := newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrTemporary)
-				log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
-			} else {
-				if len(gitlabTriggerSecret.Data["WebHookSecretKey"]) > 0 {
-					secret := string(gitlabTriggerSecret.Data["WebHookSecretKey"])
-					drupalSite.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + drupalSite.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drupalSite) + "/webhooks/" + secret + "/gitlab"
-					update = true || update
-				} else {
-					statusUpdateError := newApplicationError(errors.New("gitlabTriggerSecret value is empty"), ErrTemporary)
-					log.Error(statusUpdateError, fmt.Sprintf("%v failed to to generate GitlabWebhookURL", statusUpdateError.Unwrap()))
-				}
-			}
-		}
-	}
-
 	// Set Current version
 	if drupalSite.Status.ReleaseID.Current != releaseID(drupalSite) {
 		drupalSite.Status.ReleaseID.Current = releaseID(drupalSite)
@@ -426,6 +399,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			drupalSite.Status.AvailableBackups = updateBackupListStatus(backupList)
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
+	}
+
+	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
+	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
+		if err := r.getBuildConfigWebhookTriggerURL(ctx, drupalSite); err != nil {
+			return handleTransientErr(err, "Failed to to generate GitlabWebhookURL: %v", "")
+		}
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
@@ -783,4 +764,26 @@ func getenvOrDie(name string, log logr.Logger) string {
 		os.Exit(1)
 	}
 	return e
+}
+
+// getBuildConfigWebhookTriggerURL generates the Gitlab webhook URL for the s2i (extraconfig) buildconfig
+// by querying the K8s API for API Server & Gitlab webhook trigger secret value
+func (r *DrupalSiteReconciler) getBuildConfigWebhookTriggerURL(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+	// Fetch the API Server config
+	cfg, err := ctrl.GetConfig()
+	if err != nil {
+		return newApplicationError(errors.New("fetching API server URL failed"), ErrTemporary)
+	}
+	// Fetch the gitlab webhook trigger secret value
+	gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
+	err = r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
+	if err != nil {
+		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrTemporary)
+	}
+	if len(gitlabTriggerSecret.Data["WebHookSecretKey"]) == 0 {
+		return newApplicationError(errors.New("gitlabTriggerSecret value is empty"), ErrTemporary)
+	}
+	secret := string(gitlabTriggerSecret.Data["WebHookSecretKey"])
+	d.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + secret + "/gitlab"
+	return nil
 }
