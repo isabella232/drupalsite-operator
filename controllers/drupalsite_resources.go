@@ -23,9 +23,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -628,9 +630,10 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 	}
 	addOwnerRefToObject(currentobject, asOwner(drupalsite))
 	if currentobject.CreationTimestamp.IsZero() {
+		randomMinute := rand.Intn(30)
 		currentobject.Spec = batchbeta1.CronJobSpec{
-			// Every 30min, this is based on https://en.wikipedia.org/wiki/Cron
-			Schedule: "*/40 * * * *",
+			// Every random'th min, random'th min + 30  every hour, this is based on https://en.wikipedia.org/wiki/Cron
+			Schedule: strconv.Itoa(randomMinute) + "," + strconv.Itoa(randomMinute+30) + " * * * *",
 			// The default is 3, last job should suffice
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
 			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
@@ -1567,8 +1570,8 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 	if _, exists := d.Annotations["haproxy.router.openshift.io/ip_whitelist"]; exists {
 		currentobject.Annotations["haproxy.router.openshift.io/ip_whitelist"] = d.Annotations["haproxy.router.openshift.io/ip_whitelist"]
 	}
-  // Set timeout to 60sec: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/642
-  currentobject.Annotations["haproxy.router.openshift.io/timeout"] = "60s"
+	// Set timeout to 60sec: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/642
+	currentobject.Annotations["haproxy.router.openshift.io/timeout"] = "60s"
 	currentobject.Spec.Host = Url
 	return nil
 }
@@ -1903,26 +1906,31 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 	currentobject.Annotations["drupal.webservices.cern.ch/project"] = d.Namespace
 	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
-	currentobject.Spec = velerov1.ScheduleSpec{
-		// Schedule backup at 3AM every day
-		Schedule: "0 3 */2 * *",
-		Template: velerov1.BackupSpec{
-			IncludedNamespaces: []string{d.Namespace},
-			IncludedResources:  []string{"pods"},
-			// Add label selector to pick up the right pod and the respective PVC
-			LabelSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app":        "drupal",
-					"drupalSite": d.Name,
-				},
-			},
-			// TTL is 7 days. The backups are deleted automatically after this duration
-			TTL: metav1.Duration{
-				Duration: 168 * time.Hour,
+	if currentobject.CreationTimestamp.IsZero() || len(currentobject.Spec.Schedule) == 0 {
+		acceptedHoursForBackup := []string{"20", "21", "22", "23", "0", "1", "2", "3", "4", "5"}
+		oddOrEven := []string{"1", "2"}
+		randomHour := acceptedHoursForBackup[rand.Intn(len(acceptedHoursForBackup))]
+		randomMinute := strconv.Itoa(rand.Intn(60))
+		randomAlternateDay := oddOrEven[rand.Intn(len(oddOrEven))]
+		currentobject.Spec.Schedule = randomMinute + " " + randomHour + " " + randomAlternateDay + "-31/2 * *"
+	}
+
+	currentobject.Spec.Template = velerov1.BackupSpec{
+		IncludedNamespaces: []string{d.Namespace},
+		IncludedResources:  []string{"pods"},
+		// Add label selector to pick up the right pod and the respective PVC
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app":        "drupal",
+				"drupalSite": d.Name,
 			},
 		},
-		UseOwnerReferencesInBackup: pointer.BoolPtr(true),
+		// TTL is 14 days. The backups are deleted automatically after this duration
+		TTL: metav1.Duration{
+			Duration: 14 * 24 * time.Hour,
+		},
 	}
+	currentobject.Spec.UseOwnerReferencesInBackup = pointer.BoolPtr(true)
 	return nil
 }
 
