@@ -403,8 +403,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
 	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
-		if err := r.getBuildConfigWebhookTriggerURL(ctx, drupalSite); err != nil {
-			return handleTransientErr(err, "Failed to to generate GitlabWebhookURL: %v", "")
+		if err := r.addGitlabWebhookToStatus(ctx, drupalSite); err != nil {
+			return handleTransientErr(err, "Failed to add GitlabWebhookURL to status: %v", "")
 		}
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
@@ -766,9 +766,9 @@ func getenvOrDie(name string, log logr.Logger) string {
 	return e
 }
 
-// getBuildConfigWebhookTriggerURL generates the Gitlab webhook URL for the s2i (extraconfig) buildconfig
+// addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
 // by querying the K8s API for API Server & Gitlab webhook trigger secret value
-func (r *DrupalSiteReconciler) getBuildConfigWebhookTriggerURL(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
 	// Fetch the API Server config
 	cfg, err := ctrl.GetConfig()
 	if err != nil {

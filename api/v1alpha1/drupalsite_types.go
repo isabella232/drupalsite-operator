@@ -141,7 +141,7 @@ type DrupalSiteStatus struct {
 	ExpectedDeploymentReplicas *int32 `json:"expectedDeploymentReplicas,omitempty"`
 
 	// GitlabWebhookURL is the URL that triggers a new build of the site's image after changes on its source Gitlab "extraConfigurationRepo".
-        // It should be copied to Gitlab.
+	// It should be copied to Gitlab.
 	// +optional
 	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
 }
