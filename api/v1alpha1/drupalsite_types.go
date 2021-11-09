@@ -92,6 +92,8 @@ type Configuration struct {
 	CloneFrom `json:"cloneFrom,omitempty"`
 
 	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
+	// When `cloneFrom` is set, if this value is less than the source's, it will be *overwritten*,
+	// since the size has to be at least as large as the source.
 	// +kubebuilder:default="2000Mi"
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$`
