@@ -504,13 +504,17 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
-		drupalSite := webservicesv1a1.DrupalSite{}
-		err := r.Get(ctx, types.NamespacedName{Name: string(drp.Spec.Configuration.CloneFrom), Namespace: drp.Namespace}, &drupalSite)
+		sourceSite := webservicesv1a1.DrupalSite{}
+		err := r.Get(ctx, types.NamespacedName{Name: string(drp.Spec.Configuration.CloneFrom), Namespace: drp.Namespace}, &sourceSite)
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return false, newApplicationError(fmt.Errorf("CloneFrom DrupalSite doesn't exist"), ErrInvalidSpec)
 		case err != nil:
 			return false, newApplicationError(err, ErrClientK8s)
+		}
+		// The destination disk size must be at least as large as the source
+		if drp.Spec.Configuration.DiskSize < sourceSite.Spec.Configuration.DiskSize {
+			drp.Spec.Configuration.DiskSize = sourceSite.Spec.Configuration.DiskSize
 		}
 	}
 	// Initialize 'spec.version.releaseSpec' if empty
