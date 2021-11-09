@@ -521,7 +521,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
 		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
-		update = true || update
+		update = true
 	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
@@ -545,9 +545,14 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		} else {
 			drp.Spec.Version.ReleaseSpec = DefaultD9ReleaseSpec
 		}
-		update = true || update
+		update = true
 	}
 
+	// Initialize 'Spec.Configuration.ScheduledBackups' if empty
+	if len(drp.Spec.Configuration.ScheduledBackups) == 0 {
+		drp.Spec.Configuration.ScheduledBackups = "enabled"
+		update = true
+	}
 	return update, nil
 }
 

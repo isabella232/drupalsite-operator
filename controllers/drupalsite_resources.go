@@ -293,9 +293,14 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	}
 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
-
-	if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
-		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
+	if drp.Spec.Configuration.ScheduledBackups == "enabled" {
+		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
+		}
+	} else {
+		if transientErr := r.ensureNoBackupSchedule(ctx, drp, log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Velero schedule"))
+		}
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
@@ -844,6 +849,23 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	schedule := &velerov1.Schedule{}
 	if err := r.Get(ctx, types.NamespacedName{Name: generateScheduleName(d.Namespace, d.Name), Namespace: VeleroNamespace}, schedule); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	if err := r.Delete(ctx, schedule); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
+// ensureNoBackupSchedule ensures there is no velero backup schedule object for the drupalsite
+func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
+	schedule := &velerov1.Schedule{}
+	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
