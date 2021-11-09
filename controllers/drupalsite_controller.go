@@ -778,7 +778,7 @@ func (r *DrupalSiteReconciler) getBuildConfigWebhookTriggerURL(ctx context.Conte
 	gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
 	err = r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
 	if err != nil {
-		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrTemporary)
+		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrClientK8s)
 	}
 	if len(gitlabTriggerSecret.Data["WebHookSecretKey"]) == 0 {
 		return newApplicationError(errors.New("gitlabTriggerSecret value is empty"), ErrTemporary)
