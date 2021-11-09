@@ -1809,6 +1809,13 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 							},
 						},
 					},
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oidcSecretName, //This is always set the same way
+							},
+						},
+					},
 				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
