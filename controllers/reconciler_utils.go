@@ -311,3 +311,14 @@ func checkIfEnvFromSourceExists(envFromSourceArray []corev1.EnvFromSource, envVa
 	}
 	return false
 }
+
+// generateScheduleName generates a schedule name for the site by making sure the max length of it is 63 characters.
+// the schedule name is added as label to velero backups and labels need to abide by RFC 1123
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+func generateScheduleName(namespace string, siteName string) string {
+	if len(namespace) > 57 {
+		namespace = namespace[0:57]
+	}
+	siteNameHash := md5.Sum([]byte(siteName))
+	return namespace + "-" + hex.EncodeToString(siteNameHash[:])[0:4]
+}
