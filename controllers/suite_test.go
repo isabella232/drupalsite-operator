@@ -76,7 +76,8 @@ var _ = BeforeSuite(func(done Done) {
 	VeleroNamespace = "openshift-cern-drupal"
 	PhpFpmExporterImage = "test-phpfpmexporter"
 	WebDAVImage = "test-webdav"
-	DefaultReleaseSpec = "test-spec"
+	DefaultD8ReleaseSpec = "test-d8-spec"
+	DefaultD9ReleaseSpec = "test-d9-spec"
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{

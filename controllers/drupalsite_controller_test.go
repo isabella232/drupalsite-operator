@@ -1241,7 +1241,7 @@ var _ = Describe("DrupalSite controller", func() {
 				By("Expecting the default configuration values to be set")
 				Eventually(func() bool {
 					k8sClient.Get(ctx, key, &cr)
-					return cr.Spec.Version.ReleaseSpec == DefaultReleaseSpec
+					return cr.Spec.Version.ReleaseSpec == DefaultD8ReleaseSpec
 				}, timeout, interval).Should(BeTrue())
 
 				trueVar := true
