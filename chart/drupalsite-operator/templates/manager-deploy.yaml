@@ -28,7 +28,7 @@ spec:
         - --webdav-image={{.Values.drupalsiteOperator.webdavImage}}
         - --zap-stacktrace-level={{.Values.drupalsiteOperator.logStacktraceLevel}}
         - --zap-log-level={{.Values.drupalsiteOperator.logLevel}}
-        - --default-d8-release-spec={{.Values.drupalsiteOperator.defaultD8ReleaseSpec}}
+        - --default-d8-release-spec={{.Values.drupalsiteOperator.defaultReleaseSpec}}
         - --default-d9-release-spec={{.Values.drupalsiteOperator.defaultD9ReleaseSpec}}
         - --parallel-thread-count={{.Values.drupalsiteOperator.parallelThreadCount}}
         - --enable-topology-spread={{.Values.drupalsiteOperator.enableTopologySpread}}

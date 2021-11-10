@@ -23,7 +23,7 @@ drupalsiteOperator:
   logLevel: "3"
   # Zap Level at and above which stacktraces are captured (one of 'info', 'error')
   logStacktraceLevel: "error"
-  defaultD8ReleaseSpec: "RELEASE-2021.11.04T11-30-27Z"
+  defaultReleaseSpec: "RELEASE-2021.11.04T11-30-27Z"
   defaultD9ReleaseSpec: "RELEASE-2021.11.04T14-10-02Z"
   parallelThreadCount: 1
   # Topology spread adds an anti-affinity rule to the server deployment, spreading critical sites across availability zones
