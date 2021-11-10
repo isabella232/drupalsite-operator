@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/asaskevich/govalidator"
@@ -67,8 +68,10 @@ var (
 	SMTPHost string
 	// VeleroNamespace refers to the namespace of the velero server to create backups
 	VeleroNamespace string
-	// DefaultReleaseSpec refers to the releaseSpec of the drupalSite to be defaulted incase it is empty
-	DefaultReleaseSpec string
+	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
+	DefaultD8ReleaseSpec string
+	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
+	DefaultD9ReleaseSpec string
 	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
 	ParallelThreadCount int
 	// EnableTopologySpread refers to enabling avaliability zone scheduling for critical site deployments
@@ -519,7 +522,11 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	// Initialize 'spec.version.releaseSpec' if empty
 	if len(drp.Spec.Version.ReleaseSpec) == 0 {
-		drp.Spec.Version.ReleaseSpec = DefaultReleaseSpec
+		if strings.HasPrefix(drp.Spec.Version.Name, "v8") {
+			drp.Spec.Version.ReleaseSpec = DefaultD8ReleaseSpec
+		} else {
+			drp.Spec.Version.ReleaseSpec = DefaultD9ReleaseSpec
+		}
 		update = true || update
 	}
 
