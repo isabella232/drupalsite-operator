@@ -144,6 +144,16 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return []reconcile.Request{}
 			}),
 		).
+		Watches(&source.Kind{Type: &webservicesv1a1.DrupalSiteConfigOverride{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in a given namespace
+			func(a client.Object) []reconcile.Request {
+				req := make([]reconcile.Request, 1)
+        // The DrupalSite has the same name as the DrupalSiteConfigOverride
+				req[0].Name = a.GetName()
+				req[0].Namespace = a.GetNamespace()
+				return req
+			}),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ParallelThreadCount,
 		}).
