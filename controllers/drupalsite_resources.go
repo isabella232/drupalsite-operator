@@ -2412,7 +2412,18 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		return
 	}
 	if configOverride != nil {
-		phpResources = configOverride.Php.Resources
+		if configOverride.Php.Resources.Limits != nil && configOverride.Php.Resources.Requests != nil {
+			phpResources = configOverride.Php.Resources
+		}
+		if configOverride.Nginx.Resources.Limits != nil && configOverride.Nginx.Resources.Requests != nil {
+			nginxResources = configOverride.Nginx.Resources
+		}
+		if configOverride.Webdav.Resources.Limits != nil && configOverride.Webdav.Resources.Requests != nil {
+			webDAVResources = configOverride.Webdav.Resources
+		}
+		if configOverride.PhpExporter.Resources.Limits != nil && configOverride.PhpExporter.Resources.Requests != nil {
+			phpExporterResources = configOverride.PhpExporter.Resources
+		}
 	}
 
 	config = DeploymentConfig{replicas: replicas,
