@@ -136,7 +136,7 @@ func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d
 }
 
 func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webservicesv1a1.DrupalSite) (deploy appsv1.Deployment,
-	cmPhp corev1.ConfigMap, cmNginx corev1.ConfigMap, cmSettings corev1.ConfigMap, cmPhpCli corev1.ConfigMap, err error) {
+	cmPhp corev1.ConfigMap, cmNginxGlobal corev1.ConfigMap, cmSettings corev1.ConfigMap, cmPhpCli corev1.ConfigMap, err error) {
 	err = r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, &deploy)
 	if err != nil {
 		return
@@ -145,7 +145,7 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 	if err != nil {
 		return
 	}
-	err = r.Get(ctx, types.NamespacedName{Name: "nginx-global-" + d.Name, Namespace: d.Namespace}, &cmNginx)
+	err = r.Get(ctx, types.NamespacedName{Name: "nginx-global-" + d.Name, Namespace: d.Namespace}, &cmNginxGlobal)
 	if err != nil {
 		return
 	}
@@ -1166,11 +1166,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				},
 			},
 			{
-				Name: "nginx-config-volume",
+				Name: "nginx-global-config",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "nginx-" + d.Name,
+							Name: "nginx-global-" + d.Name,
 						},
 					},
 				},
@@ -1245,9 +1245,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/drupal-data",
 					},
 					{
-						Name:      "nginx-config-volume",
-						MountPath: "/etc/nginx/custom.conf",
-						SubPath:   "custom.conf",
+						Name:      "nginx-global-config",
+						MountPath: "/etc/nginx/global.conf",
+						SubPath:   "global.conf",
 						ReadOnly:  true,
 					},
 					{
