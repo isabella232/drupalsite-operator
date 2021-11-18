@@ -6,8 +6,8 @@ spec:
   siteUrl:
   - "drupalsite-sample.webtest.cern.ch"
   version:
-    name: "v8.9-2"
-    releaseSpec: "RELEASE-2021.10.26T15-33-59Z"
+    name: "v9.2-1"
+    releaseSpec: "RELEASE-2021.11.18T15-40-19Z"
   configuration:
     qosClass: "standard"
     databaseClass: "standard"
