@@ -145,7 +145,7 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 	if err != nil {
 		return
 	}
-	err = r.Get(ctx, types.NamespacedName{Name: "nginx-" + d.Name, Namespace: d.Namespace}, &cmNginx)
+	err = r.Get(ctx, types.NamespacedName{Name: "nginx-global-" + d.Name, Namespace: d.Namespace}, &cmNginx)
 	if err != nil {
 		return
 	}
@@ -160,7 +160,7 @@ func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webser
 // ensureDeploymentConfigmapHash ensures that the deployment has annotations with the content of each configmap.
 // If the content of the configmaps changes, this will ensure that the deployemnt rolls out.
 func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (requeue bool, transientErr reconcileError) {
-	deploy, cmPhp, cmNginx, cmSettings, cmPhpCli, err := r.getDeployConfigmap(ctx, d)
+	deploy, cmPhp, cmNginxGlobal, cmSettings, cmPhpCli, err := r.getDeployConfigmap(ctx, d)
 	switch {
 	case k8sapierrors.IsNotFound(err):
 		return false, nil
@@ -169,12 +169,12 @@ func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context
 	}
 	updateDeploymentAnnotations := func(deploy *appsv1.Deployment, d *webservicesv1a1.DrupalSite) error {
 		hashPhp := md5.Sum([]byte(createKeyValuePairs(cmPhp.Data)))
-		hashNginx := md5.Sum([]byte(createKeyValuePairs(cmNginx.Data)))
+		hashNginxGlobal := md5.Sum([]byte(createKeyValuePairs(cmNginxGlobal.Data)))
 		hashSettings := md5.Sum([]byte(createKeyValuePairs(cmSettings.Data)))
 		hashPhpCli := md5.Sum([]byte(createKeyValuePairs(cmPhpCli.Data)))
 
 		deploy.Spec.Template.ObjectMeta.Annotations["phpfpm-configmap/hash"] = hex.EncodeToString(hashPhp[:])
-		deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hashNginx[:])
+		deploy.Spec.Template.ObjectMeta.Annotations["nginx-configmap/hash"] = hex.EncodeToString(hashNginxGlobal[:])
 		deploy.Spec.Template.ObjectMeta.Annotations["settings.php-configmap/hash"] = hex.EncodeToString(hashSettings[:])
 		deploy.Spec.Template.ObjectMeta.Annotations["php-cli-configmap/hash"] = hex.EncodeToString(hashPhpCli[:])
 		return nil
@@ -226,7 +226,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP-FPM CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx_global", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
 	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
@@ -335,7 +335,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- deploy_drupal: <moved to `ensureDrupalDeployment`>
 	- svc_nginx: Service for Nginx
 	- cm_php: ConfigMap for PHP-FPM
-	- cm_nginx: ConfigMap for Nginx
+	- cm_nginx_global: ConfigMap for Nginx global settings (performance)
 	- cm_settings: ConfigMap for `settings.php`
 	- cm_php_cli: ConfigMap for 'config.ini' for PHP CLI
 	- route: Route for the drupalsite
@@ -467,10 +467,10 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
-	case "cm_nginx":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-" + d.Name, Namespace: d.Namespace}}
+	case "cm_nginx_global":
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-global" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
-			return updateConfigMapForNginx(ctx, cm, d, r.Client)
+			return updateConfigMapForNginxGlobal(ctx, cm, d, r.Client)
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cm.TypeMeta.Kind, "Resource.Namespace", cm.Namespace, "Resource.Name", cm.Name)
@@ -1992,10 +1992,10 @@ func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigM
 	return nil
 }
 
-// updateConfigMapForNginx modifies the configmap to include the Nginx settings file.
+// updateConfigMapForNginxGlobal modifies the configmap to include the Nginx settings file.
 // If the file contents change, it rolls out a new deployment.
-func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
-	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Configuration.QoSClass) + "/nginx.conf"
+func updateConfigMapForNginxGlobal(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
+	configPath := "/tmp/runtime-config/qos-" + string(d.Spec.Configuration.QoSClass) + "/nginx-global.conf"
 	content, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return newApplicationError(fmt.Errorf("reading Nginx configuration failed: %w", err), ErrFilesystemIO)
@@ -2006,7 +2006,7 @@ func updateConfigMapForNginx(ctx context.Context, currentobject *corev1.ConfigMa
 	// All configurations that we do not want to enforce, we set here
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Data = map[string]string{
-			"custom.conf": string(content),
+			"global.conf": string(content),
 		}
 	}
 
