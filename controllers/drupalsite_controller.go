@@ -780,10 +780,6 @@ func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *
 	if err != nil {
 		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrClientK8s)
 	}
-	if len(gitlabTriggerSecret.Data["WebHookSecretKey"]) == 0 {
-		return newApplicationError(errors.New("gitlabTriggerSecret value is empty"), ErrTemporary)
-	}
-	secret := string(gitlabTriggerSecret.Data["WebHookSecretKey"])
-	d.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + secret + "/gitlab"
+	d.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
 	return nil
 }
