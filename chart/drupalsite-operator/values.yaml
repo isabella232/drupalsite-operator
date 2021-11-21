@@ -24,9 +24,9 @@ drupalsiteOperator:
   # Zap Level at and above which stacktraces are captured (one of 'info', 'error')
   logStacktraceLevel: "error"
   # defaultReleaseSpec refers to the default D8 releaseSpec. In the operator code, it is tagged as 'defaultD8ReleaseSpec'
-  defaultReleaseSpec: "RELEASE-2021.11.04T11-30-27Z"
+  defaultReleaseSpec: "RELEASE-2021.11.19T01-52-31Z"
   # defaultReleaseSpec refers to the default D9 releaseSpec
-  defaultD9ReleaseSpec: "RELEASE-2021.11.04T14-10-02Z"
+  defaultD9ReleaseSpec: "RELEASE-2021.11.19T01-52-19Z"
   parallelThreadCount: 1
   # Topology spread adds an anti-affinity rule to the server deployment, spreading critical sites across availability zones
   enableTopologySpread: false
