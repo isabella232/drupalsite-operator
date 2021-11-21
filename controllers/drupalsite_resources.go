@@ -468,7 +468,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "cm_nginx_global":
-		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-global" + d.Name, Namespace: d.Namespace}}
+		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nginx-global-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			return updateConfigMapForNginxGlobal(ctx, cm, d, r.Client)
 		})
