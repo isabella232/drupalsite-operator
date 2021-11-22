@@ -227,7 +227,7 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	switch container {
 	case "php-fpm":
 		if qosClass == webservicesv1a1.QoSCritical {
-			return ResourceRequestLimit("1Gi", "500m", "2Gi", "5000m")
+			return ResourceRequestLimit("1Gi", "500m", "2.5Gi", "5000m")
 		}
 		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
 	case "nginx":

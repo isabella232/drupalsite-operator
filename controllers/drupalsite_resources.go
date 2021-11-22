@@ -1148,6 +1148,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Settings only on creation (not enforced)
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+		if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
+			// openshift-user-critical is part of the default OKD4 Priority classes
+			// https://github.com/openshift/cluster-config-operator/blob/168704868381c88551627239d132a3900eedc14f/manifests/0000_50_config-operator_09_user-priority-class.yaml
+			currentobject.Spec.Template.Spec.PriorityClassName = "openshift-user-critical"
+		}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
 
 		if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
