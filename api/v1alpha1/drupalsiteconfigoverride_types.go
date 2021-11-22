@@ -23,29 +23,17 @@ import (
 
 // DrupalSiteConfigOverrideSpec defines the desired state of DrupalSiteConfigOverride
 type DrupalSiteConfigOverrideSpec struct {
-	Php         `json:"php,omitempty"`
-	Nginx       `json:"nginx,omitempty"`
-	Webdav      `json:"webdav,omitempty"`
-	PhpExporter `json:"phpexporter,omitempty"`
+	// Php includes configuration for the PHP container of the DrupalSite server pods
+	Php Resources `json:"php,omitempty"`
+	// Nginx includes configuration for the Nginx container of the DrupalSite server pods
+	Nginx Resources `json:"nginx,omitempty"`
+	// Webdav includes configuration for the Webdav container of the DrupalSite server pods
+	Webdav Resources `json:"webdav,omitempty"`
+	// PhpExporter includes configuration for the PhpExporter container of the DrupalSite server pods
+	PhpExporter Resources `json:"phpexporter,omitempty"`
 }
 
-// Php includes configuration for the PHP container of the DrupalSite server pods
-type Php struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// Nginx includes configuration for the Nginx container of the DrupalSite server pods
-type Nginx struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// Webdav includes configuration for the Webdav container of the DrupalSite server pods
-type Webdav struct {
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// PhpExporter includes configuration for the PhpExporter container of the DrupalSite server pods
-type PhpExporter struct {
+type Resources struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 

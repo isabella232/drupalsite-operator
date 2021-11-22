@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"net/url"
 	"path"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -2412,16 +2413,16 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		return
 	}
 	if configOverride != nil {
-		if configOverride.Php.Resources.Limits != nil && configOverride.Php.Resources.Requests != nil {
+		if !reflect.DeepEqual(configOverride.Php.Resources, corev1.ResourceRequirements{}) {
 			phpResources = configOverride.Php.Resources
 		}
-		if configOverride.Nginx.Resources.Limits != nil && configOverride.Nginx.Resources.Requests != nil {
+		if !reflect.DeepEqual(configOverride.Nginx.Resources, corev1.ResourceRequirements{}) {
 			nginxResources = configOverride.Nginx.Resources
 		}
-		if configOverride.Webdav.Resources.Limits != nil && configOverride.Webdav.Resources.Requests != nil {
+		if !reflect.DeepEqual(configOverride.Webdav.Resources, corev1.ResourceRequirements{}) {
 			webDAVResources = configOverride.Webdav.Resources
 		}
-		if configOverride.PhpExporter.Resources.Limits != nil && configOverride.PhpExporter.Resources.Requests != nil {
+		if !reflect.DeepEqual(configOverride.PhpExporter.Resources, corev1.ResourceRequirements{}) {
 			phpExporterResources = configOverride.PhpExporter.Resources
 		}
 	}
