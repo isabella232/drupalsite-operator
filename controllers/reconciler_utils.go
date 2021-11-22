@@ -227,17 +227,26 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	switch container {
 	case "php-fpm":
 		if qosClass == webservicesv1a1.QoSCritical {
-			return ResourceRequestLimit("1Gi", "500m", "2.5Gi", "5000m")
+			return ResourceRequestLimit("1Gi", "500m", "2500Mi", "5000m")
+		}
+		if qosClass == webservicesv1a1.QoSTest {
+			return ResourceRequestLimit("460Mi", "90m", "570Mi", "2700m")
 		}
 		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
 	case "nginx":
 		if qosClass == webservicesv1a1.QoSCritical {
 			return ResourceRequestLimit("500Mi", "500m", "1Gi", "2000m")
 		}
+		if qosClass == webservicesv1a1.QoSTest {
+			return ResourceRequestLimit("5Mi", "30m", "15Mi", "600m")
+		}
 		return ResourceRequestLimit("10Mi", "40m", "20Mi", "900m")
 	case "php-fpm-exporter":
 		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
 	case "webdav":
+		if qosClass == webservicesv1a1.QoSTest {
+			return ResourceRequestLimit("5Mi", "30m", "15Mi", "600m")
+		}
 		// WebDAV workloads are very bursty and they need a lot of CPU to process, therefore giving very high spread
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
 	case "redis":
