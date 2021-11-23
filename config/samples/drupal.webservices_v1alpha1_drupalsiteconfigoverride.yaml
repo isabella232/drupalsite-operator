@@ -11,3 +11,27 @@ spec:
       limits:
         cpu: 1000m
         memory: 1G
+  # nginx:
+  #   resources:
+  #     requests:
+  #       cpu: 40m
+  #       memory: 10Mi
+  #     limits:
+  #       cpu: 2000m
+  #       memory: 1.5Gi
+  # webdav:
+  #   resources:
+  #     requests:
+  #       cpu: 20m
+  #       memory: 10Mi
+  #     limits:
+  #       cpu: 500m
+  #       memory: 100Mi
+  # phpexporter:
+  #   resources:
+  #     requests:
+  #       cpu: 3m
+  #       memory: 24Mi
+  #     limits:
+  #       cpu: 30m
+  #       memory: 35Mi

@@ -24,9 +24,16 @@ import (
 // DrupalSiteConfigOverrideSpec defines the desired state of DrupalSiteConfigOverride
 type DrupalSiteConfigOverrideSpec struct {
 	// Php includes configuration for the PHP container of the DrupalSite server pods
-	Php `json:"php,omitempty"`
+	Php Resources `json:"php,omitempty"`
+	// Nginx includes configuration for the Nginx container of the DrupalSite server pods
+	Nginx Resources `json:"nginx,omitempty"`
+	// Webdav includes configuration for the Webdav container of the DrupalSite server pods
+	Webdav Resources `json:"webdav,omitempty"`
+	// PhpExporter includes configuration for the PhpExporter container of the DrupalSite server pods
+	PhpExporter Resources `json:"phpexporter,omitempty"`
 }
-type Php struct {
+
+type Resources struct {
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
