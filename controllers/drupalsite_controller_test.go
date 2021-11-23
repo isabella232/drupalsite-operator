@@ -960,7 +960,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// }, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// // Check gitlab webhook URL updated on the drupalSite status
-				// By("Expecting Gitlab webhook secret created")
+				// By("Expecting Gitlab webhook secret listed in the DrupalSite status")
 				// Eventually(func() bool {
 				// 	cfg, err := ctrl.GetConfig()
 				// 	if err != nil {

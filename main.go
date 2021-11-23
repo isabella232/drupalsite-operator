@@ -87,7 +87,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	var err error
-	controllers.BuildResources, err = controllers.ResourceRequestLimit("2Gi", "250m", "4Gi", "1000m")
+	controllers.BuildResources, err = controllers.ResourceRequestLimit("2Gi", "1000m", "4Gi", "2000m")
 	if err != nil {
 		setupLog.Error(err, "Invalid configuration: can't parse build resources")
 		os.Exit(1)
