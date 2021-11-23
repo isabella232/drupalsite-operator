@@ -196,6 +196,11 @@ spec:
                   for the current DrupalSite
                 format: int32
                 type: integer
+              gitlabWebhookURL:
+                description: GitlabWebhookURL is the URL that triggers a new build
+                  of the site's image after changes on its source Gitlab "extraConfigurationRepo".
+                  It should be copied to Gitlab.
+                type: string
               releaseID:
                 description: ReleaseID reports the actual release of CERN Drupal Distribution
                   that is being used in the deployment.

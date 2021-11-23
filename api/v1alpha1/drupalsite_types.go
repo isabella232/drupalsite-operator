@@ -141,6 +141,11 @@ type DrupalSiteStatus struct {
 	// ExpectedDeploymentReplicas specifies the deployment replicas for the current DrupalSite
 	// +optional
 	ExpectedDeploymentReplicas *int32 `json:"expectedDeploymentReplicas,omitempty"`
+
+	// GitlabWebhookURL is the URL that triggers a new build of the site's image after changes on its source Gitlab "extraConfigurationRepo".
+	// It should be copied to Gitlab.
+	// +optional
+	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

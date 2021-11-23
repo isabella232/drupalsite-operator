@@ -208,6 +208,9 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 		if transientErr := r.ensureResourceX(ctx, drp, "bc_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
+		if transientErr := r.ensureResourceX(ctx, drp, "gitlab_trigger_secret", log); transientErr != nil {
+			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder Secret"))
+		}
 	}
 	// 2. Data layer
 
@@ -346,6 +349,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
 	- svc_redis: Redis Service for a critical QoS site
+	- gitlab_trigger_secret: Secret for Gitlab trigger config in buildconfig
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -561,6 +565,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", secret.TypeMeta.Kind, "Resource.Namespace", secret.Namespace, "Resource.Name", secret.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "gitlab_trigger_secret":
+		gitlab_trigger_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, gitlab_trigger_secret, func() error {
+			log.V(3).Info("Ensuring Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
+			return secretForS2iGitlabTrigger(gitlab_trigger_secret, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil
@@ -1062,6 +1077,12 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 				{
 					Type: buildv1.ConfigChangeBuildTriggerType,
 				},
+				{
+					Type: buildv1.GitLabWebHookBuildTriggerType,
+					GitLabWebHook: &buildv1.WebHookTrigger{
+						Secret: "gitlab-trigger-secret-" + d.Name,
+					},
+				},
 			},
 		}
 	}
@@ -1128,11 +1149,11 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
 
-		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
-		// a wrong image built from a different build, that is left out on the node
-		// NOTE: Removing this annotation temporarily, as it is causing indefinite rollouts with some sites
-		// ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
-		// currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"nginx-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"}]"
+		if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
+			// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
+			// a wrong image built from a different build, that is left out on the node
+			currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"},{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
+		}
 
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -1956,6 +1977,28 @@ func clusterRoleBindingForTektonExtraPermission(currentobject *rbacv1.ClusterRol
 			Name:      "tektoncd",
 			Namespace: d.Namespace,
 		},
+	}
+	return nil
+}
+
+// secretForS2iGitlabTrigger returns a Secret object for openshift buildconfig gitlab trigger
+func secretForS2iGitlabTrigger(currentobject *corev1.Secret, d *webservicesv1a1.DrupalSite) error {
+	addOwnerRefToObject(currentobject, asOwner(d))
+	currentobject.Type = "kubernetes.io/opaque"
+	// All configurations that we do not want to enforce, we set here
+	if currentobject.CreationTimestamp.IsZero() {
+		encryptedOpaquePassword := generateRandomPassword()
+		currentobject.StringData = map[string]string{
+			"WebHookSecretKey": encryptedOpaquePassword,
+		}
+	}
+	if currentobject.Labels == nil {
+		currentobject.Labels = map[string]string{}
+	}
+	ls := labelsForDrupalSite(d.Name)
+	ls["app"] = "drupal"
+	for k, v := range ls {
+		currentobject.Labels[k] = v
 	}
 	return nil
 }
