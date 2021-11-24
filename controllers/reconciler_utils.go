@@ -227,21 +227,28 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	switch container {
 	case "php-fpm":
 		if qosClass == webservicesv1a1.QoSCritical {
-			return ResourceRequestLimit("1Gi", "500m", "2Gi", "5000m")
+			return ResourceRequestLimit("2500Mi", "1000m", "3Gi", "5000m")
+		}
+		if qosClass == webservicesv1a1.QoSTest {
+			// Test sites should request much fewer resources, but they can still afford to consume more if available (low QoS)
+			return ResourceRequestLimit("200Mi", "70m", "570Mi", "1000m")
 		}
 		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
 	case "nginx":
 		if qosClass == webservicesv1a1.QoSCritical {
-			return ResourceRequestLimit("500Mi", "500m", "1Gi", "2000m")
+			// We haven't seen any Nginx bottlenecks with critical sites so far
+			return ResourceRequestLimit("20Mi", "60m", "50Mi", "2000m")
+		}
+		if qosClass == webservicesv1a1.QoSTest {
+			return ResourceRequestLimit("5Mi", "30m", "20Mi", "500m")
 		}
 		return ResourceRequestLimit("10Mi", "40m", "20Mi", "900m")
 	case "php-fpm-exporter":
-		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+		return ResourceRequestLimit("25Mi", "4m", "35Mi", "40m")
 	case "webdav":
+		// Webdav has very few requests (low QoS) anyway, so there's no need to change for test sites so far
 		// WebDAV workloads are very bursty and they need a lot of CPU to process, therefore giving very high spread
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
-	case "redis":
-		return ResourceRequestLimit("256Mi", "50m", "500Mi", "500m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
