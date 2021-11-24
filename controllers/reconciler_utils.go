@@ -246,9 +246,7 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	case "php-fpm-exporter":
 		return ResourceRequestLimit("25Mi", "4m", "35Mi", "40m")
 	case "webdav":
-		if qosClass == webservicesv1a1.QoSTest {
-			return ResourceRequestLimit("5Mi", "30m", "15Mi", "600m")
-		}
+		// Webdav has very few requests (low QoS) anyway, so there's no need to change for test sites so far
 		// WebDAV workloads are very bursty and they need a lot of CPU to process, therefore giving very high spread
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
 	}
