@@ -244,7 +244,7 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		}
 		return ResourceRequestLimit("10Mi", "40m", "20Mi", "900m")
 	case "php-fpm-exporter":
-		return ResourceRequestLimit("25Mi", "3m", "35Mi", "30m")
+		return ResourceRequestLimit("25Mi", "4m", "35Mi", "40m")
 	case "webdav":
 		if qosClass == webservicesv1a1.QoSTest {
 			return ResourceRequestLimit("5Mi", "30m", "15Mi", "600m")
