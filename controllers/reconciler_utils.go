@@ -230,7 +230,8 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 			return ResourceRequestLimit("2500Mi", "1000m", "3Gi", "5000m")
 		}
 		if qosClass == webservicesv1a1.QoSTest {
-			return ResourceRequestLimit("460Mi", "90m", "570Mi", "2700m")
+			// Test sites should request much fewer resources, but they can still afford to consume more if available (low QoS)
+			return ResourceRequestLimit("200Mi", "70m", "570Mi", "1000m")
 		}
 		return ResourceRequestLimit("520Mi", "100m", "640Mi", "3000m")
 	case "nginx":
