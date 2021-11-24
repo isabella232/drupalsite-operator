@@ -1564,30 +1564,6 @@ var _ = Describe("DrupalSite controller", func() {
 				oidcReturnUri := authz.OidcReturnURI{}
 				schedule := velerov1.Schedule{}
 				cronjob := batchbeta1.CronJob{}
-				redis_deploy := appsv1.Deployment{}
-				redis_secret := corev1.Secret{}
-				redis_service := corev1.Service{}
-
-				// Check Redis deployment resource creation
-				By("Expecting Redis deployment created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_deploy)
-					return redis_deploy.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Redis service resource creation
-				By("Expecting Redis service created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_service)
-					return redis_service.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check Redis secret resource creation
-				By("Expecting Redis secret created")
-				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_secret)
-					return redis_secret.ObjectMeta.OwnerReferences
-				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -1717,7 +1693,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 	Describe("Updating the critical QoS drupalSite object", func() {
 		Context("With standard QoS", func() {
-			It("All dependent resources should be created and redis resources should be removed", func() {
+			It("All dependent resources should be created", func() {
 				key = types.NamespacedName{
 					Name:      Name + "-critical",
 					Namespace: "critical",
@@ -1756,27 +1732,6 @@ var _ = Describe("DrupalSite controller", func() {
 				oidcReturnUri := authz.OidcReturnURI{}
 				schedule := velerov1.Schedule{}
 				cronjob := batchbeta1.CronJob{}
-				redis_deploy := appsv1.Deployment{}
-				redis_secret := corev1.Secret{}
-				redis_service := corev1.Service{}
-
-				// Check Redis deployment resource deleted
-				By("Expecting Redis deployment deleted")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_deploy)
-				}, timeout, interval).Should(Not(Succeed()))
-
-				// Check Redis service resource deleted
-				By("Expecting Redis service deleted")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_service)
-				}, timeout, interval).Should(Not(Succeed()))
-
-				// Check Redis secret resource creation
-				By("Expecting Redis secret created")
-				Eventually(func() error {
-					return k8sClient.Get(ctx, types.NamespacedName{Name: "redis-" + key.Name, Namespace: key.Namespace}, &redis_secret)
-				}, timeout, interval).Should(Not(Succeed()))
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")

@@ -249,8 +249,6 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		}
 		// WebDAV workloads are very bursty and they need a lot of CPU to process, therefore giving very high spread
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
-	case "redis":
-		return ResourceRequestLimit("256Mi", "50m", "500Mi", "500m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
