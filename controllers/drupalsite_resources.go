@@ -324,6 +324,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
+	- gitlab_trigger_secret: Secret for Gitlab trigger config in buildconfig
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
@@ -519,6 +520,17 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		})
 		if err != nil {
 			log.Error(err, "Failed to ensure Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+		return nil
+	case "gitlab_trigger_secret":
+		gitlab_trigger_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, gitlab_trigger_secret, func() error {
+			log.V(3).Info("Ensuring Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
+			return secretForS2iGitlabTrigger(gitlab_trigger_secret, d)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
 			return newApplicationError(err, ErrClientK8s)
 		}
 		return nil

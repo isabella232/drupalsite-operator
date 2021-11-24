@@ -148,7 +148,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			// Reconcile every DrupalSite in a given namespace
 			func(a client.Object) []reconcile.Request {
 				req := make([]reconcile.Request, 1)
-        // The DrupalSite has the same name as the DrupalSiteConfigOverride
+				// The DrupalSite has the same name as the DrupalSiteConfigOverride
 				req[0].Name = a.GetName()
 				req[0].Namespace = a.GetNamespace()
 				return req
