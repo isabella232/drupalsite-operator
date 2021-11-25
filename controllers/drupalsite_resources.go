@@ -583,6 +583,42 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 	return nil
 }
 
+// ensureDrupalOperationsJob is similar to ensureResourceX, but for the Drupal operations job, which requires extra information like the operations script
+func (r *DrupalSiteReconciler) ensureDrupalOperationsJob(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger, extraLabel string, jobName string, operation ...string) (transientErr reconcileError) {
+	if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName + "-" + d.Name, Namespace: d.Namespace}}
+		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
+			log.V(3).Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+			return jobForDrupalSiteOperations(job, databaseSecret, d, extraLabel, operation...)
+		})
+		if err != nil {
+			log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	return nil
+}
+
+// ensureNoDrupalOperationsJob ensures the Drupal operations job is deleted
+// TODO: Make sure to delete the pods created by the job as well
+func (r *DrupalSiteReconciler) ensureNoDrupalOperationsJob(ctx context.Context, d *webservicesv1a1.DrupalSite, jobName string, log logr.Logger) (transientErr reconcileError) {
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName + "-" + d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, job); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return nil
+		default:
+			return newApplicationError(err, ErrClientK8s)
+		}
+	}
+	// PropagationPolicy needs to be passed when deleting job, for the child pods to be deleted as well
+	propagationPolicy := metav1.DeletePropagationBackground
+	if err := r.Delete(ctx, job, &client.DeleteOptions{PropagationPolicy: &propagationPolicy}); err != nil {
+		return newApplicationError(err, ErrClientK8s)
+	}
+	return nil
+}
+
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
 	// Don't keep a history of cronjobs
 	var jobsHistoryLimit int32 = 0
@@ -1882,6 +1918,105 @@ func secretForS2iGitlabTrigger(currentobject *corev1.Secret, d *webservicesv1a1.
 	return nil
 }
 
+// jobForDrupalSiteOperations returns a job object thats runs a given script on the drupalSite
+func jobForDrupalSiteOperations(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite, extraLabel string, operation ...string) error {
+	ls := labelsForDrupalSite(d.Name)
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Labels = map[string]string{}
+		currentobject.Spec.Template.ObjectMeta = metav1.ObjectMeta{
+			Labels: ls,
+		}
+		currentobject.Spec.Template.Spec = corev1.PodSpec{
+			RestartPolicy: "Never",
+			Containers: []corev1.Container{{
+				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
+				Name:            "site-operation",
+				Command:         operation,
+				ImagePullPolicy: "Always",
+				Env: []corev1.EnvVar{
+					{
+						Name:  "DRUPAL_SHARED_VOLUME",
+						Value: "/drupal-data-source",
+					},
+				},
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: databaseSecret,
+							},
+						},
+					},
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oidcSecretName, //This is always set the same way
+							},
+						},
+					},
+				},
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "php-cli-config-volume",
+						MountPath: "/usr/local/etc/php/conf.d/config.ini",
+						SubPath:   "config.ini",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
+				},
+				TerminationMessagePath: "/dev/termination-log",
+			}},
+			Volumes: []corev1.Volume{
+				{
+					Name: "drupal-directory-" + d.Name,
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: "pv-claim-" + d.Name,
+						},
+					},
+				},
+				{
+					Name: "site-settings-php",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "site-settings-" + d.Name,
+							},
+						},
+					},
+				},
+				{
+					Name: "php-cli-config-volume",
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "php-cli-config-" + d.Name,
+							},
+						},
+					},
+				},
+			},
+		}
+		ls["app"] = "site-operation"
+		ls["operation"] = extraLabel
+		for k, v := range ls {
+			currentobject.Labels[k] = v
+		}
+		currentobject.Spec.BackoffLimit = pointer.Int32Ptr(0)
+	}
+	return nil
+}
+
 // updateConfigMapForPHPFPM modifies the configmap to include the php-fpm settings file,
 // but only if it's freshly created
 func updateConfigMapForPHPFPM(ctx context.Context, currentobject *corev1.ConfigMap, d *webservicesv1a1.DrupalSite, c client.Client) error {
@@ -2049,12 +2184,13 @@ func disableSiteMaintenanceModeCommandForDrupalSite() []string {
 
 // checkUpdbStatus outputs the command needed to check if a database update is required
 func checkUpdbStatus() []string {
-	return []string{"/operations/check-updb-status.sh"}
+	return []string{"sh", "-c", "/operations/check-updb-status.sh > /dev/termination-log"}
+	// return []string{"sh", "-c", "cd /app && drush updatedb-status --no-entity-updates --format=json 2>/dev/null | jq '. | length' > /dev/termination-log"}
 }
 
 // runUpDBCommand outputs the command needed to update the database in drupal
 func runUpDBCommand() []string {
-	return []string{"/operations/run-updb.sh"}
+	return []string{"sh", "-c", "/operations/run-updb.sh > /dev/termination-log"}
 }
 
 // takeBackup outputs the command need to take the database backup to a given filename

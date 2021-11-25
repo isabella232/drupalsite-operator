@@ -113,10 +113,11 @@ func unsetUpdateInProgress(drp *webservicesv1a1.DrupalSite) bool {
 }
 
 // setDBUpdatesPending sets the 'DBUpdatesPending' status on the drupalSite object
-func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
+func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite, message string) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
-		Type:   "DBUpdatesPending",
-		Status: "True",
+		Type:    "DBUpdatesPending",
+		Status:  "True",
+		Message: message,
 	})
 }
 
@@ -328,4 +329,28 @@ func generateScheduleName(namespace string, siteName string) string {
 	}
 	siteNameHash := md5.Sum([]byte(siteName))
 	return namespace + "-" + hex.EncodeToString(siteNameHash[:])[0:4]
+}
+
+// getOperationsJobPod fetches the pod
+func (r *DrupalSiteReconciler) getOperationsJobPod(ctx context.Context, d *webservicesv1a1.DrupalSite) (corev1.Pod, reconcileError) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"job-name": "site-operation-" + d.Name, "app": "site-operation"},
+	})
+	if err != nil {
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+		// consider filtering with ownerRef
+	}
+	err = r.List(ctx, &podList, &options)
+	switch {
+	case err != nil:
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
+	}
+	return podList.Items[0], nil
 }

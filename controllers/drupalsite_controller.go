@@ -281,11 +281,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// In situations where there are no db updates, but 'DBUpdatesPending' is set without a 'DBUpdatesFailed' status, remove the 'DBUpdatesPending'
 	if drupalSite.ConditionTrue("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
-		sout, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, checkUpdbStatus()...)
+		_, updatesPending, output, err := r.checkForDBUpdates(ctx, drupalSite, log)
 		if err != nil {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
-		if sout == "" {
+		if len(output) == 0 && !updatesPending {
 			update = drupalSite.Status.Conditions.RemoveCondition("DBUpdatesPending") || update
 		}
 	}
@@ -298,6 +298,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if drupalSite.ConditionTrue("DBUpdatesFailed") {
 			update = drupalSite.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
 		}
+		if drupalSite.ConditionTrue("DBUpdatesPending") {
+			update = drupalSite.Status.Conditions.RemoveCondition("DBUpdatesPending") || update
+		}
+
 	}
 
 	// Update status with all the conditions that were checked
@@ -305,7 +309,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
+	// Condition `UpdateNeeded` <- when serving image in the deployment not matching `releaseID`
 	updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
 	if !isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
@@ -317,6 +321,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return r.updateCRorFailReconcile(ctx, log, drupalSite)
 			}
 		}
+	}
+
+	// Clean up jobs created for update
+	if err := r.ensureNoDrupalOperationsJob(ctx, drupalSite, "check-updb", log); err != nil {
+		handleNonfatalErr(err, "%v while cleaning up check-updb job", "")
+	}
+	if err := r.ensureNoDrupalOperationsJob(ctx, drupalSite, "run-updb", log); err != nil {
+		handleNonfatalErr(err, "%v while cleaning up run-updb job", "")
 	}
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
@@ -471,6 +483,7 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 // isDrupalSiteInstalled checks if the drupal site is initialized by running drush status command in the PHP pod
 func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	if r.isDrupalSiteReady(ctx, d) {
+		// Figure something else here instead of moving exec into a job. Maybe it is a bit of over load.
 		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkIfSiteIsInstalled()...); err != nil {
 			return false
 		}
@@ -718,36 +731,43 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 // 5. If there is a permanent unrecoverable error, restore the DB using the backup and set 'DBUpdateFailed' status
 // 6. If no error, remove the 'DBUpdatesPending' status and continue
 func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
-	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
-	if err != nil {
-		return true
-	}
-	if sout != "" {
-		// Set DBUpdatesPending status
-		if setDBUpdatesPending(d) {
-			return true
-		}
-
-		// Take backup
-		backupFileName := "db_backup_update_rollback.sql"
-		// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
-		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
-			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
-			return true
-		}
-
-		// Run updb
-		// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
-		_, err = r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
+	if !d.ConditionTrue("DBUpdatesPending") {
+		_, updatesPending, output, err := r.checkForDBUpdates(ctx, d, log)
 		if err != nil {
-			err = r.rollBackDBUpdate(ctx, d, backupFileName)
-			if err != nil {
-				setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
+			// return r.updateCRStatusOrFailReconcile(ctx, log, d)
+			return true
+		}
+		if updatesPending {
+			// Set DBUpdatesPending status
+			if setDBUpdatesPending(d, output) {
 				return true
 			}
+		}
+		return false
+	}
+
+	// Take backup
+	backupFileName := "db_backup_update_rollback.sql"
+	// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
+	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
+		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
+		return true
+	}
+
+	// Run updb
+	// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
+	_, err := r.runUpdateDB(ctx, d, log)
+	if err != nil {
+		if err.Temporary() {
+			return true
+		}
+		err = r.rollBackDBUpdate(ctx, d, backupFileName)
+		if err != nil {
 			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
 			return true
 		}
+		// setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
+		return true
 	}
 	// DB update successful, remove conditions
 	if d.ConditionTrue("DBUpdatesPending") {
@@ -806,4 +826,89 @@ func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *
 	}
 	d.Status.GitlabWebhookURL = "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
 	return nil
+}
+
+// checkForDBUpdates checkes if DBUpdates are required for the given site by creating a job and checking it's status.
+func (r *DrupalSiteReconciler) checkForDBUpdates(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, updatesPending bool, output string, err reconcileError) {
+	// Try to fetch the job
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-operation-" + d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, job); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			// Create the job if it doesn't exist
+			if transientErr := r.ensureDrupalOperationsJob(ctx, d, log, "CheckDBUpdates", "check-updb", checkUpdbStatus()...); transientErr != nil {
+				return false, false, "", transientErr
+			}
+		default:
+			return false, false, "", newApplicationError(err, ErrClientK8s)
+		}
+	}
+	// Check if job has completed
+	if job.Status.CompletionTime == nil {
+		log.Error(err, "job not completed", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+		return false, false, "", newApplicationError(errors.New("job not completed"), ErrTemporary)
+	}
+	// Fetch the pod created by the job
+	pod, err := r.getOperationsJobPod(ctx, d)
+	if err != nil {
+		// What to do when job is not finished/ there is an error
+		return false, false, "", err
+	}
+	if len(pod.Status.ContainerStatuses) > 0 {
+		if pod.Status.ContainerStatuses[0].State.Terminated.ExitCode == 0 {
+			if len(pod.Status.ContainerStatuses[0].State.Terminated.Message) > 0 {
+				// Updates exist or there is an error
+				if strings.Contains(pod.Status.ContainerStatuses[0].State.Terminated.Message, "error") {
+					err := newApplicationError(errors.New("error while checking for db updates"), ErrDBUpdateFailed)
+					setConditionStatus(d, "DBUpdatesFailed", true, err, false)
+					return true, false, pod.Status.ContainerStatuses[0].State.Terminated.Message, err
+				}
+				return true, true, pod.Status.ContainerStatuses[0].State.Terminated.Message, nil
+			}
+			// No updates
+			return false, false, "", nil
+		}
+	}
+	err = newApplicationError(errors.New("error while checking for db updates"), ErrDBUpdateFailed)
+	d.Status.Conditions.RemoveCondition("DBUpdatesPending")
+	setConditionStatus(d, "DBUpdatesFailed", true, err, false)
+	return true, false, "", err
+}
+
+// runUpdateDB updates the tables that are required for the given site by creating a job and checking it's status.
+// The function also deletes the job after it checks
+func (r *DrupalSiteReconciler) runUpdateDB(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError) {
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "site-operation-" + d.Name, Namespace: d.Namespace}}
+	if err := r.Get(ctx, types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, job); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			if transientErr := r.ensureDrupalOperationsJob(ctx, d, log, "UpdateDB", "run-updb", runUpDBCommand()...); transientErr != nil {
+				return false, transientErr
+			}
+		default:
+			return false, newApplicationError(err, ErrClientK8s)
+		}
+	}
+	// Check if job has completed
+	if job.Status.CompletionTime == nil {
+		log.Error(err, "job not completed", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+		return false, newApplicationError(errors.New("job not completed"), ErrTemporary)
+	}
+	pod, err := r.getOperationsJobPod(ctx, d)
+	if err != nil {
+		return false, err
+	}
+	if len(pod.Status.ContainerStatuses) > 0 {
+		if pod.Status.ContainerStatuses[0].State.Terminated.ExitCode == 0 {
+			if pod.Status.ContainerStatuses[0].State.Terminated.Message == "Running drush updatedb\nEnabling maintenance mode\nDisabling maintenance mode\n" {
+				// update successful
+				return true, nil
+			}
+		} else {
+			err = newApplicationError(errors.New("error while updating db tables"), ErrDBUpdateFailed)
+			setConditionStatus(d, "DBUpdatesFailed", true, err, false)
+			return true, err
+		}
+	}
+	return false, nil
 }
