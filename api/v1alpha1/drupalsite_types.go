@@ -68,10 +68,11 @@ type Version struct {
 type Configuration struct {
 	// ExtraConfigurationRepo injects the composer project and other supported configuration from the given git repo to the site,
 	// by building an image specific to this site from the generic CERN one.
-	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+	// Add extra modules to your website with Composer through a Git repo, following these docs
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
 	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
+	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
 	// +kubebuilder:validation:Enum:=critical;test;standard
