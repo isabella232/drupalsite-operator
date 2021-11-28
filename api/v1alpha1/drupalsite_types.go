@@ -75,7 +75,7 @@ type Configuration struct {
 	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
-	// +kubebuilder:validation:Enum:=critical;test;standard
+	// +kubebuilder:validation:Enum:=critical;eco;standard
 	// +kubebuilder:default=standard
 	// +optional
 	QoSClass `json:"qosClass,omitempty"`
