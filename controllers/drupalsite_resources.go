@@ -845,27 +845,10 @@ func (r *DrupalSiteReconciler) ensureNoReturnURI(ctx context.Context, d *webserv
 	return nil
 }
 
-// ensureNoSchedule ensures there is no Schedule object for the drupalsite
-func (r *DrupalSiteReconciler) ensureNoSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	schedule := &velerov1.Schedule{}
-	if err := r.Get(ctx, types.NamespacedName{Name: generateScheduleName(d.Namespace, d.Name), Namespace: VeleroNamespace}, schedule); err != nil {
-		switch {
-		case k8sapierrors.IsNotFound(err):
-			return nil
-		default:
-			return newApplicationError(err, ErrClientK8s)
-		}
-	}
-	if err := r.Delete(ctx, schedule); err != nil {
-		return newApplicationError(err, ErrClientK8s)
-	}
-	return nil
-}
-
-// ensureNoBackupSchedule ensures there is no velero backup schedule object for the drupalsite
+// ensureNoBackupSchedule ensures there is no Schedule object for the drupalsite
 func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
 	schedule := &velerov1.Schedule{}
-	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: generateScheduleName(d.Namespace, d.Name), Namespace: VeleroNamespace}, schedule); err != nil {
 		switch {
 		case k8sapierrors.IsNotFound(err):
 			return nil
