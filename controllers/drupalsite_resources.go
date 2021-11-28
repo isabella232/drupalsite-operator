@@ -249,7 +249,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if r.isDBODProvisioned(ctx, drp) {
 		// Important check to confirm that the site isn't initialized already,
 		// before creating an install/clone job!
-		if !drp.ConditionTrue("Initialized") {
+		if drp.ConditionFalse("Initialized") {
 			if drp.Spec.Configuration.CloneFrom == "" {
 				if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 					transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
