@@ -270,7 +270,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Check if the site is installed or cloned and mark the condition
 	if !drupalSite.ConditionTrue("Initialized") {
-		if r.isDrupalSiteInstalled(ctx, drupalSite) || r.isCloneJobCompleted(ctx, drupalSite) {
+		installed, err := r.isDrupalSiteInstalled(ctx, drupalSite)
+		if err != nil {
+			// Initialized? Unknown
+			update = setConditionStatus(drupalSite, "Initialized", false, err, true) || update
+		} else if installed {
 			update = setInitialized(drupalSite) || update
 		} else {
 			update = setNotInitialized(drupalSite) || update
@@ -429,19 +433,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // business logic
 
-// isInstallJobCompleted checks if the drush job is successfully completed
-func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
-	found := &batchv1.Job{}
-	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "install-" + d.Name, Namespace: d.Namespace}}
-	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
-	if err == nil {
-		if found.Status.Succeeded != 0 {
-			return true
-		}
-	}
-	return false
-}
-
 // isCloneJobCompleted checks if the clone job is successfully completed
 func (r *DrupalSiteReconciler) isCloneJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	cloneJob := &batchv1.Job{}
@@ -467,14 +458,21 @@ func (r *DrupalSiteReconciler) isDrupalSiteReady(ctx context.Context, d *webserv
 }
 
 // isDrupalSiteInstalled checks if the drupal site is initialized by running drush status command in the PHP pod
-func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	if r.isDrupalSiteReady(ctx, d) {
-		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkIfSiteIsInstalled()...); err != nil {
-			return false
+		_, stderr, err := r.execToServerPod(ctx, d, "php-fpm", nil, checkIfSiteIsInstalled()...)
+		// Error running exec => condition unknown
+		if err != nil {
+			return false, newApplicationError(err, ErrClientK8s)
 		}
-		return true
+		// The script executed and returned this error message
+		// TODO: check error code instead of message!
+		if stderr == "Drupal is not installed" {
+			return false, nil
+		}
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
