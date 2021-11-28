@@ -513,7 +513,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return nil
 		}
 		// This ensures we have cron function for the website, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
-		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cronjob-" + d.Name, Namespace: d.Namespace}}
+		// Note: Cronjob name must be < 52 characters
+		// Since max DrupalSite name is 50 chars, we can't have a prefix.
+		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cron, func() error {
 			log.V(3).Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
 			return cronjobForDrupalSite(cron, databaseSecret, d)

@@ -273,7 +273,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Cronjob resource is created
 				By("Expecting Cronjob to be created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
@@ -481,7 +481,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check the image version on the cronjob
 				By("Expecting the new drupal Version on the cronjob spec")
 				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
 						switch container.Name {
 						case "cronjob":
@@ -644,11 +644,11 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check Drush cronjob
 				By("Expecting Drush cronjob recreated")
 				Eventually(func() error {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return k8sClient.Delete(ctx, &cronjob)
 				}, timeout, interval).Should(Succeed())
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
@@ -947,7 +947,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Cronjob resource is created
 				By("Expecting Cronjob to be created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -1143,7 +1143,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check the image version on the cronjob
 				By("Expecting the new drupal Version on the cronjob spec")
 				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
 						switch container.Name {
 						case "cronjob":
@@ -1393,7 +1393,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Cronjob resource is created
 				By("Expecting Cronjob to be created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -1684,7 +1684,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Cronjob resource is created
 				By("Expecting Cronjob to be created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
@@ -1844,7 +1844,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check if the Cronjob resource is created
 				By("Expecting Cronjob to be created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 			})
@@ -2007,7 +2007,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check the image version on the cronjob
 				By("Expecting the new drupal Version on the cronjob spec")
 				Eventually(func() bool {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "cronjob-" + key.Name, Namespace: key.Namespace}, &cronjob)
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cronjob)
 					for i, container := range cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers {
 						switch container.Name {
 						case "cronjob":
