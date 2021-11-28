@@ -273,7 +273,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		installed, err := r.isDrupalSiteInstalled(ctx, drupalSite)
 		if err != nil {
 			// Initialized? Unknown
-			update = setConditionStatus(drupalSite, "Initialized", false, err, true) || update
+			update = setConditionStatus(drupalSite, "Initialized", true, err, true) || update
 		} else if installed {
 			update = setInitialized(drupalSite) || update
 		} else {
@@ -463,7 +463,7 @@ func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *web
 		_, stderr, err := r.execToServerPod(ctx, d, "php-fpm", nil, checkIfSiteIsInstalled()...)
 		// Error running exec => condition unknown
 		if err != nil {
-			return false, newApplicationError(err, ErrClientK8s)
+			return true, newApplicationError(err, ErrClientK8s)
 		}
 		// The script executed and returned this error message
 		// TODO: check error code instead of message!
@@ -472,7 +472,7 @@ func (r *DrupalSiteReconciler) isDrupalSiteInstalled(ctx context.Context, d *web
 		}
 		return true, nil
 	}
-	return false, nil
+	return true, newApplicationError(fmt.Errorf("Can't check install status"), ErrTemporary)
 }
 
 // isDBODProvisioned checks if the DBOD has been provisioned by checking the status of DBOD custom resource
