@@ -105,6 +105,12 @@ type Configuration struct {
 	// Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
+
+	// ScheduledBackups when "true" will enable Scheduled Velero backups for the site and when "false" will disable scheduled backups
+	// +kubebuilder:validation:Enum:=enabled;disabled
+	// +kubebuilder:default=enabled
+	// +optional
+	ScheduledBackups string `json:"scheduledBackups,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements

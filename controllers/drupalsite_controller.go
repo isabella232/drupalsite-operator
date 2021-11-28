@@ -496,7 +496,7 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	log.V(1).Info("Deleting DrupalSite")
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
-	if err := r.ensureNoSchedule(ctx, drp, log); err != nil {
+	if err := r.ensureNoBackupSchedule(ctx, drp, log); err != nil {
 		return ctrl.Result{}, err
 	}
 	return r.updateCRorFailReconcile(ctx, log, drp)
@@ -521,7 +521,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	if drp.Spec.Configuration.WebDAVPassword == "" {
 		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
-		update = true || update
+		update = true
 	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
@@ -545,9 +545,14 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		} else {
 			drp.Spec.Version.ReleaseSpec = DefaultD9ReleaseSpec
 		}
-		update = true || update
+		update = true
 	}
 
+	// Initialize 'Spec.Configuration.ScheduledBackups' if empty
+	if len(drp.Spec.Configuration.ScheduledBackups) == 0 {
+		drp.Spec.Configuration.ScheduledBackups = "enabled"
+		update = true
+	}
 	return update, nil
 }
 
