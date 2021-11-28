@@ -879,23 +879,6 @@ func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *we
 	return nil
 }
 
-// ensureNoBackupSchedule ensures there is no velero backup schedule object for the drupalsite
-func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (transientErr reconcileError) {
-	schedule := &velerov1.Schedule{}
-	if err := r.Get(ctx, types.NamespacedName{Name: d.Namespace + "-" + d.Name, Namespace: VeleroNamespace}, schedule); err != nil {
-		switch {
-		case k8sapierrors.IsNotFound(err):
-			return nil
-		default:
-			return newApplicationError(err, ErrClientK8s)
-		}
-	}
-	if err := r.Delete(ctx, schedule); err != nil {
-		return newApplicationError(err, ErrClientK8s)
-	}
-	return nil
-}
-
 // checkNewBackups returns the list of velero backups that exist for a given site
 func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
 	backupList := velerov1.BackupList{}
