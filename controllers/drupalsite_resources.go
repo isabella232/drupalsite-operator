@@ -350,6 +350,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "webdav_secret":
+		// TODO: secret names must be short (I believe <64 chars), and given the maximum name length of a DrupalSite (50 chars)
+		// the webdav secret is too long.
+		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		webdav_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "webdav-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_secret, func() error {
 			log.V(3).Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
@@ -414,7 +417,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if len(databaseSecretName) == 0 {
 			return nil
 		}
-		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "ensure-site-install-" + d.Name, Namespace: d.Namespace}}
+		// Note: this name is too long
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "install-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 			return jobForDrupalSiteInstallation(job, databaseSecretName, d)
 		})
@@ -457,6 +461,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "cm_settings":
+		// TODO: configmap names must be short (I believe <64 chars), and given the maximum name length of a DrupalSite (50 chars), this is too long
+		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "site-settings-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			return updateConfigMapForSiteSettings(ctx, cm, d, r.Client)
@@ -467,6 +473,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "cm_php_cli":
+		// TODO: configmap names must be short (I believe <64 chars), and given the maximum name length of a DrupalSite (50 chars), this is too long
+		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "php-cli-config-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cm, func() error {
 			return updateConfigMapForPHPCLI(ctx, cm, d, r.Client)
@@ -513,7 +521,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			return nil
 		}
 		// This ensures we have cron function for the website, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
-		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "cronjob-" + d.Name, Namespace: d.Namespace}}
+		// Note: Cronjob name must be < 52 characters
+		// Since max DrupalSite name is 50 chars, we can't have a prefix.
+		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cron, func() error {
 			log.V(3).Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
 			return cronjobForDrupalSite(cron, databaseSecret, d)
@@ -524,6 +534,8 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "gitlab_trigger_secret":
+		// TODO: secret names must be short (I believe <64 chars), and given the maximum name length of a DrupalSite (50 chars), this is too long
+		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		gitlab_trigger_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, gitlab_trigger_secret, func() error {
 			log.V(3).Info("Ensuring Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
