@@ -422,8 +422,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if len(databaseSecretName) == 0 {
 			return nil
 		}
-		// Note: this name is too long
-		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "install-" + d.Name, Namespace: d.Namespace}}
+		// TODO: this name is too long
+		// change to `install-*`
+		job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "ensure-site-install-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
 			return jobForDrupalSiteInstallation(job, databaseSecretName, d)
 		})

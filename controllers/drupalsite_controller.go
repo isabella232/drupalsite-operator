@@ -432,7 +432,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // isInstallJobCompleted checks if the drush job is successfully completed
 func (r *DrupalSiteReconciler) isInstallJobCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
 	found := &batchv1.Job{}
-	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "install-" + d.Name, Namespace: d.Namespace}}
+	jobObject := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "ensure-site-install-" + d.Name, Namespace: d.Namespace}}
 	err := r.Get(ctx, types.NamespacedName{Name: jobObject.Name, Namespace: jobObject.Namespace}, found)
 	if err == nil {
 		if found.Status.Succeeded != 0 {
