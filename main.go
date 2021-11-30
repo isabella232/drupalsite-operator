@@ -82,6 +82,7 @@ func main() {
 	flag.StringVar(&controllers.DefaultD9ReleaseSpec, "default-d9-release-spec", "RELEASE-2021.11.04T14-10-02Z", "The default releaseSpec value to be passed to the DrupalSites")
 	flag.IntVar(&controllers.ParallelThreadCount, "parallel-thread-count", 1, "The default number of parallel threads executed by the DrupalSite Operator controllers")
 	flag.BoolVar(&controllers.EnableTopologySpread, "enable-topology-spread", false, "Enable avaliability zone scheduling for critical site deployments")
+	flag.StringVar(&controllers.ClusterName, "cluster-name", "", "Name of the cluster the operator is deployed on")
 	opts := zap.Options{
 		Development: false,
 	}

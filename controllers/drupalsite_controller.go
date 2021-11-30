@@ -76,6 +76,8 @@ var (
 	ParallelThreadCount int
 	// EnableTopologySpread refers to enabling avaliability zone scheduling for critical site deployments
 	EnableTopologySpread bool
+	// ClusterName refers to the name of the cluster the operator is running on
+	ClusterName string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -795,17 +797,12 @@ func getenvOrDie(name string, log logr.Logger) string {
 // addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
 // by querying the K8s API for API Server & Gitlab webhook trigger secret value
 func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
-	// Fetch the API Server config
-	cfg, err := ctrl.GetConfig()
-	if err != nil {
-		return newApplicationError(errors.New("fetching API server URL failed"), ErrTemporary)
-	}
 	// Fetch the gitlab webhook trigger secret value
 	gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
-	err = r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
+	err := r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
 	if err != nil {
 		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrClientK8s)
 	}
-	d.Status.GitlabWebhookURL = cfg.Host + "/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
+	d.Status.GitlabWebhookURL = "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
 	return nil
 }

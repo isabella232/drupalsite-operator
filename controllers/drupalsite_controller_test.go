@@ -805,7 +805,7 @@ var _ = Describe("DrupalSite controller", func() {
 				oidcReturnUri := authz.OidcReturnURI{}
 				schedule := velerov1.Schedule{}
 				cronjob := batchbeta1.CronJob{}
-				// secret := corev1.Secret{}
+				secret := corev1.Secret{}
 
 				// Check DBOD resource creation
 				By("Expecting Database resource created")
@@ -951,23 +951,18 @@ var _ = Describe("DrupalSite controller", func() {
 					return cronjob.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// Tests passing locally. but failing on CI. So commenting for now
 				// Check gitlab webhook secret resource creation
-				// By("Expecting Gitlab webhook secret created")
-				// Eventually(func() []metav1.OwnerReference {
-				// 	k8sClient.Get(ctx, types.NamespacedName{Name: "gitlab-trigger-secret-" + key.Name, Namespace: key.Namespace}, &secret)
-				// 	return secret.ObjectMeta.OwnerReferences
-				// }, timeout, interval).Should(ContainElement(expectedOwnerReference))
+				By("Expecting Gitlab webhook secret created")
+				Eventually(func() []metav1.OwnerReference {
+					k8sClient.Get(ctx, types.NamespacedName{Name: "gitlab-trigger-secret-" + key.Name, Namespace: key.Namespace}, &secret)
+					return secret.ObjectMeta.OwnerReferences
+				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
-				// // Check gitlab webhook URL updated on the drupalSite status
-				// By("Expecting Gitlab webhook secret listed in the DrupalSite status")
-				// Eventually(func() bool {
-				// 	cfg, err := ctrl.GetConfig()
-				// 	if err != nil {
-				// 		return false
-				// 	}
-				// 	return cr.Status.GitlabWebhookURL == cfg.Host+"/apis/build.openshift.io/v1/namespaces/"+drupalSiteObject.Namespace+"/buildconfigs/"+"sitebuilder-s2i-"+nameVersionHash(drupalSiteObject)+"/webhooks/"+string(secret.Data["WebHookSecretKey"])+"/gitlab"
-				// }, timeout, interval).Should(BeTrue())
+				// Check gitlab webhook URL updated on the drupalSite status
+				By("Expecting Gitlab webhook secret listed in the DrupalSite status")
+				Eventually(func() bool {
+					return cr.Status.GitlabWebhookURL == "https://api."+ClusterName+".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/"+drupalSiteObject.Namespace+"/buildconfigs/"+"sitebuilder-s2i-"+nameVersionHash(drupalSiteObject)+"/webhooks/"+string(secret.Name)+"/gitlab"
+				}, timeout, interval).Should(BeTrue())
 			})
 		})
 	})

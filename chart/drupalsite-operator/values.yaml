@@ -30,3 +30,4 @@ drupalsiteOperator:
   parallelThreadCount: 1
   # Topology spread adds an anti-affinity rule to the server deployment, spreading critical sites across availability zones
   enableTopologySpread: false
+  clusterName: {}
