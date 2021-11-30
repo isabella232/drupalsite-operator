@@ -78,6 +78,7 @@ var _ = BeforeSuite(func(done Done) {
 	WebDAVImage = "test-webdav"
 	DefaultD8ReleaseSpec = "test-d8-spec"
 	DefaultD9ReleaseSpec = "test-d9-spec"
+	ClusterName = "test"
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
