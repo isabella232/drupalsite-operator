@@ -1630,6 +1630,8 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 // jobForDrupalSiteClone returns a job object thats clones a drupalsite
 func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d *webservicesv1a1.DrupalSite) error {
 	ls := labelsForDrupalSite(d.Name)
+	// Temporary folder to store ephemeral files used during cloning procedure
+	var emptyDir = "/var/empty-run/"
 	if currentobject.CreationTimestamp.IsZero() {
 		addOwnerRefToObject(currentobject, asOwner(d))
 		currentobject.Labels = map[string]string{}
@@ -1642,7 +1644,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 					Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 					Name:            "src-db-backup",
 					ImagePullPolicy: "Always",
-					Command:         takeBackup("dbBackUp.sql"),
+					Command:         takeBackup(emptyDir + "dbBackUp.sql"),
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceMemory: resource.MustParse(jobMemoryRequest),
@@ -1663,10 +1665,13 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 							},
 						},
 					},
-					VolumeMounts: []corev1.VolumeMount{{
-						Name:      "drupal-directory-" + string(d.Spec.Configuration.CloneFrom),
-						MountPath: "/drupal-data",
-					}},
+
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "tmp-dir",
+							MountPath: emptyDir,
+						},
+					},
 				},
 			},
 			RestartPolicy: "Never",
@@ -1674,7 +1679,7 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 				Image:           sitebuilderImageRefToUse(d, releaseID(d)).Name,
 				Name:            "dest-clone",
 				ImagePullPolicy: "Always",
-				Command:         cloneSource("dbBackUp.sql"),
+				Command:         cloneSource(emptyDir + "dbBackUp.sql"),
 				Env: []corev1.EnvVar{
 					{
 						Name:  "DRUPAL_SHARED_VOLUME",
@@ -1718,6 +1723,10 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 						SubPath:   "settings.php",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "tmp-dir",
+						MountPath: emptyDir,
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1756,6 +1765,11 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 							},
 						},
 					},
+				},
+				{
+					// Tmp Dir storage to address issue https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/692
+					Name:         "tmp-dir",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
 		}
@@ -2035,8 +2049,8 @@ func runUpDBCommand() []string {
 }
 
 // takeBackup outputs the command need to take the database backup to a given filename
-func takeBackup(filename string) []string {
-	return []string{"/operations/database-backup.sh", "-f", filename}
+func takeBackup(filepath string) []string {
+	return []string{"/operations/database-backup.sh", "-p", filepath}
 }
 
 // restoreBackup outputs the command need to restore the database backup from a given filename
@@ -2045,8 +2059,8 @@ func restoreBackup(filename string) []string {
 }
 
 // cloneSource outputs the command need to clone a drupal site
-func cloneSource(filename string) []string {
-	return []string{"/operations/clone.sh", "-f", filename}
+func cloneSource(filepath string) []string {
+	return []string{"/operations/clone.sh", "-p", filepath}
 }
 
 // encryptBasicAuthPassword encrypts a password for basic authentication
