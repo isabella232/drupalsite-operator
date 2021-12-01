@@ -1037,19 +1037,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Settings only on creation (not enforced)
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
-		if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
-			// TODO: move this to the `DeploymentConfig`
-			// openshift-user-critical is part of the default OKD4 Priority classes
-			// https://github.com/openshift/cluster-config-operator/blob/168704868381c88551627239d132a3900eedc14f/manifests/0000_50_config-operator_09_user-priority-class.yaml
-			currentobject.Spec.Template.Spec.PriorityClassName = "openshift-user-critical"
-		}
 		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
-
-		if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
-			// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
-			// a wrong image built from a different build, that is left out on the node
-			currentobject.Annotations["image.openshift.io/triggers"] = "[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"},{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
-		}
 
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -1339,10 +1327,16 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Ref: https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/71
 	currentobject.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/timeout"] = "90m"
 	currentobject.Spec.Template.ObjectMeta.Annotations["backup.velero.io/backup-volumes"] = "drupal-directory-" + d.Name
+	if d.Spec.QoSClass == webservicesv1a1.QoSCritical {
+		currentobject.Annotations["critical-site"] = "true"
+		// TODO: move this to the `DeploymentConfig` function
+		// openshift-user-critical is part of the default OKD4 Priority classes
+		// https://github.com/openshift/cluster-config-operator/blob/168704868381c88551627239d132a3900eedc14f/manifests/0000_50_config-operator_09_user-priority-class.yaml
+		currentobject.Spec.Template.Spec.PriorityClassName = "openshift-user-critical"
+	}
 
 	// Ensure availability zones for critical sites if enabled
 	if d.Spec.QoSClass == webservicesv1a1.QoSCritical && EnableTopologySpread {
-		currentobject.Annotations["critical-site"] = "true"
 		currentobject.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{
 			{
 				LabelSelector: &metav1.LabelSelector{
@@ -1357,6 +1351,14 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		}
 	} else {
 		currentobject.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{}
+	}
+
+	// Ensure S2I rollouts on image change
+	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
+		// This annotation is required to trigger new rollout, when the imagestream gets updated with a new image for the given tag. Without this, deployments might start running with
+		// a wrong image built from a different build, that is left out on the node
+		currentobject.Annotations["image.openshift.io/triggers"] =
+			"[{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"nginx\\\")].image\",\"pause\":\"false\"},{\"from\":{\"kind\":\"ImageStreamTag\",\"name\":\"sitebuilder-s2i-" + d.Name + ":" + releaseID + "\",\"namespace\":\"" + d.Namespace + "\"},\"fieldPath\":\"spec.template.spec.containers[?(@.name==\\\"php-fpm\\\")].image\",\"pause\":\"false\"}]"
 	}
 
 	return nil
