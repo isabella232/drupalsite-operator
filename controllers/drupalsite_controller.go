@@ -730,7 +730,8 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 
 		// Take backup
 		backupFileName := "db_backup_update_rollback.sql"
-		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup(backupFileName)...); err != nil {
+		// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
+		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
 			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
 			return true
 		}
