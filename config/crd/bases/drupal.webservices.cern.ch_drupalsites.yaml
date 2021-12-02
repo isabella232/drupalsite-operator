@@ -76,6 +76,13 @@ spec:
                       through a Git repo, following these docs
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
+                  isPrimary:
+                    default: true
+                    description: isPrimary defines if the DrupalSite instance is the
+                      "main" one of the project. Currently, it defines Scheduled backups
+                      When "true" will enable Scheduled Velero backups for the site
+                      and when "false" will disable scheduled backups
+                    type: boolean
                   qosClass:
                     default: standard
                     description: QoSClass specifies the website's performance and
@@ -84,15 +91,6 @@ spec:
                     - critical
                     - test
                     - standard
-                    type: string
-                  scheduledBackups:
-                    default: enabled
-                    description: ScheduledBackups when "true" will enable Scheduled
-                      Velero backups for the site and when "false" will disable scheduled
-                      backups
-                    enum:
-                    - enabled
-                    - disabled
                     type: string
                   webDAVPassword:
                     description: WebDAVPassword sets the HTTP basic auth password
@@ -213,6 +211,10 @@ spec:
                   of the site's image after changes on its source Gitlab "extraConfigurationRepo".
                   It should be copied to Gitlab.
                 type: string
+              isPrimary:
+                description: IsPrimary states if the Drupalsite is the main instance
+                  of the project
+                type: boolean
               releaseID:
                 description: ReleaseID reports the actual release of CERN Drupal Distribution
                   that is being used in the deployment.

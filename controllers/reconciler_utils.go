@@ -148,6 +148,21 @@ func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context
 	return reconcile.Result{}, nil
 }
 
+// updateCRStatusOrFailReconcile tries to update the Custom Resource Status and logs any error
+func (r *DrupalSiteReconciler) updateCRSpecAndStatusOrFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
+	reconcile.Result, error) {
+	if err := r.Client.Patch(ctx, drp, nil); err != nil {
+		//if err := r.Status().Update(ctx, drp); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
+}
+
 // getBuildStatus gets the build status from one of the builds for a given resources
 func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource string, drp *webservicesv1a1.DrupalSite) (buildv1.BuildPhase, error) {
 	buildList := &buildv1.BuildList{}

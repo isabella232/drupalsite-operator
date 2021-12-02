@@ -106,11 +106,12 @@ type Configuration struct {
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 
-	// ScheduledBackups when "true" will enable Scheduled Velero backups for the site and when "false" will disable scheduled backups
-	// +kubebuilder:validation:Enum:=enabled;disabled
-	// +kubebuilder:default=enabled
+	// isPrimary defines if the DrupalSite instance is the "main" one of the project.
+	// Currently, it defines Scheduled backups
+	// When "true" will enable Scheduled Velero backups for the site and when "false" will disable scheduled backups
+	// +kubebuilder:default=true
 	// +optional
-	ScheduledBackups string `json:"scheduledBackups,omitempty"`
+	IsPrimary bool `json:"isPrimary,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
@@ -153,6 +154,9 @@ type DrupalSiteStatus struct {
 	// It should be copied to Gitlab.
 	// +optional
 	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
+
+	// IsPrimary states if the Drupalsite is the main instance of the project
+	IsPrimary bool `json:"isPrimary,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.
