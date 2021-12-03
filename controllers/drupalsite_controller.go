@@ -238,10 +238,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if update, err, site := r.ensureSpecFinalizer(ctx, drupalSite, log); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to ensure DrupalSite spec defaults", err.Unwrap()))
 		setErrorCondition(drupalSite, err)
-		return r.updateCRSpecAndStatusOrFailReconcile(ctx, log, site)
+		return r.updateCRStatusOrFailReconcile(ctx, log, site)
 	} else if update {
 		log.V(3).Info("Initializing DrupalSite Spec")
-		return r.updateCRSpecAndStatusOrFailReconcile(ctx, log, site)
+		return r.updateCRStatusOrFailReconcile(ctx, log, site)
 		//return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 	if err := validateSpec(drupalSite.Spec); err != nil {

@@ -1,0 +1,24 @@
+# permissions for end users to edit drupalprojectconfigs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: drupalprojectconfig-editor-role
+rules:
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalprojectconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalprojectconfigs/status
+  verbs:
+  - get
