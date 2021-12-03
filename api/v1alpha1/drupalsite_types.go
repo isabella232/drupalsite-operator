@@ -105,13 +105,6 @@ type Configuration struct {
 	// Changing this field updates the password.
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
-
-	// isPrimary defines if the DrupalSite instance is the "main" one of the project.
-	// Currently, it defines Scheduled backups
-	// When "true" will enable Scheduled Velero backups for the site and when "false" will disable scheduled backups
-	// +kubebuilder:default=true
-	// +optional
-	IsPrimary bool `json:"isPrimary,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
@@ -156,6 +149,7 @@ type DrupalSiteStatus struct {
 	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
 
 	// IsPrimary states if the Drupalsite is the main instance of the project
+	// +kubebuilder:default=false
 	IsPrimary bool `json:"isPrimary,omitempty"`
 }
 
