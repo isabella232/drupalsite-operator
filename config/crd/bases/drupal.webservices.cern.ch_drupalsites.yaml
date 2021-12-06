@@ -76,13 +76,6 @@ spec:
                       through a Git repo, following these docs
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
-                  isPrimary:
-                    default: true
-                    description: isPrimary defines if the DrupalSite instance is the
-                      "main" one of the project. Currently, it defines Scheduled backups
-                      When "true" will enable Scheduled Velero backups for the site
-                      and when "false" will disable scheduled backups
-                    type: boolean
                   qosClass:
                     default: standard
                     description: QoSClass specifies the website's performance and
@@ -212,6 +205,7 @@ spec:
                   It should be copied to Gitlab.
                 type: string
               isPrimary:
+                default: false
                 description: IsPrimary states if the Drupalsite is the main instance
                   of the project
                 type: boolean
