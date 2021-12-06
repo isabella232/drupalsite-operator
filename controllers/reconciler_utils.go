@@ -131,7 +131,7 @@ func (r *DrupalSiteReconciler) updateDrupalProjectConfigCRorFailReconcile(ctx co
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{Requeue: true}, nil
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
