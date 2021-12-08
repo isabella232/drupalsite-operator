@@ -1399,13 +1399,15 @@ func persistentVolumeClaimForDrupalSite(currentobject *corev1.PersistentVolumeCl
 			// },
 			StorageClassName: pointer.StringPtr("cephfs-no-backup"),
 			AccessModes:      []corev1.PersistentVolumeAccessMode{"ReadWriteMany"},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceName(corev1.ResourceStorage): resource.MustParse(d.Spec.Configuration.DiskSize),
-				},
-			},
 		}
 	}
+
+	currentobject.Spec.Resources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceName(corev1.ResourceStorage): resource.MustParse(d.Spec.Configuration.DiskSize),
+		},
+	}
+
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
