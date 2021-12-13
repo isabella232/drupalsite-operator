@@ -585,7 +585,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
 	var jobsHistoryLimit int32 = 1
-	var jobBackoffLimit int32 = 1
+	var jobBackoffLimit int32 = 0
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -603,12 +603,13 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 		currentobject.Spec = batchbeta1.CronJobSpec{
 			// Every random'th min, random'th min + 30  every hour, this is based on https://en.wikipedia.org/wiki/Cron
 			Schedule: strconv.Itoa(randomMinute) + "," + strconv.Itoa(randomMinute+30) + " * * * *",
-			// The default is 3, last job should suffice
+			// The default is 3, last job should suffice so we set to 1
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
 			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
 			ConcurrencyPolicy: batchbeta1.ReplaceConcurrent,
 			JobTemplate: batchbeta1.JobTemplateSpec{
 				Spec: batchv1.JobSpec{
+					// Backoff to 0, so only 1 run per job
 					BackoffLimit: &jobBackoffLimit,
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
