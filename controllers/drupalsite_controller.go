@@ -156,11 +156,12 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &webservicesv1a1.DrupalProjectConfig{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in a given namespace
 			func(a client.Object) []reconcile.Request {
-				req := make([]reconcile.Request, 1)
-				// The DrupalSite has the same name as the DrupalSiteConfigOverride
-				req[0].Name = a.GetName()
-				req[0].Namespace = a.GetNamespace()
-				return req
+				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetName())
+				_, exists := a.GetLabels()["drupal.cern.ch/user-project"]
+				if exists {
+					return fetchDrupalSitesInNamespace(mgr, log, a.GetName())
+				}
+				return []reconcile.Request{}
 			}),
 		).
 		WithOptions(controller.Options{
@@ -326,22 +327,22 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 	}
-	// Check if Primary DrupalSite HAS a website, and if it does NOT + This DrupalSIte instance is unique -> Become Primary Website
-	if needsUpdate, err, dpc := r.checkIfPrimaryDrupalsiteExists(ctx, drupalSite); err != nil {
+	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
+	if updateNeeded, err, dpc := r.checkIfPrimaryDrupalsiteExists(ctx, drupalSite); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", err.Unwrap()))
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	} else if needsUpdate {
+	} else if updateNeeded {
 		log.Info("Updating DrupalProjectConfig", "")
 		return r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, dpc)
 	}
 
 	// Check if current instance is the Primary Drupalsite
-	if needsUpdate, err := r.checkIfPrimaryDrupalsite(ctx, drupalSite); err != nil {
+	if updateNeeded, err := r.checkIfPrimaryDrupalsite(ctx, drupalSite); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", err.Unwrap()))
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	} else if needsUpdate {
+	} else if updateNeeded {
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
