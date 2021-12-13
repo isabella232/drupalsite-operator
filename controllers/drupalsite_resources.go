@@ -584,8 +584,12 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 }
 
 func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
-	var jobsHistoryLimit int32 = 1
-	var jobBackoffLimit int32 = 0
+	// Don't keep a history of cronjobs
+	var jobsHistoryLimit int32 = 0
+	// Number of tries for the job, useful in case we want to retry a failed job
+	var jobBackoffLimit int32 = 1
+	// Don't schedule a cronjob if you've missed the schedule by this much, instead wait for the next one
+	var startingDeadlineSeconds int64 = 400
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}
 	}
@@ -605,15 +609,16 @@ func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret stri
 			Schedule: strconv.Itoa(randomMinute) + "," + strconv.Itoa(randomMinute+30) + " * * * *",
 			// The default is 3, last job should suffice so we set to 1
 			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
+			FailedJobsHistoryLimit:     &jobsHistoryLimit,
 			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
-			ConcurrencyPolicy: batchbeta1.ReplaceConcurrent,
+			ConcurrencyPolicy:       batchbeta1.ForbidConcurrent,
+			StartingDeadlineSeconds: &startingDeadlineSeconds,
 			JobTemplate: batchbeta1.JobTemplateSpec{
 				Spec: batchv1.JobSpec{
-					// Backoff to 0, so only 1 run per job
 					BackoffLimit: &jobBackoffLimit,
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
-							RestartPolicy: "Never",
+							RestartPolicy: "OnFailure",
 							Containers: []corev1.Container{
 								{
 									Name:            "cronjob",
