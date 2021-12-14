@@ -246,13 +246,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// 1. Init: Check if finalizer is set. If not, set it, validate and update CR status
 
-	if update, err, site := r.ensureSpecFinalizer(ctx, drupalSite, log); err != nil {
+	if update, err := r.ensureSpecFinalizer(ctx, drupalSite, log); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to ensure DrupalSite spec defaults", err.Unwrap()))
 		setErrorCondition(drupalSite, err)
-		return r.updateCRStatusOrFailReconcile(ctx, log, site)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if update {
 		log.V(3).Info("Initializing DrupalSite Spec")
-		return r.updateCRStatusOrFailReconcile(ctx, log, site)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		//return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 	if err := validateSpec(drupalSite.Spec); err != nil {
@@ -542,7 +542,7 @@ func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 
 // ensureSpecFinalizer ensures that the spec is valid, adding extra info if necessary, and that the finalizer is there,
 // then returns if it needs to be updated.
-func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError, site *webservicesv1a1.DrupalSite) {
+func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err reconcileError) {
 	if !controllerutil.ContainsFinalizer(drp, finalizerStr) {
 		log.V(3).Info("Adding finalizer")
 		controllerutil.AddFinalizer(drp, finalizerStr)
@@ -558,9 +558,9 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		err := r.Get(ctx, types.NamespacedName{Name: string(drp.Spec.Configuration.CloneFrom), Namespace: drp.Namespace}, &sourceSite)
 		switch {
 		case k8sapierrors.IsNotFound(err):
-			return false, newApplicationError(fmt.Errorf("CloneFrom DrupalSite doesn't exist"), ErrInvalidSpec), drp
+			return false, newApplicationError(fmt.Errorf("CloneFrom DrupalSite doesn't exist"), ErrInvalidSpec)
 		case err != nil:
-			return false, newApplicationError(err, ErrClientK8s), drp
+			return false, newApplicationError(err, ErrClientK8s)
 		}
 		// The destination disk size must be at least as large as the source
 		if drp.Spec.Configuration.DiskSize < sourceSite.Spec.Configuration.DiskSize {
@@ -576,7 +576,7 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		}
 		update = true
 	}
-	return update, nil, drp
+	return update, nil
 }
 
 // getRunningdeployment fetches the running drupal deployment
@@ -846,7 +846,7 @@ func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsiteExists(ctx context.Contex
 		return false, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s), &webservicesv1a1.DrupalProjectConfig{}
 	}
 	if len(drupalProjectConfigList.Items) == 0 {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!", drp.Namespace)
+		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
 		return false, nil, &webservicesv1a1.DrupalProjectConfig{}
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
@@ -868,7 +868,7 @@ func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp
 		return
 	}
 	if len(drupalProjectConfigList.Items) == 0 {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!", drp.Namespace)
+		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
 		return
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
