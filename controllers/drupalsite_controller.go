@@ -252,8 +252,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if update {
 		log.V(3).Info("Initializing DrupalSite Spec")
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		//return r.updateCRorFailReconcile(ctx, log, drupalSite)
+		return r.updateCRorFailReconcile(ctx, log, drupalSite)
 	}
 	if err := validateSpec(drupalSite.Spec); err != nil {
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSite spec", err.Unwrap()))
