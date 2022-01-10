@@ -159,7 +159,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetName())
 				_, exists := a.GetLabels()["drupal.cern.ch/user-project"]
 				if exists {
-					return fetchDrupalSitesInNamespace(mgr, log, a.GetName())
+					return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
 				}
 				return []reconcile.Request{}
 			}),
@@ -260,6 +260,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
+	// Retrieve the DrupalProjectConfig Resource
+	drupalProjectConfig, err := r.GetDrupalProjectConfig(ctx, drupalSite)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to retrieve DrupalProjectConfig", err))
+		// Although we log an Error, we will allow the reconcile to continue, as the absence of the resource does not mean DrupalSite cannot be processed
+		// Populate resource as nil
+		drupalProjectConfig = nil
+	}
+
 	// 2. Check all conditions and update if needed
 	update := false
 
@@ -327,21 +336,25 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
-	if updateNeeded, err, dpc := r.checkIfPrimaryDrupalsiteExists(ctx, drupalSite); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", err.Unwrap()))
-		setErrorCondition(drupalSite, err)
+	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsiteExists(ctx, drupalSite, drupalProjectConfig)
+	switch {
+	case err != nil:
+		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
+		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	} else if updateNeeded {
+	case updateNeeded:
 		log.Info("Updating DrupalProjectConfig", "")
-		return r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, dpc)
-	}
+		return r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, drupalProjectConfig)
 
+	}
 	// Check if current instance is the Primary Drupalsite
-	if updateNeeded, err := r.checkIfPrimaryDrupalsite(ctx, drupalSite); err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", err.Unwrap()))
-		setErrorCondition(drupalSite, err)
+	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
+	switch {
+	case err != nil:
+		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
+		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	} else if updateNeeded {
+	case updateNeeded:
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -828,55 +841,58 @@ func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *
 	return nil
 }
 
-func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsiteExists(ctx context.Context, drp *webservicesv1a1.DrupalSite) (bool, reconcileError, *webservicesv1a1.DrupalProjectConfig) {
+// GetDrupalProjectConfig gets the DrupalProjectConfig for a Project
+func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalProjectConfig, reconcileError) {
+	// Fetch the DrupalProjectConfigList on the Namespace
+	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
+	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
+		return &webservicesv1a1.DrupalProjectConfig{}, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
+	}
+	if len(drupalProjectConfigList.Items) == 0 {
+		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
+		return &webservicesv1a1.DrupalProjectConfig{}, nil
+	}
+	// We get the first DrupalProjectConfig in the Namespace, only one is expected per project!
+	return &drupalProjectConfigList.Items[0], nil
+}
+
+// checkIfPrimaryDrupalsiteExists will check for Drupalsites in a project, if only one DrupalSite is in place then we consider that primary exists and can be set on the DrupalProjectConfig, otherwise nothing to do as there is no clear Primary site
+func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsiteExists(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileError reconcileError) {
+	update = false
+	if dpc == nil {
+		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
+		return
+	}
 	// Check how many DrupalSites are in place on the project
 	drupalSiteList := &webservicesv1a1.DrupalSiteList{}
 	if err := r.List(ctx, drupalSiteList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		return false, newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s), &webservicesv1a1.DrupalProjectConfig{}
+		return false, newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s)
 	}
 	if len(drupalSiteList.Items) > 1 {
 		// Nothing to do in case there's more than one DrupalSite in the project
-		return false, nil, &webservicesv1a1.DrupalProjectConfig{}
+		return
 	}
 
-	// Fetch the DrupalProjectConfigList on the Namespace
-	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
-	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		return false, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s), &webservicesv1a1.DrupalProjectConfig{}
+	if dpc.Spec.PrimarySiteName == "" {
+		dpc.Spec.PrimarySiteName = drp.Name
+		return true, nil
 	}
-	if len(drupalProjectConfigList.Items) == 0 {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
-		return false, nil, &webservicesv1a1.DrupalProjectConfig{}
-	}
-	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
-	drupalProjectConfig := drupalProjectConfigList.Items[0]
-	if drupalProjectConfig.Spec.PrimarySiteName == "" {
-		drupalProjectConfig.Spec.PrimarySiteName = drp.Name
-		return true, nil, &drupalProjectConfig
-	}
-	return false, nil, &webservicesv1a1.DrupalProjectConfig{}
+	return false, nil
 }
 
 //checkIfPrimaryDrupalSite checks if current DrupalSite is primary or not in the project
-func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite) (update bool, reconcileErr reconcileError) {
+func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
 	update = false
-	// Fetch the DrupalProjectConfigList on the Namespace
-	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
-	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		reconcileErr = newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
-		return
-	}
-	if len(drupalProjectConfigList.Items) == 0 {
+	if dpc == nil {
 		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
 		return
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
-	drupalProjectConfig := drupalProjectConfigList.Items[0]
-	if drp.Name == drupalProjectConfig.Spec.PrimarySiteName && !drp.Status.IsPrimary {
+	if drp.Name == dpc.Spec.PrimarySiteName && !drp.Status.IsPrimary {
 		update = true
 		drp.Status.IsPrimary = true
 		return
-	} else if drp.Name != drupalProjectConfig.Spec.PrimarySiteName && drp.Status.IsPrimary {
+	} else if drp.Name != dpc.Spec.PrimarySiteName && drp.Status.IsPrimary {
 		update = true
 		drp.Status.IsPrimary = false
 		return

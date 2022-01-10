@@ -85,6 +85,15 @@ spec:
                     - test
                     - standard
                     type: string
+                  scheduledBackups:
+                    default: enabled
+                    description: ScheduledBackups when "true" will enable Scheduled
+                      Velero backups for the site and when "false" will disable scheduled
+                      backups
+                    enum:
+                    - enabled
+                    - disabled
+                    type: string
                   webDAVPassword:
                     description: WebDAVPassword sets the HTTP basic auth password
                       for WebDAV file access. A default is auto-generated if a value

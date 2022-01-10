@@ -23,12 +23,12 @@ import (
 // DrupalProjectConfigSpec defines the desired state of DrupalProjectConfig
 type DrupalProjectConfigSpec struct {
 	// PrimarySiteName defines the primary DrupalSite instance of a project
+	// +optional
 	PrimarySiteName string `json:"primarySiteName,omitempty"`
 }
 
 // DrupalProjectConfigStatus defines the observed state of DrupalProjectConfig
 type DrupalProjectConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 }
 
 //+kubebuilder:object:root=true
