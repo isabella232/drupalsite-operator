@@ -156,7 +156,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&source.Kind{Type: &webservicesv1a1.DrupalProjectConfig{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in a given namespace
 			func(a client.Object) []reconcile.Request {
-				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetName())
+				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetNamespace())
 				_, exists := a.GetLabels()["drupal.cern.ch/user-project"]
 				if exists {
 					return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
@@ -846,11 +846,11 @@ func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *
 	// Fetch the DrupalProjectConfigList on the Namespace
 	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
 	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		return &webservicesv1a1.DrupalProjectConfig{}, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
+		return nil, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
 	}
 	if len(drupalProjectConfigList.Items) == 0 {
 		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
-		return &webservicesv1a1.DrupalProjectConfig{}, nil
+		return nil, nil
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per project!
 	return &drupalProjectConfigList.Items[0], nil
