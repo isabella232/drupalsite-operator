@@ -332,7 +332,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
-	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsiteExists(ctx, drupalSite, drupalProjectConfig)
+	updateNeeded, reconcileErr = r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
 	switch {
 	case err != nil:
 		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
@@ -852,17 +852,17 @@ func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *
 	return &drupalProjectConfigList.Items[0], nil
 }
 
-// checkIfPrimaryDrupalsiteExists will check for Drupalsites in a project, if only one DrupalSite is in place then we consider that primary exists and can be set on the DrupalProjectConfig, otherwise nothing to do as there is no clear Primary site
-func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsiteExists(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileError reconcileError) {
+// proclaimPrimarySiteIfExists will check for Drupalsites in a project, if only one DrupalSite is in place then we consider that primary exists and can be set on the DrupalProjectConfig, otherwise nothing to do as there is no clear Primary site
+func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileError reconcileError) {
 	update = false
 	if dpc == nil {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
 		return
 	}
 	// Check how many DrupalSites are in place on the project
 	drupalSiteList := &webservicesv1a1.DrupalSiteList{}
 	if err := r.List(ctx, drupalSiteList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		return false, newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s)
+		reconcileError = newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s)
+		return
 	}
 	if len(drupalSiteList.Items) > 1 {
 		// Nothing to do in case there's more than one DrupalSite in the project
@@ -871,9 +871,11 @@ func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsiteExists(ctx context.Contex
 
 	if dpc.Spec.PrimarySiteName == "" {
 		dpc.Spec.PrimarySiteName = drp.Name
-		return true, nil
+		r.Log.Info("Project" + dpc.Namespace + "contains only 1 drupalsite\"" + drp.Name + "\", which is considered the primary production site")
+		update = true
+		return
 	}
-	return false, nil
+	return
 }
 
 //checkIfPrimaryDrupalSite checks if current DrupalSite is primary or not in the project
