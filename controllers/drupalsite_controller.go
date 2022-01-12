@@ -157,11 +157,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			// Reconcile every DrupalSite in a given namespace
 			func(a client.Object) []reconcile.Request {
 				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetNamespace())
-				_, exists := a.GetLabels()["drupal.cern.ch/user-project"]
-				if exists {
-					return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
-				}
-				return []reconcile.Request{}
+				return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
 			}),
 		).
 		WithOptions(controller.Options{
