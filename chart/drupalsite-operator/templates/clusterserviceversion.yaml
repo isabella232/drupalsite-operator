@@ -85,11 +85,7 @@ spec:
           path: version.name
           x-descriptors:
             - 'urn:alm:descriptor:com.tectonic.ui:select:v8.9-2'
-        - description: Specify the release of [CERN Drupal Distribution](https://gitlab.cern.ch/drupal/paas/cern-drupal-distribution) that will be deployed.
-          displayName: Name
-          path: version.releaseSpec
-          x-descriptors:
-            - 'urn:alm:descriptor:com.tectonic.ui:select:RELEASE-2021.10.26T15-33-59Z'
+            - 'urn:alm:descriptor:com.tectonic.ui:select:v9.2-1'
 
       statusDescriptors: [] # TODO
       description: >-
