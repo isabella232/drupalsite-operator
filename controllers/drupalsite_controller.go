@@ -34,7 +34,6 @@ import (
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1b1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -106,7 +105,6 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=velero.io,resources=backups,verbs=get;list;watch;
 // +kubebuilder:rbac:groups=velero.io,resources=schedules,verbs=*;
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
-// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=*;
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 
 // SetupWithManager adds a manager which watches the resources
@@ -123,7 +121,6 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
-		Owns(&batchv1b1.CronJob{}).
 		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {

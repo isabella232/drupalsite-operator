@@ -40,7 +40,6 @@ import (
 	authz "gitlab.cern.ch/paas-tools/operators/authz-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchbeta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -257,11 +256,6 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			}
 		}
 	}
-	if drp.ConditionTrue("Initialized") {
-		if transientErr := r.ensureResourceX(ctx, drp, "cronjob_crontask", log); transientErr != nil {
-			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal Cronjob"))
-		}
-	}
 
 	// 4. Ingress
 
@@ -328,7 +322,6 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- webdav_secret: Secret with credential for WebDAV
 	- backup_schedule: Velero Schedule for scheduled backups of the drupalSite
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
-	- cronjob: Creates cronjob to trigger Cron tasks on Drupalsites, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
 	- gitlab_trigger_secret: Secret for Gitlab trigger config in buildconfig
 */
 func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
@@ -521,24 +514,6 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			log.Error(err, "Failed to ensure Resource", "Kind", rbac.TypeMeta.Kind, "Resource.Name", rbac.Name)
 		}
 		return nil
-	case "cronjob_crontask":
-		databaseSecret := databaseSecretName(d)
-		if len(databaseSecret) == 0 {
-			return nil
-		}
-		// This ensures we have cron function for the website, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/437
-		// Note: Cronjob name must be < 52 characters
-		// Since max DrupalSite name is 50 chars, we can't have a prefix.
-		cron := &batchbeta1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: d.Name, Namespace: d.Namespace}}
-		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, cron, func() error {
-			log.V(3).Info("Ensuring Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
-			return cronjobForDrupalSite(cron, databaseSecret, d)
-		})
-		if err != nil {
-			log.Error(err, "Failed to ensure Resource", "Kind", cron.TypeMeta.Kind, "Resource.Namespace", cron.Namespace, "Resource.Name", cron.Name)
-			return newApplicationError(err, ErrClientK8s)
-		}
-		return nil
 	case "gitlab_trigger_secret":
 		// TODO: secret names must be short (I believe <64 chars), and given the maximum name length of a DrupalSite (50 chars), this is too long
 		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
@@ -580,142 +555,6 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 			return newApplicationError(err, ErrClientK8s)
 		}
 	}
-	return nil
-}
-
-func cronjobForDrupalSite(currentobject *batchbeta1.CronJob, databaseSecret string, drupalsite *webservicesv1a1.DrupalSite) error {
-	// Don't keep a history of cronjobs
-	var jobsHistoryLimit int32 = 0
-	// Number of tries for the job, useful in case we want to retry a failed job
-	var jobBackoffLimit int32 = 1
-	// Don't schedule a cronjob if you've missed the schedule by this much, instead wait for the next one
-	var startingDeadlineSeconds int64 = 400
-	if currentobject.Labels == nil {
-		currentobject.Labels = map[string]string{}
-	}
-	if currentobject.Annotations == nil {
-		currentobject.Annotations = map[string]string{}
-	}
-	ls := labelsForDrupalSite(drupalsite.Name)
-	ls["app"] = "cronjob"
-	for k, v := range ls {
-		currentobject.Labels[k] = v
-	}
-	addOwnerRefToObject(currentobject, asOwner(drupalsite))
-	if currentobject.CreationTimestamp.IsZero() {
-		randomMinute := rand.Intn(30)
-		currentobject.Spec = batchbeta1.CronJobSpec{
-			// Every random'th min, random'th min + 30  every hour, this is based on https://en.wikipedia.org/wiki/Cron
-			Schedule: strconv.Itoa(randomMinute) + "," + strconv.Itoa(randomMinute+30) + " * * * *",
-			// The default is 3, last job should suffice so we set to 1
-			SuccessfulJobsHistoryLimit: &jobsHistoryLimit,
-			FailedJobsHistoryLimit:     &jobsHistoryLimit,
-			// Default "Allow" policy may lead into trouble, see: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/553
-			ConcurrencyPolicy:       batchbeta1.ForbidConcurrent,
-			StartingDeadlineSeconds: &startingDeadlineSeconds,
-			JobTemplate: batchbeta1.JobTemplateSpec{
-				Spec: batchv1.JobSpec{
-					BackoffLimit: &jobBackoffLimit,
-					Template: v1.PodTemplateSpec{
-						Spec: v1.PodSpec{
-							RestartPolicy: "OnFailure",
-							Containers: []corev1.Container{
-								{
-									Name:            "cronjob",
-									ImagePullPolicy: "IfNotPresent",
-									Command: []string{
-										"sh",
-										"-c",
-										"/operations/run-cron.sh -s " + drupalsite.Name,
-									},
-									Resources: corev1.ResourceRequirements{
-										Requests: corev1.ResourceList{
-											corev1.ResourceMemory: resource.MustParse(jobMemoryRequest),
-										},
-									},
-									EnvFrom: []corev1.EnvFromSource{
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: databaseSecret,
-												},
-											},
-										},
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: oidcSecretName, //This is always set the same way
-												},
-											},
-										},
-									},
-									VolumeMounts: []corev1.VolumeMount{
-										{
-											Name:      "drupal-directory-" + drupalsite.Name,
-											MountPath: "/drupal-data",
-										},
-										{
-											Name:      "php-cli-config-volume",
-											MountPath: "/usr/local/etc/php/conf.d/config.ini",
-											SubPath:   "config.ini",
-											ReadOnly:  true,
-										},
-										{
-											Name:      "site-settings-php",
-											MountPath: "/app/web/sites/default/settings.php",
-											SubPath:   "settings.php",
-											ReadOnly:  true,
-										},
-									},
-								},
-							},
-							Volumes: []corev1.Volume{
-								{
-									Name: "drupal-directory-" + drupalsite.Name,
-									VolumeSource: corev1.VolumeSource{
-										PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-											ClaimName: "pv-claim-" + drupalsite.Name,
-										},
-									},
-								},
-								{
-									Name: "php-cli-config-volume",
-									VolumeSource: corev1.VolumeSource{
-										ConfigMap: &corev1.ConfigMapVolumeSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "php-cli-config-" + drupalsite.Name,
-											},
-										},
-									},
-								},
-								{
-									Name: "site-settings-php",
-									VolumeSource: corev1.VolumeSource{
-										ConfigMap: &corev1.ConfigMapVolumeSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "site-settings-" + drupalsite.Name,
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			}}
-	}
-
-	for i, container := range currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers {
-		switch container.Name {
-		case "cronjob":
-			if len(drupalsite.Status.Failsafe) > 0 {
-				currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(drupalsite, drupalsite.Status.Failsafe).Name
-			} else {
-				currentobject.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(drupalsite, releaseID(drupalsite)).Name
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -1043,7 +882,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	// Settings only on creation (not enforced)
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
-		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}}
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}, {Name: "cron"}}
 
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
@@ -1285,6 +1124,42 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
+			case "cron":
+				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+				currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: databaseSecret,
+							},
+						},
+					},
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: oidcSecretName, //This is always set the same way
+							},
+						},
+					},
+				}
+				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+					{
+						Name:      "drupal-directory-" + d.Name,
+						MountPath: "/drupal-data",
+					},
+					{
+						Name:      "php-cli-config-volume",
+						MountPath: "/usr/local/etc/php/conf.d/config.ini",
+						SubPath:   "config.ini",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "site-settings-php",
+						MountPath: "/app/web/sites/default/settings.php",
+						SubPath:   "settings.php",
+						ReadOnly:  true,
+					},
+				}
 			}
 		}
 
@@ -1303,6 +1178,8 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
 			case "webdav":
 				currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
+			case "cron":
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			}
 		}
 	}
@@ -1322,6 +1199,13 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		case "webdav":
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
+		case "cron":
+			currentobject.Spec.Template.Spec.Containers[i].Command = []string{
+				"sh",
+				"-c",
+				"/operations/cronjob.sh -s " + d.Name,
+			}
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.cronResources
 		}
 	}
 	currentobject.Spec.Replicas = &config.replicas
@@ -2185,6 +2069,10 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
+	cronResources, err := reqLimDict("cron", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
 	if reconcileErr != nil {
 		return
 	}
@@ -2208,10 +2096,11 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		if !reflect.DeepEqual(configOverride.PhpExporter.Resources, corev1.ResourceRequirements{}) {
 			phpExporterResources = configOverride.PhpExporter.Resources
 		}
+		// Note: no config override is necessary for the Cron resources
 	}
 
 	config = DeploymentConfig{replicas: replicas,
-		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources,
+		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources, cronResources: cronResources,
 	}
 	return
 }
@@ -2222,6 +2111,7 @@ type DeploymentConfig struct {
 	nginxResources       corev1.ResourceRequirements
 	phpExporterResources corev1.ResourceRequirements
 	webDAVResources      corev1.ResourceRequirements
+	cronResources        corev1.ResourceRequirements
 }
 
 func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {

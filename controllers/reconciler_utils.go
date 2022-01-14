@@ -249,6 +249,8 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		// Webdav has very few requests (low QoS) anyway, so there's no need to change for test sites so far
 		// WebDAV workloads are very bursty and they need a lot of CPU to process, therefore giving very high spread
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
+	case "cron":
+		return ResourceRequestLimit("10Mi", "10m", "20Mi", "80m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
