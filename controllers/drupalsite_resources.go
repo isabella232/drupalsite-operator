@@ -246,7 +246,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
-	if r.isDBODProvisioned(ctx, drp) {
+	if r.isDBODProvisioned(ctx, drp) && !(drp.ConditionTrue("Initialized")) {
 		if drp.Spec.Configuration.CloneFrom == "" {
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
