@@ -1159,6 +1159,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						SubPath:   "settings.php",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
 				}
 			}
 		}
