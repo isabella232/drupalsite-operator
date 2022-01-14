@@ -1,0 +1,10 @@
+apiVersion: drupal.webservices.cern.ch/v1alpha1
+kind: SupportedDrupalVersions
+metadata:
+  name: supporteddrupalversions-sample
+spec:
+  blacklist:
+  - "v9-Test-Upgrade"
+  - "v8.9-cerntaxonomies"
+  - "v8.9-2"
+  defaultVersion: "v9.2-1"

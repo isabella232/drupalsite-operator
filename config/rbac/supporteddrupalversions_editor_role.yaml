@@ -1,0 +1,24 @@
+# permissions for end users to edit supporteddrupalversions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: supporteddrupalversions-editor-role
+rules:
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - supporteddrupalversions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - supporteddrupalversions/status
+  verbs:
+  - get

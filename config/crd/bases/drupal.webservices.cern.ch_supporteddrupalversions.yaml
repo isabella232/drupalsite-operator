@@ -1,0 +1,92 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: supporteddrupalversions.drupal.webservices.cern.ch
+spec:
+  group: drupal.webservices.cern.ch
+  names:
+    kind: SupportedDrupalVersions
+    listKind: SupportedDrupalVersionsList
+    plural: supporteddrupalversions
+    singular: supporteddrupalversions
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SupportedDrupalVersions is the Schema for the supporteddrupalversions
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SupportedDrupalVersionsSpec defines the desired state of
+              SupportedDrupalVersions
+            properties:
+              blacklist:
+                description: Optional list of versions to be ignored in Status
+                items:
+                  type: string
+                type: array
+              defaultVersion:
+                type: string
+            required:
+            - defaultVersion
+            type: object
+          status:
+            description: SupportedDrupalVersionsStatus defines the observed state
+              of SupportedDrupalVersions
+            properties:
+              versions:
+                description: AvailableVersions will list all the current versions
+                  present in the Container Registry and supported by our infrastructure
+                items:
+                  description: DrupalVersion represents one available version present
+                    on the Container Registry
+                  properties:
+                    name:
+                      description: Name of the version
+                      type: string
+                    releaseSpec:
+                      description: ReleaseSpec contains the details for the current
+                        DrupalVersion
+                      properties:
+                        latest:
+                          description: LatestReleaseSpec will contain the latest version
+                            of a specific DrupalVersion
+                          type: string
+                      required:
+                      - latest
+                      type: object
+                  required:
+                  - name
+                  - releaseSpec
+                  type: object
+                type: array
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
