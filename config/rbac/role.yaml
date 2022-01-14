@@ -116,6 +116,32 @@ rules:
   - patch
   - update
 - apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - supporteddrupalversions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - supporteddrupalversions/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - supporteddrupalversions/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - image.openshift.io
   resources:
   - imagestreams

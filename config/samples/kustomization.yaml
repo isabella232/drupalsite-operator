@@ -2,4 +2,5 @@
 resources:
 - drupal.webservices_v1alpha1_drupalsite.yaml
 - drupal.webservices_v1alpha1_drupalsiteconfigoverride.yaml
+- drupal.webservices_v1alpha1_supporteddrupalversions.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

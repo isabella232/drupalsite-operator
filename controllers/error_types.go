@@ -13,16 +13,17 @@ var (
 	ErrInvalidSpec = errors.New("InvalidSpec")
 	// ErrFunctionDomain can be returned by a function that was passed invalid arguments, such as the default case of a switch.
 	// Consider constraining the arg type.
-	ErrFunctionDomain         = errors.New("FunctionDomainError")
-	ErrClientK8s              = errors.New("k8sAPIClientError")
-	ErrPodExec                = errors.New("ExecInPodError")
-	ErrFilesystemIO           = errors.New("FilesystemIOError")
-	ErrDBOD                   = errors.New("DBODError")
-	ErrBuildFailed            = errors.New("BuildError")
-	ErrDeploymentUpdateFailed = errors.New("DeploymentUpdateError")
-	ErrDBUpdateFailed         = errors.New("DBUpdateError")
-	ErrRollBack               = errors.New("RollbackError")
-	ErrPodNotRunning          = errors.New("PodNotRunning")
+	ErrFunctionDomain              = errors.New("FunctionDomainError")
+	ErrClientK8s                   = errors.New("k8sAPIClientError")
+	ErrPodExec                     = errors.New("ExecInPodError")
+	ErrFilesystemIO                = errors.New("FilesystemIOError")
+	ErrDBOD                        = errors.New("DBODError")
+	ErrBuildFailed                 = errors.New("BuildError")
+	ErrDeploymentUpdateFailed      = errors.New("DeploymentUpdateError")
+	ErrDBUpdateFailed              = errors.New("DBUpdateError")
+	ErrRollBack                    = errors.New("RollbackError")
+	ErrPodNotRunning               = errors.New("PodNotRunning")
+	ErrSupportedDrupalVersionsNone = errors.New("SupportedDrupalVersionsNoneError")
 )
 
 type reconcileError interface {

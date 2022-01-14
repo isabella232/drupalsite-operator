@@ -79,6 +79,7 @@ rules:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites
+  - supporteddrupalversions
   verbs:
   - "*"
 - apiGroups:
@@ -93,12 +94,14 @@ rules:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites/finalizers
+  - supporteddrupalversions/finalizers
   verbs:
   - update
 - apiGroups:
   - drupal.webservices.cern.ch
   resources:
   - drupalsites/status
+  - supporteddrupalversions/status
   verbs:
   - get
   - patch
