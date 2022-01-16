@@ -1144,19 +1144,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				}
 				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
 					{
-						Name:      "drupal-directory-" + d.Name,
-						MountPath: "/drupal-data",
-					},
-					{
 						Name:      "php-cli-config-volume",
 						MountPath: "/usr/local/etc/php/conf.d/config.ini",
 						SubPath:   "config.ini",
-						ReadOnly:  true,
-					},
-					{
-						Name:      "site-settings-php",
-						MountPath: "/app/web/sites/default/settings.php",
-						SubPath:   "settings.php",
 						ReadOnly:  true,
 					},
 					{
