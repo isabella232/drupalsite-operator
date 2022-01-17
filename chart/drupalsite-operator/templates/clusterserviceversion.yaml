@@ -30,7 +30,7 @@ metadata:
             "publish": true,
             "version": {
               "name": "v8.9-2",
-              "releaseSpec": "RELEASE-2021.10.26T15-33-59Z",
+              "releaseSpec": "RELEASE-2022.01.17T12-36-36Z",
             },
             "environment": {
               "name": "dev",
