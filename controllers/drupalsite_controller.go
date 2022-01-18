@@ -877,7 +877,7 @@ func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, 
 	return
 }
 
-//checkIfPrimaryDrupalsite checks if current DrupalSite is primary or not in the project
+//checkIfPrimaryDrupalSite updates the status of the current Drupalsite to show if it is the primary site according to the DrupalProjectConfig
 func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
 	update = false
 	if dpc == nil {
