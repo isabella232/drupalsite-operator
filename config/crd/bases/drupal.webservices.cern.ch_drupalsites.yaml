@@ -87,9 +87,9 @@ spec:
                     type: string
                   scheduledBackups:
                     default: enabled
-                    description: ScheduledBackups when "true" will enable Scheduled
-                      Velero backups for the site and when "false" will disable scheduled
-                      backups
+                    description: ScheduledBackups [deprecated] when "true" will enable
+                      Scheduled Velero backups for the site and when "false" will
+                      disable scheduled backups
                     enum:
                     - enabled
                     - disabled
