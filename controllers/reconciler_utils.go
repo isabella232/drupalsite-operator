@@ -251,6 +251,8 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		return ResourceRequestLimit("10Mi", "20m", "100Mi", "500m")
 	case "cron":
 		return ResourceRequestLimit("10Mi", "10m", "20Mi", "80m")
+	case "drupal-logs":
+		return ResourceRequestLimit("10Mi", "4m", "15Mi", "15m")
 	}
 	return corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
