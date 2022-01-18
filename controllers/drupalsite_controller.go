@@ -882,7 +882,6 @@ func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, 
 func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
 	update = false
 	if dpc == nil {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
 		return
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
