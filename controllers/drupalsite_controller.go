@@ -339,8 +339,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	case updateNeeded:
-		log.Info("Updating DrupalProjectConfig " + drupalProjectConfig.Namespace)
-		r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, drupalProjectConfig)
+		log.Info("Updating DrupalProjectConfig ")
+		r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig)
 	}
 	// Check if current instance is the Primary Drupalsite
 	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)

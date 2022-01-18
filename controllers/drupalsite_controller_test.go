@@ -1918,7 +1918,21 @@ var _ = Describe("DrupalSite controller", func() {
 			})
 		})
 	})
-
+	Describe("TODO Using DrupalProjectConfig", func() {
+		Context("", func() {
+			It("", func() {
+				// Tests that should be done
+				// Create a new project without any DrupalProjectConfig, operator logs Warning: Project $PROJECT does not contain any DrupalProjectConfig!
+				// Createda DrupalProjectConfig with one website and saw spec getting automatically filled, $PROJECT only 1 drupalsite\"$DRUPALSITE\", which is considered the primary production site
+				// Creation of a second website does not affect DrupalProjectConfig
+				// Creation of DrupalProjectConfig with 2 DrupalSites in place will not automatically fill spec.primarySiteName
+				// Deletion of 2 instances to 1, and spec.primarySiteName=="", will auto-fill
+				// If spec.primarySiteName!="", it is never auto-filled, not even with just one instance being created
+				// By default DrupalSite.status.isPrimary is false
+				// Editing DrupalProjectConfig will reflect changes on DrupalSite.status.isPrimary
+			})
+		})
+	})
 	Describe("Deleting the drupalsite object", func() {
 		Context("With critical QoS", func() {
 			It("Should be deleted successfully", func() {
