@@ -335,7 +335,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	updateNeeded, reconcileErr = r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
 	switch {
 	case err != nil:
-		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
+		log.Error(err, fmt.Sprintf("%v failed to declare this DrupalSite as Primary", reconcileErr.Unwrap()))
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	case updateNeeded:
