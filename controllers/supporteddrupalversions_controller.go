@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -97,7 +98,11 @@ func (r *SupportedDrupalVersionsReconciler) Reconcile(ctx context.Context, req c
 		return reconcile.Result{}, err
 	}
 	// Parse registry tags and keep only v*-RELEASE-* tags
-	registryDrupalVersions := parseRegistryTags(registryTags)
+	registryDrupalVersions, err := parseRegistryTags(registryTags)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Failed to parse registry tags"))
+		return reconcile.Result{}, err
+	}
 	// Get the most recent tag for each v* version
 	registryDrupalVersionsLatestRelease := getLatestRelease(registryDrupalVersions)
 
@@ -164,16 +169,19 @@ func drupalVersionsEqual(availableVersions []v1alpha1.DrupalVersion, versionsLat
 func getRegistryTags(siteBuilderImage string) ([]string, error) {
 	tags, err := crane.ListTags(siteBuilderImage)
 	if err != nil {
-		log.Error(err, err.Error())
+		return tags, err
 	}
 
 	return tags, nil
 }
 
 // parseRegistryTags parses the tags that match the pattern ^(v.*)-(RELEASE.*)$
-func parseRegistryTags(tags []string) map[string][]string {
+func parseRegistryTags(tags []string) (map[string][]string, error) {
 	versions := make(map[string][]string)
-	re := regexp.MustCompile("^(v.*)-(RELEASE.*)$")
+	re, err := regexp.Compile("^(v.*)-(RELEASE.*)$")
+	if err != nil {
+		return versions, err
+	}
 
 	for _, tag := range tags {
 		version := re.FindStringSubmatch(tag)
@@ -187,7 +195,7 @@ func parseRegistryTags(tags []string) map[string][]string {
 			}
 		}
 	}
-	return versions
+	return versions, nil
 }
 
 // getLatestRelease filters the latest release for each version
@@ -204,7 +212,7 @@ func getLatestRelease(versions map[string][]string) map[string]string {
 		sort.Slice(releaseSpecsTime, func(i, j int) bool {
 			return releaseSpecsTime[i].After(releaseSpecsTime[j])
 		})
-		versionsLatestRelease[versionName] = releaseSpecsTime[0].Format(layout)
+		versionsLatestRelease[versionName] = strings.Join([]string{"RELEASE", releaseSpecsTime[0].Format(layout)}, "-")
 	}
 
 	return versionsLatestRelease

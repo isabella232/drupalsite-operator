@@ -15,12 +15,6 @@ rules:
 - apiGroups:
   - batch
   resources:
-  - cronjobs
-  verbs:
-  - '*'
-- apiGroups:
-  - batch
-  resources:
   - jobs
   verbs:
   - '*'
