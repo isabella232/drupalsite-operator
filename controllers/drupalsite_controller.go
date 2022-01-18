@@ -339,9 +339,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	case updateNeeded:
-		log.Info("Updating DrupalProjectConfig", "")
-		return r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, drupalProjectConfig)
-
+		log.Info("Updating DrupalProjectConfig " + drupalProjectConfig.Namespace)
+		r.updateDrupalProjectConfigCRorFailReconcile(ctx, log, drupalProjectConfig)
 	}
 	// Check if current instance is the Primary Drupalsite
 	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
@@ -845,7 +844,7 @@ func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *
 		return nil, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
 	}
 	if len(drupalProjectConfigList.Items) == 0 {
-		r.Log.Info("Warning: Project %s does not contain any DrupalProjectConfig!")
+		r.Log.Info("Warning: Project " + drp.Namespace + " does not contain any DrupalProjectConfig!")
 		return nil, nil
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per project!
