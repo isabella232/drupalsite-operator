@@ -878,7 +878,7 @@ func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, 
 	return
 }
 
-//checkIfPrimaryDrupalSite checks if current DrupalSite is primary or not in the project
+//checkIfPrimaryDrupalsite checks if current DrupalSite is primary or not in the project
 func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
 	update = false
 	if dpc == nil {
