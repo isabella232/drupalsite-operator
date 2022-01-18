@@ -287,7 +287,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	}
 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
-	if drp.Spec.Configuration.ScheduledBackups == "enabled" {
+	if drp.Status.IsPrimary || drp.Spec.Configuration.ScheduledBackups == "enabled" {
 		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 		}

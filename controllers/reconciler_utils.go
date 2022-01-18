@@ -121,6 +121,16 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
+func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) {
+	if err := r.Update(ctx, dpc); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("Object changed while reconciling. Requeuing.")
+		}
+		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
+	}
+}
+
+// updateCRorFailReconcile tries to update the Custom Resource and logs any error
 func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
 	reconcile.Result, error) {
 	if err := r.Update(ctx, drp); err != nil {

@@ -153,6 +153,13 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return req
 			}),
 		).
+		Watches(&source.Kind{Type: &webservicesv1a1.DrupalProjectConfig{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in a given namespace
+			func(a client.Object) []reconcile.Request {
+				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetNamespace())
+				return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
+			}),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ParallelThreadCount,
 		}).
@@ -249,6 +256,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
+	// Retrieve the DrupalProjectConfig Resource
+	drupalProjectConfig, err := r.GetDrupalProjectConfig(ctx, drupalSite)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to retrieve DrupalProjectConfig", err))
+		// Although we log an Error, we will allow the reconcile to continue, as the absence of the resource does not mean DrupalSite cannot be processed
+		// Populate resource as nil
+		drupalProjectConfig = nil
+	}
+
 	// 2. Check all conditions and update if needed
 	update := false
 
@@ -314,6 +330,27 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return r.updateCRorFailReconcile(ctx, log, drupalSite)
 			}
 		}
+	}
+	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
+	updateNeeded, reconcileErr = r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
+	switch {
+	case err != nil:
+		log.Error(err, fmt.Sprintf("%v failed to declare this DrupalSite as Primary", reconcileErr.Unwrap()))
+		setErrorCondition(drupalSite, reconcileErr)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	case updateNeeded:
+		log.Info("Updating DrupalProjectConfig ")
+		r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig)
+	}
+	// Check if current instance is the Primary Drupalsite
+	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
+	switch {
+	case err != nil:
+		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
+		setErrorCondition(drupalSite, reconcileErr)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	case updateNeeded:
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
@@ -544,12 +581,6 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		} else {
 			drp.Spec.Version.ReleaseSpec = DefaultD9ReleaseSpec
 		}
-		update = true
-	}
-
-	// Initialize 'Spec.Configuration.ScheduledBackups' if empty
-	if len(drp.Spec.Configuration.ScheduledBackups) == 0 {
-		drp.Spec.Configuration.ScheduledBackups = "enabled"
 		update = true
 	}
 	return update, nil
@@ -803,4 +834,64 @@ func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *
 	}
 	d.Status.GitlabWebhookURL = "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
 	return nil
+}
+
+// GetDrupalProjectConfig gets the DrupalProjectConfig for a Project
+func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalProjectConfig, reconcileError) {
+	// Fetch the DrupalProjectConfigList on the Namespace
+	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
+	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
+		return nil, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
+	}
+	if len(drupalProjectConfigList.Items) == 0 {
+		r.Log.Info("Warning: Project " + drp.Namespace + " does not contain any DrupalProjectConfig!")
+		return nil, nil
+	}
+	// We get the first DrupalProjectConfig in the Namespace, only one is expected per project!
+	return &drupalProjectConfigList.Items[0], nil
+}
+
+// proclaimPrimarySiteIfExists will check for Drupalsites in a project, if only one DrupalSite is in place then we consider that primary exists and can be set on the DrupalProjectConfig, otherwise nothing to do as there is no clear Primary site
+func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileError reconcileError) {
+	update = false
+	if dpc == nil {
+		return
+	}
+	// Check how many DrupalSites are in place on the project
+	drupalSiteList := &webservicesv1a1.DrupalSiteList{}
+	if err := r.List(ctx, drupalSiteList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
+		reconcileError = newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s)
+		return
+	}
+	if len(drupalSiteList.Items) > 1 {
+		// Nothing to do in case there's more than one DrupalSite in the project
+		return
+	}
+
+	if dpc.Spec.PrimarySiteName == "" {
+		dpc.Spec.PrimarySiteName = drp.Name
+		r.Log.Info("Project" + dpc.Namespace + "contains only 1 drupalsite\"" + drp.Name + "\", which is considered the primary production site")
+		update = true
+		return
+	}
+	return
+}
+
+//checkIfPrimaryDrupalSite updates the status of the current Drupalsite to show if it is the primary site according to the DrupalProjectConfig
+func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
+	update = false
+	if dpc == nil {
+		return
+	}
+	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
+	if drp.Name == dpc.Spec.PrimarySiteName && !drp.Status.IsPrimary {
+		update = true
+		drp.Status.IsPrimary = true
+		return
+	} else if drp.Name != dpc.Spec.PrimarySiteName && drp.Status.IsPrimary {
+		update = true
+		drp.Status.IsPrimary = false
+		return
+	}
+	return
 }
