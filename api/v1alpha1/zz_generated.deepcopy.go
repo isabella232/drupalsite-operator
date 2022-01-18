@@ -245,6 +245,7 @@ func (in *DrupalSiteConfigOverrideSpec) DeepCopyInto(out *DrupalSiteConfigOverri
 	in.Nginx.DeepCopyInto(&out.Nginx)
 	in.Webdav.DeepCopyInto(&out.Webdav)
 	in.PhpExporter.DeepCopyInto(&out.PhpExporter)
+	in.Cron.DeepCopyInto(&out.Cron)
 	in.DrupalLogs.DeepCopyInto(&out.DrupalLogs)
 }
 

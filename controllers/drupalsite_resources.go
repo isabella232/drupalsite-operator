@@ -2168,10 +2168,12 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		if !reflect.DeepEqual(configOverride.PhpExporter.Resources, corev1.ResourceRequirements{}) {
 			phpExporterResources = configOverride.PhpExporter.Resources
 		}
+		if !reflect.DeepEqual(configOverride.Cron.Resources, corev1.ResourceRequirements{}) {
+			cronResources = configOverride.Cron.Resources
+		}
 		if !reflect.DeepEqual(configOverride.DrupalLogs.Resources, corev1.ResourceRequirements{}) {
 			drupalLogsResources = configOverride.DrupalLogs.Resources
 		}
-		// NOTE: no config override is necessary for the Cron resources
 	}
 
 	config = DeploymentConfig{replicas: replicas,
