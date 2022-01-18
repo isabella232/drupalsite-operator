@@ -31,6 +31,8 @@ type DrupalSiteConfigOverrideSpec struct {
 	Webdav Resources `json:"webdav,omitempty"`
 	// PhpExporter includes configuration for the PhpExporter container of the DrupalSite server pods
 	PhpExporter Resources `json:"phpexporter,omitempty"`
+	// DrupalLogs includes configuration for the DrupalLogs container of the DrupalSite server pods
+	DrupalLogs Resources `json:"drupallogs,omitempty"`
 }
 
 type Resources struct {

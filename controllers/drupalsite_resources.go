@@ -879,11 +879,20 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 	}
 	currentobject.Annotations["alpha.image.policy.openshift.io/resolve-names"] = "*"
 
+	if currentobject.CreationTimestamp.IsZero() {
+		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}, {Name: "cron"}, {Name: "drupal-logs"}}
+	} else {
+		containerExists("nginx", currentobject)
+		containerExists("php-fpm", currentobject)
+		containerExists("php-fpm-exporter", currentobject)
+		containerExists("webdav", currentobject)
+		containerExists("cron", currentobject)
+		containerExists("drupal-logs", currentobject)
+	}
+
 	// Settings only on creation (not enforced)
 	if currentobject.CreationTimestamp.IsZero() {
 		currentobject.Spec.Template.ObjectMeta.Annotations = map[string]string{}
-		currentobject.Spec.Template.Spec.Containers = []corev1.Container{{Name: "nginx"}, {Name: "php-fpm"}, {Name: "php-fpm-exporter"}, {Name: "webdav"}, {Name: "cron"}}
-
 		currentobject.Spec.Selector = &metav1.LabelSelector{
 			MatchLabels: ls,
 		}
@@ -973,6 +982,7 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			},
 		}
 
+		// TODO: gradually migrate this code outside of the `CreationTimestamp.IsZero` check
 		for i, container := range currentobject.Spec.Template.Spec.Containers {
 			switch container.Name {
 			case "nginx":
@@ -1124,82 +1134,62 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						MountPath: "/var/run/",
 					},
 				}
-			case "cron":
-				currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
-				currentobject.Spec.Template.Spec.Containers[i].EnvFrom = []corev1.EnvFromSource{
-					{
-						SecretRef: &corev1.SecretEnvSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: databaseSecret,
-							},
-						},
-					},
-					{
-						SecretRef: &corev1.SecretEnvSource{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: oidcSecretName, //This is always set the same way
-							},
-						},
-					},
-				}
-				currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
-					{
-						Name:      "php-cli-config-volume",
-						MountPath: "/usr/local/etc/php/conf.d/config.ini",
-						SubPath:   "config.ini",
-						ReadOnly:  true,
-					},
-					{
-						Name:      "empty-dir",
-						MountPath: "/var/run/",
-					},
-				}
-			}
-		}
-
-	}
-
-	// Settings on update
-	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"]
-	if !annotExists || d.Status.ReleaseID.Failsafe == "" || currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID {
-		for i, container := range currentobject.Spec.Template.Spec.Containers {
-			switch container.Name {
-			case "nginx":
-				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-			case "php-fpm":
-				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
-			case "php-fpm-exporter":
-				currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
-			case "webdav":
-				currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
-			case "cron":
-				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			}
 		}
 	}
 
 	// Settings enforced always
-
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
 		switch container.Name {
 		case "nginx":
+			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
+			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 		case "php-fpm-exporter":
+			currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
 		case "webdav":
+			currentobject.Spec.Template.Spec.Containers[i].Image = WebDAVImage
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 		case "cron":
+			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{
 				"sh",
 				"-c",
 				"/operations/cronjob.sh -s " + d.Name,
 			}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.cronResources
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "php-cli-config-volume",
+					MountPath: "/usr/local/etc/php/conf.d/config.ini",
+					SubPath:   "config.ini",
+					ReadOnly:  true,
+				},
+			}
+		case "drupal-logs":
+			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			currentobject.Spec.Template.Spec.Containers[i].Command = tailDrupalLogs()
+			currentobject.Spec.Template.Spec.Containers[i].Resources = config.drupalLogsResources
+			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
+			currentobject.Spec.Template.Spec.Containers[i].ImagePullPolicy = "Always"
+			currentobject.Spec.Template.Spec.Containers[i].Ports = []corev1.ContainerPort{{
+				ContainerPort: 8085,
+				Name:          "drupal-logs",
+				Protocol:      "TCP",
+			}}
+			currentobject.Spec.Template.Spec.Containers[i].VolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "empty-dir",
+					MountPath: "/var/run/",
+				},
+			}
 		}
 	}
 	currentobject.Spec.Replicas = &config.replicas
@@ -1475,6 +1465,10 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 						SubPath:   "settings.php",
 						ReadOnly:  true,
 					},
+					{
+						Name:      "empty-dir",
+						MountPath: "/var/run/",
+					},
 				},
 			}},
 			Volumes: []corev1.Volume{
@@ -1505,6 +1499,10 @@ func jobForDrupalSiteInstallation(currentobject *batchv1.Job, databaseSecret str
 							},
 						},
 					},
+				},
+				{
+					Name:         "empty-dir",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 				},
 			},
 		}
@@ -1975,6 +1973,11 @@ func syncDrupalFilesToEmptydir() []string {
 	return []string{"/operations/sync-drupal-emptydir.sh"}
 }
 
+// tailDrupalLogs outputs the command to tail the drupal log file
+func tailDrupalLogs() []string {
+	return []string{"/operations/tail-drupal-logs.sh"}
+}
+
 // backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
 // A nil argument is equivalent to an empty slice.
 func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsList []webservicesv1a1.Backup) bool {
@@ -2064,6 +2067,7 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
 	cronResources, err := reqLimDict("cron", drupalSite.Spec.QoSClass)
+	drupalLogsResources, err := reqLimDict("drupal-logs", drupalSite.Spec.QoSClass)
 	if err != nil {
 		reconcileErr = newApplicationError(err, ErrFunctionDomain)
 	}
@@ -2090,11 +2094,14 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		if !reflect.DeepEqual(configOverride.PhpExporter.Resources, corev1.ResourceRequirements{}) {
 			phpExporterResources = configOverride.PhpExporter.Resources
 		}
-		// Note: no config override is necessary for the Cron resources
+		if !reflect.DeepEqual(configOverride.DrupalLogs.Resources, corev1.ResourceRequirements{}) {
+			drupalLogsResources = configOverride.DrupalLogs.Resources
+		}
+		// NOTE: no config override is necessary for the Cron resources
 	}
 
 	config = DeploymentConfig{replicas: replicas,
-		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources, cronResources: cronResources,
+		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources, cronResources: cronResources, drupalLogsResources: drupalLogsResources,
 	}
 	return
 }
@@ -2106,6 +2113,7 @@ type DeploymentConfig struct {
 	phpExporterResources corev1.ResourceRequirements
 	webDAVResources      corev1.ResourceRequirements
 	cronResources        corev1.ResourceRequirements
+	drupalLogsResources  corev1.ResourceRequirements
 }
 
 func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
@@ -2118,4 +2126,19 @@ func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webse
 		return nil, newApplicationError(err, ErrClientK8s)
 	}
 	return &configOverride.Spec, nil
+}
+
+// containerExists checks if a container exists on the deployment
+// if it doesn't exists, it adds it
+func containerExists(name string, currentobject *appsv1.Deployment) {
+	containerExists := false
+	for _, container := range currentobject.Spec.Template.Spec.Containers {
+		if container.Name == name {
+			containerExists = true
+			break
+		}
+	}
+	if !containerExists {
+		currentobject.Spec.Template.Spec.Containers = append(currentobject.Spec.Template.Spec.Containers, corev1.Container{Name: name})
+	}
 }
