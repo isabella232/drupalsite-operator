@@ -80,6 +80,7 @@ rules:
   resources:
   - drupalsites
   - supporteddrupalversions
+  - drupalprojectconfigs
   verbs:
   - "*"
 - apiGroups:
@@ -95,6 +96,7 @@ rules:
   resources:
   - drupalsites/finalizers
   - supporteddrupalversions/finalizers
+  - drupalprojectconfigs/finalizers
   verbs:
   - update
 - apiGroups:
@@ -102,6 +104,7 @@ rules:
   resources:
   - drupalsites/status
   - supporteddrupalversions/status
+  - drupalprojectconfigs/status
   verbs:
   - get
   - patch
