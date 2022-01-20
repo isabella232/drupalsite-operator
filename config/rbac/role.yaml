@@ -113,8 +113,6 @@ rules:
   - drupal.webservices.cern.ch
   resources:
   - supporteddrupalversions
-  - drupalprojectconfigs
-  - drupalprojectconfigs/status
   verbs:
   - create
   - delete
