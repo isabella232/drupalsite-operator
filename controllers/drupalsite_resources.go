@@ -1138,15 +1138,31 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		}
 	}
 
+	// Settings on update
+	// We should not enforce image field on every reconcile for containers that rely on imagestreams. For imagestream, the image value will be resolved from the tag name to SHA value by openshift. This in turn causes indefinite rollouts.
+	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"]
+	if !annotExists || d.Status.ReleaseID.Failsafe == "" || currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID {
+		for i, container := range currentobject.Spec.Template.Spec.Containers {
+			switch container.Name {
+			case "nginx":
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			case "php-fpm":
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			case "cron":
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			case "drupal-logs":
+				currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
+			}
+		}
+	}
+
 	// Settings enforced always
 	for i, container := range currentobject.Spec.Template.Spec.Containers {
 		switch container.Name {
 		case "nginx":
-			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-nginx.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.nginxResources
 		case "php-fpm":
-			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
 		case "php-fpm-exporter":
@@ -1157,7 +1173,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"php-fpm"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.webDAVResources
 		case "cron":
-			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{
 				"sh",
 				"-c",
@@ -1174,7 +1189,6 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 				},
 			}
 		case "drupal-logs":
-			currentobject.Spec.Template.Spec.Containers[i].Image = sitebuilderImageRefToUse(d, releaseID).Name
 			currentobject.Spec.Template.Spec.Containers[i].Command = tailDrupalLogs()
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.drupalLogsResources
 			// Set to always due to https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/54
