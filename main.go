@@ -42,6 +42,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -63,6 +64,7 @@ func init() {
 	utilruntime.Must(imagev1.AddToScheme(scheme))
 	utilruntime.Must(buildv1.AddToScheme(scheme))
 	utilruntime.Must(velerov1.AddToScheme(scheme))
+	utilruntime.Must(pipelinev1.AddToScheme(scheme))
 }
 
 func main() {
@@ -84,6 +86,7 @@ func main() {
 	flag.IntVar(&controllers.ParallelThreadCount, "parallel-thread-count", 1, "The default number of parallel threads executed by the DrupalSite Operator controllers")
 	flag.BoolVar(&controllers.EnableTopologySpread, "enable-topology-spread", false, "Enable avaliability zone scheduling for critical site deployments")
 	flag.StringVar(&controllers.ClusterName, "cluster-name", "", "Name of the cluster the operator is deployed on")
+	flag.StringVar(&controllers.EasystartBackupName, "easystart-backup-name", "", "The name of the easy-start backup")
 	opts := zap.Options{
 		Development: false,
 	}

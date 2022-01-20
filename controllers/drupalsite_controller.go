@@ -29,12 +29,14 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	dbodv1a1 "gitlab.cern.ch/drupal/paas/dbod-operator/api/v1alpha1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"knative.dev/pkg/apis"
 
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -77,6 +79,8 @@ var (
 	EnableTopologySpread bool
 	// ClusterName refers to the name of the cluster the operator is running on
 	ClusterName string
+	// EasystartBackupName refers to the name of the easystart backup
+	EasystartBackupName string
 )
 
 // DrupalSiteReconciler reconciles a DrupalSite object
@@ -283,9 +287,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = setNotReady(drupalSite, nil) || update
 	}
 
-	// Check if the site is installed or cloned and mark the condition
+	// Check if the site is installed, cloned or easystart and mark the condition
 	if !drupalSite.ConditionTrue("Initialized") {
-		if r.isDrupalSiteInstalled(ctx, drupalSite) || r.isCloneJobCompleted(ctx, drupalSite) {
+		if r.isDrupalSiteInstalled(ctx, drupalSite) || r.isCloneJobCompleted(ctx, drupalSite) || r.isEasystartTaskRunCompleted(ctx, drupalSite) {
 			update = setInitialized(drupalSite) || update
 		} else {
 			update = setNotInitialized(drupalSite) || update
@@ -487,6 +491,17 @@ func (r *DrupalSiteReconciler) isCloneJobCompleted(ctx context.Context, d *webse
 	}
 	// business logic, ie check "Succeeded"
 	return cloneJob.Status.Succeeded != 0
+}
+
+// isEasystartTaskRunCompleted checks if the easystart taskRun is successfully completed
+func (r *DrupalSiteReconciler) isEasystartTaskRunCompleted(ctx context.Context, d *webservicesv1a1.DrupalSite) bool {
+	easystartTaskRun := &pipelinev1.TaskRun{}
+	err := r.Get(ctx, types.NamespacedName{Name: "easystart-" + d.Name, Namespace: d.Namespace}, easystartTaskRun)
+	if err != nil {
+		return false
+	}
+	// business logic, ie check "Succeeded"
+	return easystartTaskRun.Status.GetCondition(apis.ConditionSucceeded).IsTrue()
 }
 
 // isDrupalSiteReady checks if the drupal site is to ready to serve requests by checking the status of Nginx & PHP pods
