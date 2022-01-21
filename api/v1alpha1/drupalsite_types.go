@@ -111,6 +111,11 @@ type Configuration struct {
 	// +kubebuilder:default=enabled
 	// +optional
 	ScheduledBackups string `json:"scheduledBackups,omitempty"`
+
+	// EasyStart when "enable" triggers a restore taskrun of the easystart template.
+	// +kubebuilder:validation:Enum:=enable
+	// +optional
+	Easystart string `json:"easystart,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements

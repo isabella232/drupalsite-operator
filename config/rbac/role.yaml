@@ -78,6 +78,24 @@ rules:
 - apiGroups:
   - drupal.webservices.cern.ch
   resources:
+  - drupalprojectconfigs
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
+  - drupalprojectconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - drupal.webservices.cern.ch
+  resources:
   - drupalsiteconfigoverrides
   verbs:
   - get
@@ -113,8 +131,6 @@ rules:
   - drupal.webservices.cern.ch
   resources:
   - supporteddrupalversions
-  - drupalprojectconfigs
-  - drupalprojectconfigs/status
   verbs:
   - create
   - delete
@@ -158,6 +174,16 @@ rules:
   - routes
   verbs:
   - '*'
+- apiGroups:
+  - tekton.dev
+  resources:
+  - taskruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
 - apiGroups:
   - velero.io
   resources:

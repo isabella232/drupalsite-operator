@@ -33,6 +33,7 @@ spec:
         - --parallel-thread-count={{.Values.drupalsiteOperator.parallelThreadCount}}
         - --enable-topology-spread={{.Values.drupalsiteOperator.enableTopologySpread}}
         - --cluster-name={{.Values.drupalsiteOperator.clusterName}}
+        - --easystart-backup-name={{.Values.drupalsiteOperator.easystartBackupName}}
         command:
         - /manager
         image: {{ .Values.image | quote }}

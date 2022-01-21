@@ -40,6 +40,7 @@ import (
 	buildv1 "github.com/openshift/api/build/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	routev1 "github.com/openshift/api/route/v1"
+	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -80,6 +81,7 @@ var _ = BeforeSuite(func(done Done) {
 	DefaultD8ReleaseSpec = "test-d8-spec"
 	DefaultD9ReleaseSpec = "test-d9-spec"
 	ClusterName = "test"
+	EasystartBackupName = "easystart-backup"
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -118,6 +120,9 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = velerov1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = pipelinev1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	cfg, err := testEnv.Start()

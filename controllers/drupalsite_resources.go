@@ -52,6 +52,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
 
@@ -245,14 +246,26 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
+	/* A new drupalsite can be initialized with 3 different ways depending its Spec:
+	- clone_job if Spec.Configuration.CloneFrom is given
+	- easystart_taskrun if Spec.Configuration.Easystart equals to enable
+	- site_install_job if it is a fresh site
+        Between CloneFrom and Easystart we don't care which case is checked first (undefined).
+        We use an OPA rule that prohibits both fields from being set at the same time.
+	*/
 	if r.isDBODProvisioned(ctx, drp) && !(drp.ConditionTrue("Initialized")) {
-		if drp.Spec.Configuration.CloneFrom == "" {
-			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
-				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
-			}
-		} else {
+		switch {
+		case drp.Spec.Configuration.CloneFrom != "":
 			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
+			}
+		case drp.Spec.Configuration.Easystart == "enable":
+			if transientErr := r.ensureResourceX(ctx, drp, "easystart_taskrun", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for easystart TaskRun"))
+			}
+		default:
+			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
 		}
 	}
@@ -307,6 +320,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush ensure-site-install
 	- clone_job: Kubernetes Job for cloning a drupal site
+	- easystart_taskrun: Taskrun for restoring easystart backup
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- bc_s2i: BuildConfig for S2I sitebuilder
@@ -435,6 +449,20 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				return newApplicationError(err, ErrClientK8s)
+			}
+		}
+		return nil
+	case "easystart_taskrun":
+		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
+			taskRun := &pipelinev1.TaskRun{
+				ObjectMeta: metav1.ObjectMeta{Name: "easystart-" + d.Name, Namespace: d.Namespace}}
+			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, taskRun, func() error {
+				log.V(3).Info("Ensuring Resource", "Kind", taskRun.TypeMeta.Kind, "Resource.Namespace", taskRun.Namespace, "Resource.Name", taskRun.Name)
+				return taskRunForEasystartRestore(taskRun, d)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", taskRun.TypeMeta.Kind, "Resource.Namespace", taskRun.Namespace, "Resource.Name", taskRun.Name)
 				return newApplicationError(err, ErrClientK8s)
 			}
 		}
@@ -1677,6 +1705,35 @@ func jobForDrupalSiteClone(currentobject *batchv1.Job, databaseSecret string, d 
 		ls["app"] = "clone"
 		for k, v := range ls {
 			currentobject.Labels[k] = v
+		}
+	}
+	return nil
+}
+
+// taskRunForEasystartRestore returns a taskRun objects that restores easystart backup
+func taskRunForEasystartRestore(currentobject *pipelinev1.TaskRun, d *webservicesv1a1.DrupalSite) error {
+	if currentobject.CreationTimestamp.IsZero() {
+		addOwnerRefToObject(currentobject, asOwner(d))
+		currentobject.Spec = pipelinev1.TaskRunSpec{
+			TaskRef: &pipelinev1.TaskRef{
+				Name: "drupalsite-restore",
+				Kind: "ClusterTask",
+			},
+			Params: []pipelinev1.Param{
+				{
+					Name:  "drupalSite",
+					Value: pipelinev1.ArrayOrString{Type: pipelinev1.ParamTypeString, StringVal: d.Name},
+				},
+				{
+					Name:  "backupName",
+					Value: pipelinev1.ArrayOrString{Type: pipelinev1.ParamTypeString, StringVal: EasystartBackupName},
+				},
+				{
+					Name:  "namespace",
+					Value: pipelinev1.ArrayOrString{Type: pipelinev1.ParamTypeString, StringVal: d.Namespace},
+				},
+			},
+			ServiceAccountName: "tektoncd",
 		}
 	}
 	return nil
