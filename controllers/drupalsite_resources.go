@@ -312,7 +312,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- pvc_drupal: PersistentVolume for the drupalsite
 	- site_install_job: Kubernetes Job for the drush ensure-site-install
 	- clone_job: Kubernetes Job for cloning a drupal site
-    - easystart_taskrun: Taskrun for restoring easystart backup
+	- easystart_taskrun: Taskrun for restoring easystart backup
 	- is_base: ImageStream for sitebuilder-base
 	- is_s2i: ImageStream for S2I sitebuilder
 	- bc_s2i: BuildConfig for S2I sitebuilder

@@ -94,6 +94,8 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsiteconfigoverrides,verbs=get;list;watch
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalprojectconfigs,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalprojectconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=app,resources=deployments,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=buildconfigs,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=builds,verbs=get;list;watch
@@ -110,6 +112,7 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=velero.io,resources=schedules,verbs=*;
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+// +kubebuilder:rbac:groups=tekton.dev,resources=taskruns,verbs=get;list;watch;create;delete
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
