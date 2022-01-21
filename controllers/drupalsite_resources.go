@@ -246,16 +246,22 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
+	/* A new drupalsite can be initialized with 3 different ways depending its Spec:
+	- clone_job if Spec.Configuration.CloneFrom is given
+	- easystart_taskrun if Spec.Configuration.Easystart equals to enable
+	- site_install_job if it is a fresh site
+	*/
 	if r.isDBODProvisioned(ctx, drp) && !(drp.ConditionTrue("Initialized")) {
-		if drp.Spec.Configuration.CloneFrom != "" {
+		switch {
+		case drp.Spec.Configuration.CloneFrom != "":
 			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
 			}
-		} else if drp.Spec.Configuration.Easystart == "enable" {
+		case drp.Spec.Configuration.Easystart == "enable":
 			if transientErr := r.ensureResourceX(ctx, drp, "easystart_taskrun", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for easystart TaskRun"))
 			}
-		} else {
+		default:
 			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
