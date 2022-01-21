@@ -250,6 +250,8 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	- clone_job if Spec.Configuration.CloneFrom is given
 	- easystart_taskrun if Spec.Configuration.Easystart equals to enable
 	- site_install_job if it is a fresh site
+        Between CloneFrom and Easystart we don't care which case is checked first (undefined).
+        We use an OPA rule that prohibits both fields from being set at the same time.
 	*/
 	if r.isDBODProvisioned(ctx, drp) && !(drp.ConditionTrue("Initialized")) {
 		switch {
