@@ -166,6 +166,16 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - tekton.dev
+  resources:
+  - taskruns
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
 ---
 apiVersion: v1
 kind: ServiceAccount
