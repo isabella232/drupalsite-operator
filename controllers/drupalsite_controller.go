@@ -444,6 +444,14 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
 		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
+
+		// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
+		// The URL is dependent on BuildConfig name, which is based on nameVersionHash() function. Therefore it needs to be updated for every ReleaseID update
+		if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 {
+			if err := r.addGitlabWebhookToStatus(ctx, drupalSite); err != nil {
+				return handleTransientErr(err, "Failed to add GitlabWebhookURL to status: %v", "")
+			}
+		}
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -453,14 +461,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	if !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups) {
 		drupalSite.Status.AvailableBackups = backupList
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	}
-
-	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
-	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
-		if err := r.addGitlabWebhookToStatus(ctx, drupalSite); err != nil {
-			return handleTransientErr(err, "Failed to add GitlabWebhookURL to status: %v", "")
-		}
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
