@@ -737,9 +737,9 @@ func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *we
 }
 
 // checkNewBackups returns the list of velero backups that exist for a given site
-func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
+func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []webservicesv1a1.Backup, reconcileErr reconcileError) {
 	backupList := velerov1.BackupList{}
-	backups = make([]velerov1.Backup, 0)
+	backups = make([]webservicesv1a1.Backup, 0)
 	hash := md5.Sum([]byte(d.Namespace))
 	backupLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:])},
@@ -761,7 +761,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	default:
 		for i := range backupList.Items {
 			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
-				backups = append(backups, backupList.Items[i])
+				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: d.Name})
 			}
 		}
 	}

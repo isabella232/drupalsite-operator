@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -447,14 +448,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
-	switch {
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, err
-	case len(backupList) != 0:
-		if backupListUpdateNeeded(backupList, drupalSite.Status.AvailableBackups) {
-			drupalSite.Status.AvailableBackups = updateBackupListStatus(backupList)
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
+	}
+	if !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups) {
+		drupalSite.Status.AvailableBackups = backupList
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
