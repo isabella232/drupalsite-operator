@@ -157,4 +157,4 @@ $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION
 // See: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/787
 $settings['reverse_proxy'] = TRUE;
 $settings['reverse_proxy_addresses'] = array($_SERVER['REMOTE_ADDR']);
-$settings['reverse_proxy_trusted_headers'] = SymfonyComponentHttpFoundationRequest::HEADER_X_FORWARDED_FOR | SymfonyComponentHttpFoundationRequest::HEADER_X_FORWARDED_PROTO | SymfonyComponentHttpFoundationRequest::HEADER_X_FORWARDED_PORT;
+$settings['reverse_proxy_trusted_headers'] = \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_FOR | \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PROTO | \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PORT;
