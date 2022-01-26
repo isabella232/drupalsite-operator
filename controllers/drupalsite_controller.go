@@ -71,7 +71,7 @@ var (
 	VeleroNamespace string
 	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
 	DefaultD8ReleaseSpec string
-	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
+	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 9 to be defaulted incase it is empty
 	DefaultD9ReleaseSpec string
 	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
 	ParallelThreadCount int
