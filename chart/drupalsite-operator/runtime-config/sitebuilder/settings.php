@@ -67,6 +67,7 @@ if (extension_loaded('redis') && (getenv('ENABLE_REDIS') == "true")) {
   // Set Redis as the default backend for any cache bin not otherwise specified.
   $settings['cache']['default'] = 'cache.backend.redis';
   $settings['redis.connection']['interface'] = 'PhpRedis';
+  //$settings['redis.connection']['host'] = 'redis.' . getenv('NAMESPACE') . '.svc.cluster.local';
   $settings['redis.connection']['host'] = getenv('REDIS_SERVICE_HOST');
   $settings['redis.connection']['port'] = getenv('REDIS_SERVICE_PORT');
   // NOTE: env `REDIS_PASSWORD` needs to be manually exposed
@@ -151,3 +152,9 @@ if (getenv('ENVIRONMENT') != 'production' && file_exists($app_root . '/' . $site
 // $databases['default']['default']['init_commands']['isolation'] = "SET SESSION tx_isolation='READ-COMMITTED'";
 $databases['default']['default']['init_commands']['lock_wait_timeout'] = "SET SESSION innodb_lock_wait_timeout = 20";
 $databases['default']['default']['init_commands']['wait_timeout'] = "SET SESSION wait_timeout = 600";
+
+// These settings force HTTPS for all content served by drupal
+// See: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/787
+$settings['reverse_proxy'] = TRUE;
+$settings['reverse_proxy_addresses'] = array($_SERVER['REMOTE_ADDR']);
+$settings['reverse_proxy_trusted_headers'] = \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_FOR | \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PROTO | \Symfony\Component\HttpFoundation\Request::HEADER_X_FORWARDED_PORT;
