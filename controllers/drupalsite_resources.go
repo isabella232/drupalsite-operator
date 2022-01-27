@@ -417,10 +417,18 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
 				log.V(3).Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
-				return newOidcReturnURI(OidcReturnURI, d, string(req))
+				return newOidcReturnURI(OidcReturnURI, d, string(req), true)
 			})
 			if err != nil {
 				log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+			}
+			OidcReturnURIHTTPS := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-https-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
+			_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURIHTTPS, func() error {
+				log.V(3).Info("Ensuring Resource", "Kind", OidcReturnURIHTTPS.TypeMeta.Kind, "Resource.Namespace", OidcReturnURIHTTPS.Namespace, "Resource.Name", OidcReturnURIHTTPS.Name)
+				return newOidcReturnURI(OidcReturnURIHTTPS, d, string(req), false)
+			})
+			if err != nil {
+				log.Error(err, "Failed to ensure Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURIHTTPS.Namespace, "Resource.Name", OidcReturnURIHTTPS.Name)
 			}
 		}
 		return nil
@@ -1398,7 +1406,8 @@ func routeForDrupalSite(currentobject *routev1.Route, d *webservicesv1a1.DrupalS
 }
 
 // newOidcReturnURI returns a oidcReturnURI object
-func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite, Url string) error {
+func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.DrupalSite, Url string, http bool) error {
+	returnURI := ""
 	addOwnerRefToObject(currentobject, asOwner(d))
 	url, err := url.Parse(Url)
 	if err != nil {
@@ -1418,7 +1427,11 @@ func newOidcReturnURI(currentobject *authz.OidcReturnURI, d *webservicesv1a1.Dru
 
 	// This will append `/openid-connect/*` to the URL, guaranteeing all subpaths of the link can be redirected
 	url.Path = path.Join(url.Path, "openid-connect")
-	returnURI := "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
+	if http {
+		returnURI = "http://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
+	} else {
+		returnURI = "https://" + url.String() + "/*" // Hardcoded since with path.Join method creates `%2A` which will not work in the AuthzAPI, and the prefix `http`
+	}
 	currentobject.Spec = authz.OidcReturnURISpec{
 		RedirectURI: returnURI,
 	}
