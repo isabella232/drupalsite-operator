@@ -241,9 +241,9 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 		}
 		if qosClass == webservicesv1a1.QoSTest {
 			// Test sites should request much fewer resources, but they can still afford to consume more if available (low QoS)
-			return ResourceRequestLimit("200Mi", "70m", "500Mi", "1000m")
+			return ResourceRequestLimit("150Mi", "70m", "500Mi", "1000m")
 		}
-		return ResourceRequestLimit("550Mi", "100m", "640Mi", "3000m")
+		return ResourceRequestLimit("300Mi", "100m", "640Mi", "3000m")
 	case "nginx":
 		if qosClass == webservicesv1a1.QoSCritical {
 			// We haven't seen any Nginx bottlenecks with critical sites so far
