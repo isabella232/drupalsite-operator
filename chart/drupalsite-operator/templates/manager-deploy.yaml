@@ -61,8 +61,8 @@ spec:
           name: qos-critical
         - mountPath: /tmp/runtime-config/qos-standard
           name: qos-standard
-        - mountPath: /tmp/runtime-config/qos-eco
-          name: qos-eco
+        - mountPath: /tmp/runtime-config/qos-test
+          name: qos-test
         - mountPath: /tmp/runtime-config/sitebuilder
           name: sitebuilder
       terminationGracePeriodSeconds: 10
@@ -73,9 +73,9 @@ spec:
       - name: qos-standard
         configMap:
           name: qos-standard
-      - name: qos-eco
+      - name: qos-test
         configMap:
-          name: qos-eco
+          name: qos-test
       - name: sitebuilder
         configMap:
           name: sitebuilder
