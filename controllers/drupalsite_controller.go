@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -320,6 +321,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
+	// The URL is dependent on BuildConfig name, which is based on nameVersionHash() function. Therefore it needs to be updated when there is a ReleaseID update
+	// For consistency, we update the field on every reconcile
+	if len(drupalSite.Spec.Configuration.ExtraConfigurationRepo) > 0 {
+		update = addGitlabWebhookToStatus(ctx, drupalSite) || update
+	}
+
 	// Update status with all the conditions that were checked
 	if update {
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
@@ -447,21 +455,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
-	switch {
-	case err != nil:
+	if err != nil {
 		return ctrl.Result{}, err
-	case len(backupList) != 0:
-		if backupListUpdateNeeded(backupList, drupalSite.Status.AvailableBackups) {
-			drupalSite.Status.AvailableBackups = updateBackupListStatus(backupList)
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
 	}
-
-	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
-	if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 && len(drupalSite.Status.GitlabWebhookURL) == 0 {
-		if err := r.addGitlabWebhookToStatus(ctx, drupalSite); err != nil {
-			return handleTransientErr(err, "Failed to add GitlabWebhookURL to status: %v", "")
-		}
+	if !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups) {
+		drupalSite.Status.AvailableBackups = backupList
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -622,7 +620,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 	}
 	if pod.Status.Phase == corev1.PodPending {
 		currentTime := time.Now()
-		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < 3 {
+		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodForPodToStartDuringUpgrade(d) {
 			return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
 		}
 		return false, newApplicationError(errors.New("pod failed to start after grace period"), ErrDeploymentUpdateFailed)
@@ -843,15 +841,15 @@ func getenvOrDie(name string, log logr.Logger) string {
 
 // addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
 // by querying the K8s API for API Server & Gitlab webhook trigger secret value
-func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+func addGitlabWebhookToStatus(ctx context.Context, drp *webservicesv1a1.DrupalSite) bool {
 	// Fetch the gitlab webhook trigger secret value
-	gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
-	err := r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
-	if err != nil {
-		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrClientK8s)
+	gitlabTriggerSecret := "gitlab-trigger-secret-" + drp.Name
+	webHookUrl := "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + drp.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drp) + "/webhooks/" + gitlabTriggerSecret + "/gitlab"
+	if drp.Status.GitlabWebhookURL != webHookUrl {
+		drp.Status.GitlabWebhookURL = webHookUrl
+		return true
 	}
-	d.Status.GitlabWebhookURL = "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
-	return nil
+	return false
 }
 
 // GetDrupalProjectConfig gets the DrupalProjectConfig for a Project

@@ -300,7 +300,8 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	}
 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
-	if drp.Status.IsPrimary || drp.Spec.Configuration.ScheduledBackups == "enabled" {
+	// Create Velero schedule only after site is initialized in order for the first backup to not report 'Failed' or 'PartiallyFailed' status
+	if drp.ConditionTrue("Initialized") && (drp.Status.IsPrimary || drp.Spec.Configuration.ScheduledBackups == "enabled") {
 		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 		}
@@ -745,9 +746,9 @@ func (r *DrupalSiteReconciler) ensureNoBackupSchedule(ctx context.Context, d *we
 }
 
 // checkNewBackups returns the list of velero backups that exist for a given site
-func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []velerov1.Backup, reconcileErr reconcileError) {
+func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (backups []webservicesv1a1.Backup, reconcileErr reconcileError) {
 	backupList := velerov1.BackupList{}
-	backups = make([]velerov1.Backup, 0)
+	backups = make([]webservicesv1a1.Backup, 0)
 	hash := md5.Sum([]byte(d.Namespace))
 	backupLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:])},
@@ -769,7 +770,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	default:
 		for i := range backupList.Items {
 			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
-				backups = append(backups, backupList.Items[i])
+				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: d.Name})
 			}
 		}
 	}
@@ -2074,17 +2075,6 @@ func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsLi
 		}
 	}
 	return false
-}
-
-// updateBackupListStatus updates the list of backups in the status of the DrupalSite
-func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1a1.Backup {
-	statusBackupsList := []webservicesv1a1.Backup{}
-	for _, v := range veleroBackupsList {
-		if value, bool := v.GetLabels()["drupal.webservices.cern.ch/drupalSite"]; bool {
-			statusBackupsList = append(statusBackupsList, webservicesv1a1.Backup{BackupName: v.Name, DrupalSiteName: value, Date: v.Status.CompletionTimestamp, Expires: v.Status.Expiration})
-		}
-	}
-	return statusBackupsList
 }
 
 // expectedDeploymentReplicas calculates expected replicas of deployment
