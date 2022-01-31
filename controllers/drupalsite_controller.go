@@ -321,6 +321,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
+	// The URL is dependent on BuildConfig name, which is based on nameVersionHash() function. Therefore it needs to be updated when there is a ReleaseID update
+	// For consistency, we update the field on every reconcile
+	if len(drupalSite.Spec.Configuration.ExtraConfigurationRepo) > 0 {
+		update = addGitlabWebhookToStatus(ctx, drupalSite) || update
+	}
+
 	// Update status with all the conditions that were checked
 	if update {
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
@@ -444,14 +451,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
 		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
-
-		// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
-		// The URL is dependent on BuildConfig name, which is based on nameVersionHash() function. Therefore it needs to be updated for every ReleaseID update
-		if len(drupalSite.Spec.ExtraConfigurationRepo) > 0 {
-			if err := r.addGitlabWebhookToStatus(ctx, drupalSite); err != nil {
-				return handleTransientErr(err, "Failed to add GitlabWebhookURL to status: %v", "")
-			}
-		}
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -842,15 +841,15 @@ func getenvOrDie(name string, log logr.Logger) string {
 
 // addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
 // by querying the K8s API for API Server & Gitlab webhook trigger secret value
-func (r *DrupalSiteReconciler) addGitlabWebhookToStatus(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
+func addGitlabWebhookToStatus(ctx context.Context, drp *webservicesv1a1.DrupalSite) bool {
 	// Fetch the gitlab webhook trigger secret value
-	gitlabTriggerSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
-	err := r.Get(ctx, types.NamespacedName{Name: gitlabTriggerSecret.Name, Namespace: gitlabTriggerSecret.Namespace}, gitlabTriggerSecret)
-	if err != nil {
-		return newApplicationError(errors.New("fetching gitlabTriggerSecret failed"), ErrClientK8s)
+	gitlabTriggerSecret := "gitlab-trigger-secret-" + drp.Name
+	webHookUrl := "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + drp.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drp) + "/webhooks/" + gitlabTriggerSecret + "/gitlab"
+	if drp.Status.GitlabWebhookURL != webHookUrl {
+		drp.Status.GitlabWebhookURL = webHookUrl
+		return true
 	}
-	d.Status.GitlabWebhookURL = "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + d.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(d) + "/webhooks/" + gitlabTriggerSecret.Name + "/gitlab"
-	return nil
+	return false
 }
 
 // GetDrupalProjectConfig gets the DrupalProjectConfig for a Project
