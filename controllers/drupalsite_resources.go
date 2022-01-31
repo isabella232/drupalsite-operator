@@ -2064,17 +2064,6 @@ func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsLi
 	return false
 }
 
-// updateBackupListStatus updates the list of backups in the status of the DrupalSite
-func updateBackupListStatus(veleroBackupsList []velerov1.Backup) []webservicesv1a1.Backup {
-	statusBackupsList := []webservicesv1a1.Backup{}
-	for _, v := range veleroBackupsList {
-		if value, bool := v.GetLabels()["drupal.webservices.cern.ch/drupalSite"]; bool {
-			statusBackupsList = append(statusBackupsList, webservicesv1a1.Backup{BackupName: v.Name, DrupalSiteName: value, Date: v.Status.CompletionTimestamp, Expires: v.Status.Expiration})
-		}
-	}
-	return statusBackupsList
-}
-
 // expectedDeploymentReplicas calculates expected replicas of deployment
 func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, qosClass webservicesv1a1.QoSClass) (int32, error) {
 	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
