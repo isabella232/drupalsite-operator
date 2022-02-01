@@ -1,6 +1,6 @@
 module gitlab.cern.ch/drupal/paas/drupalsite-operator
 
-go 1.15
+go 1.16
 
 require (
 	cloud.google.com/go/container v1.0.0 // indirect
