@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"flag"
 	"path/filepath"
 	"testing"
@@ -49,6 +50,7 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var cancel context.CancelFunc
 
 func init() {
 	flag.StringVar(&SiteBuilderImage, "sitebuilder-image", "", "The sitebuilder source image name.")
@@ -67,12 +69,12 @@ var scheme = runtime.NewScheme()
 var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	customApiServerFlags := []string{
-		"--secure-port=6884",
-	}
+	// customApiServerFlags := []string{
+	// 	"--secure-port=6884",
+	// }
 
-	apiServerFlags := append([]string(nil), envtest.DefaultKubeAPIServerFlags...)
-	apiServerFlags = append(apiServerFlags, customApiServerFlags...)
+	// apiServerFlags := append([]string(nil), envtest.DefaultKubeAPIServerFlags...)
+	// apiServerFlags = append(apiServerFlags, customApiServerFlags...)
 
 	SiteBuilderImage = "gitlab-registry.cern.ch/drupal/paas/drupal-runtime/site-builder"
 	VeleroNamespace = "openshift-cern-drupal"
@@ -89,11 +91,14 @@ var _ = BeforeSuite(func(done Done) {
 			filepath.Join("..", "config", "crd", "bases"),
 			filepath.Join("..", "testResources", "mock_crd"),
 		},
-		BinaryAssetsDirectory: filepath.Join("..", "testbin", "bin"),
 		ErrorIfCRDPathMissing: true,
-		KubeAPIServerFlags:    apiServerFlags,
+		// KubeAPIServerFlags:    apiServerFlags,
 		// AttachControlPlaneOutput: true,
 	}
+
+	var ctx context.Context
+	ctx, cancel = context.WithCancel(context.Background())
+
 	err := drupalwebservicesv1alpha1.AddToScheme(scheme)
 	Expect(err).NotTo(HaveOccurred())
 	// +kubebuilder:scaffold:scheme
@@ -142,7 +147,7 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
@@ -154,6 +159,7 @@ var _ = BeforeSuite(func(done Done) {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
+	cancel() // stop manager
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
-})
+}, 100)

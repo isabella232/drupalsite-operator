@@ -28,16 +28,14 @@ endif
 all: manager
 
 # Run tests
-# Copy runtime config to /tmp and setup envtest assets before running the tests
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+ENVTEST := $(shell pwd)/bin/setup-envtest
 ENVTEST_K8S_VERSION = 1.21
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-test: generate fmt vet manifests
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	cp -r chart/drupalsite-operator/runtime-config/ /tmp/
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR);
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v
+setup-envtest-bin: ## Download setup-envtest locally if necessary
+	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+	$(ENVTEST) use ${ENVTEST_K8S_VERSION}
+	
+test: setup-envtest-bin
+	source <(${ENVTEST} use -p env ${ENVTEST_K8S_VERSION}); go test ./... -coverprofile cover.out -v
 
 # Build manager binary
 manager: generate fmt vet
@@ -124,3 +122,4 @@ bundle: manifests kustomize
 .PHONY: bundle-build
 bundle-build:
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+
