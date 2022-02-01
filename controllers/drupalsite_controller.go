@@ -129,6 +129,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&dbodv1a1.Database{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&pipelinev1.TaskRun{}).
 		Watches(&source.Kind{Type: &velerov1.Backup{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {
