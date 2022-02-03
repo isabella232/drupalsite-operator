@@ -72,7 +72,7 @@ var (
 	VeleroNamespace string
 	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
 	DefaultD8ReleaseSpec string
-	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 9 to be defaulted incase it is empty
+	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 9.2 to be defaulted incase it is empty
 	DefaultD9ReleaseSpec string
 	// DefaultD93ReleaseSpec refers to the releaseSpec for Drupal 9.3 to be defaulted incase it is empty
 	DefaultD93ReleaseSpec string
