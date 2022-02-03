@@ -83,6 +83,7 @@ func main() {
 	flag.StringVar(&controllers.VeleroNamespace, "velero-namespace", "openshift-cern-drupal", "The namespace of the Velero server to create backups")
 	flag.StringVar(&controllers.DefaultD8ReleaseSpec, "default-d8-release-spec", "RELEASE-2022.01.17T12-36-36Z", "The default releaseSpec value to be passed to the DrupalSites")
 	flag.StringVar(&controllers.DefaultD9ReleaseSpec, "default-d9-release-spec", "RELEASE-2022.01.17T12-36-51Z", "The default releaseSpec value to be passed to the DrupalSites")
+	flag.StringVar(&controllers.DefaultD93ReleaseSpec, "default-d93-release-spec", "RELEASE-2022.02.03T11-18-39Z", "The default releaseSpec value to be passed to the DrupalSites")
 	flag.IntVar(&controllers.ParallelThreadCount, "parallel-thread-count", 1, "The default number of parallel threads executed by the DrupalSite Operator controllers")
 	flag.BoolVar(&controllers.EnableTopologySpread, "enable-topology-spread", false, "Enable avaliability zone scheduling for critical site deployments")
 	flag.StringVar(&controllers.ClusterName, "cluster-name", "", "Name of the cluster the operator is deployed on")
