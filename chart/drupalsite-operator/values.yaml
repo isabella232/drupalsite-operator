@@ -27,6 +27,7 @@ drupalsiteOperator:
   defaultReleaseSpec: "RELEASE-2022.01.17T12-36-36Z"
   # defaultReleaseSpec refers to the default D9 releaseSpec
   defaultD9ReleaseSpec: "RELEASE-2022.01.17T12-36-51Z"
+  defaultD93ReleaseSpec: "RELEASE-2022.02.03T11-18-39Z"
   parallelThreadCount: 1
   # Topology spread adds an anti-affinity rule to the server deployment, spreading critical sites across availability zones
   enableTopologySpread: false
