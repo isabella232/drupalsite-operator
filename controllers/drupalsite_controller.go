@@ -338,36 +338,56 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 	updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
+	if reconcileErr != nil {
+		handleNonfatalErr(reconcileErr, "%v while checking if an update is needed", "")
+	}
+	dbUpdateNeeded, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
+	if reconcileErr != nil {
+		handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed", "")
+	}
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
-	if !isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
-		switch {
-		case reconcileErr != nil:
-			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed", "")
-		case updateNeeded:
-			if setUpdateInProgress(drupalSite) {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
+	// 1. Decide the value of the annotation "updateInProgress"
+	switch {
+	case updateNeeded || dbUpdateNeeded:
+		if setUpdateInProgress(drupalSite) {
+			return r.updateCRorFailReconcile(ctx, log, drupalSite)
+		}
+	case !(updateNeeded || dbUpdateNeeded):
+		if unsetUpdateInProgress(drupalSite) {
+			return r.updateCRorFailReconcile(ctx, log, drupalSite)
 		}
 	}
+	// 2. Set status condition DBUpdatesPending
+	switch {
+	case dbUpdateNeeded:
+		if setDBUpdatesPending(drupalSite) {
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	case !dbUpdateNeeded:
+		if removeDBUpdatesPending(drupalSite) {
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
 	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
-	updateNeeded, reconcileErr = r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
+	update, reconcileErr = r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
 	switch {
 	case err != nil:
 		log.Error(err, fmt.Sprintf("%v failed to declare this DrupalSite as Primary", reconcileErr.Unwrap()))
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	case updateNeeded:
+	case update:
 		log.Info("Updating DrupalProjectConfig ")
 		r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig)
 	}
 	// Check if current instance is the Primary Drupalsite
-	updateNeeded, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
+	update, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
 	switch {
 	case err != nil:
 		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	case updateNeeded:
+	case update:
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -651,6 +671,20 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 	return false, nil
 }
 
+// dbUpdateNeeded checks updbst to see if DB updates are needed
+func (r *DrupalSiteReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
+	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
+	if err != nil {
+		return true, newApplicationError(err, ErrPodExec)
+	}
+	// DB table updates needed
+	if sout != "" {
+		return true, nil
+	}
+	// No db table updates needed
+	return false, nil
+}
+
 // GetDeploymentCondition returns the condition with the provided type.
 func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.DeploymentConditionType) *appsv1.DeploymentCondition {
 	for i := range status.Conditions {
@@ -801,14 +835,9 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 		}
 	}
 	// DB update successful, remove conditions
-	if d.ConditionTrue("DBUpdatesPending") {
-		d.Status.Conditions.RemoveCondition("DBUpdatesPending")
-		if d.ConditionTrue("DBUpdatesFailed") {
-			d.Status.Conditions.RemoveCondition("DBUpdatesFailed")
-		}
-		return true
-	}
-	return false
+	update = d.Status.Conditions.RemoveCondition("DBUpdatesPending")
+	update = d.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
+	return
 }
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called

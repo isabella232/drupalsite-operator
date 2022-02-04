@@ -120,6 +120,12 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 	})
 }
 
+// removeDBUpdatesPending removes the 'DBUpdatesPending' status on the drupalSite object
+func removeDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
+	return drp.Status.Conditions.RemoveCondition("DBUpdatesPending")
+
+}
+
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
 func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) {
 	if err := r.Update(ctx, dpc); err != nil {
