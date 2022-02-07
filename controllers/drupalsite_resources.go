@@ -1202,6 +1202,30 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		case "php-fpm":
 			currentobject.Spec.Template.Spec.Containers[i].Command = []string{"/run-php-fpm.sh"}
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpResources
+			currentobject.Spec.Template.Spec.Containers[i].LivenessProbe = &v1.Probe{
+				Handler: v1.Handler{
+					Exec: &v1.ExecAction{
+						Command: customProbe("liveness"),
+					},
+				},
+				InitialDelaySeconds: 600, // Restarting soon after initialization can't fix anything
+				TimeoutSeconds:      60,
+				PeriodSeconds:       90,
+				FailureThreshold:    5,
+				SuccessThreshold:    1,
+			}
+			currentobject.Spec.Template.Spec.Containers[i].StartupProbe = &v1.Probe{
+				Handler: v1.Handler{
+					Exec: &v1.ExecAction{
+						Command: startupProbe(),
+					},
+				},
+				InitialDelaySeconds: 2, // fast check, since this is a startup probe
+				TimeoutSeconds:      3,
+				PeriodSeconds:       3,
+				FailureThreshold:    3,
+				SuccessThreshold:    1,
+			}
 		case "php-fpm-exporter":
 			currentobject.Spec.Template.Spec.Containers[i].Image = PhpFpmExporterImage
 			currentobject.Spec.Template.Spec.Containers[i].Resources = config.phpExporterResources
@@ -2061,6 +2085,16 @@ func syncDrupalFilesToEmptydir() []string {
 // tailDrupalLogs outputs the command to tail the drupal log file
 func tailDrupalLogs() []string {
 	return []string{"/operations/tail-drupal-logs.sh"}
+}
+
+// customProbe outputs the command to check the /user/login
+func customProbe(probe string) []string {
+	return []string{"/operations/probe-site.sh", "-p", probe}
+}
+
+// startupProbe outputs the command to check the /_site/_php-fpm-status
+func startupProbe() []string {
+	return []string{"/operations/startup-probe-site.sh"}
 }
 
 // backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
