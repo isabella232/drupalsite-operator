@@ -929,6 +929,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, key, &cr)
 				}, timeout, interval).Should(Succeed())
+
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
 				backup := velerov1.Backup{
@@ -1770,6 +1771,7 @@ var _ = Describe("DrupalSite controller", func() {
 				Eventually(func() error {
 					return k8sClient.Get(ctx, key, &cr)
 				}, timeout, interval).Should(Succeed())
+
 				// Create a backup resource for the drupalSite
 				hash := md5.Sum([]byte(key.Namespace))
 				backup := velerov1.Backup{
