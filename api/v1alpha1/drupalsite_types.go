@@ -226,6 +226,18 @@ func (drp DrupalSite) ConditionTrue(condition status.ConditionType) (update bool
 	return init != nil && init.Status == v1.ConditionTrue
 }
 
+// ConditionFalse reports if the condition is true
+func (drp DrupalSite) ConditionFalse(condition status.ConditionType) (update bool) {
+	init := drp.Status.Conditions.GetCondition(condition)
+	return init != nil && init.Status == v1.ConditionFalse
+}
+
+// ConditionUnknown reports if the condition is true
+func (drp DrupalSite) ConditionUnknown(condition status.ConditionType) (update bool) {
+	init := drp.Status.Conditions.GetCondition(condition)
+	return init != nil && init.Status == v1.ConditionUnknown
+}
+
 // ConditionReasonSet reports if the condition Reason is not empty
 func (drp DrupalSite) ConditionReasonSet(condition status.ConditionType) (update bool) {
 	init := drp.Status.Conditions.GetCondition(condition)

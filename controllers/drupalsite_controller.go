@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -393,7 +392,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
 	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
-	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
+	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
 		if reconcileErr != nil {
 			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed", "")
@@ -424,6 +423,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if removeDBUpdatesPending(drupalSite) {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
+		}
+	}
+	if drupalSite.ConditionTrue("CodeUpdateFailed") {
+		if unsetUpdateInProgress(drupalSite) {
+			return r.updateCRorFailReconcile(ctx, log, drupalSite)
+		}
+		// Set condition unknown
+		if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 	}
 
@@ -671,6 +679,7 @@ func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv
 }
 
 // dbUpdateNeeded checks updbst to see if DB updates are needed
+// If there is an error, the return value is false
 func (r *DrupalSiteReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
 	if err != nil {
@@ -692,22 +701,6 @@ func GetDeploymentCondition(status appsv1.DeploymentStatus, condType appsv1.Depl
 		c := status.Conditions[i]
 		if c.Type == condType {
 			return &c
-		}
-	}
-	return nil
-}
-
-func (r *DrupalSiteReconciler) checkBuildstatusForUpdate(ctx context.Context, d *webservicesv1a1.DrupalSite) reconcileError {
-	// Check status of the S2i buildconfig if the extraConfigurationRepo field is set
-	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
-		status, err := r.getBuildStatus(ctx, "sitebuilder-s2i-", d)
-		switch {
-		case err != nil:
-			return newApplicationError(err, ErrClientK8s)
-		case status == buildv1.BuildPhaseFailed || status == buildv1.BuildPhaseError:
-			return newApplicationError(nil, ErrBuildFailed)
-		case status != buildv1.BuildPhaseComplete:
-			return newApplicationError(err, ErrTemporary)
 		}
 	}
 	return nil
@@ -826,11 +819,8 @@ func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservice
 		// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
 		_, err = r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
 		if err != nil {
-			err = r.rollBackDBUpdate(ctx, d, backupFileName)
-			if err != nil {
-				setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
-				return true
-			}
+			// Removing rollBackDBUpdate as we broken sites to keep up with updating
+			// We let the site administrators to rectify the problem manually
 			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
 			return true
 		}
@@ -866,16 +856,7 @@ func (r *DrupalSiteReconciler) rollBackDBUpdate(ctx context.Context, d *webservi
 	return nil
 }
 
-// getenvOrDie checks for the given variable in the environment, if not exists
-func getenvOrDie(name string, log logr.Logger) string {
-	e := os.Getenv(name)
-	if e == "" {
-		log.V(1).Info(name + ": missing environment variable (unset or empty string)")
-		os.Exit(1)
-	}
-	return e
-}
-
+// getenvOrDie checks for the given variable in the environm
 // addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
 // by querying the K8s API for API Server & Gitlab webhook trigger secret value
 func addGitlabWebhookToStatus(ctx context.Context, drp *webservicesv1a1.DrupalSite) bool {
