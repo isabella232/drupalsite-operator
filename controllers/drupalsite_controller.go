@@ -552,7 +552,7 @@ func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.L
 	log.V(1).Info("Deleting DrupalSite")
 
 	// Remove site from DrupalProjectConfig if it was the primary site
-	if dpc.Spec.PrimarySiteName == drp.Name {
+	if dpc != nil && dpc.Spec.PrimarySiteName == drp.Name {
 		dpc.Spec.PrimarySiteName = ""
 		return r.updateCRorFailReconcile(ctx, log, drp)
 	}
