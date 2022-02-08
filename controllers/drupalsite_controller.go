@@ -334,6 +334,9 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = addGitlabWebhookToStatus(ctx, drupalSite) || update
 	}
 
+	// Check if current instance is the Primary Drupalsite and update Status
+	update = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig) || update
+
 	// Update status with all the conditions that were checked
 	if update {
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
@@ -348,21 +351,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	case updateProjectConfig:
 		log.Info("Proclaiming this site as primary in DrupalProjectConfig")
+		r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
 		if err = r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig); err != nil {
 			handleNonfatalErr(newApplicationError(err, ErrClientK8s), "%v while updating DrupalProjectConfig")
 		}
-	}
-
-	// Check if current instance is the Primary Drupalsite and update Status
-	update, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
-	switch {
-	case reconcileErr != nil:
-		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is the primary site", reconcileErr.Unwrap()))
-		setErrorCondition(drupalSite, reconcileErr)
-		// NOTE: this is a fatal error because we don't want to take wrong actions if we can't assert if this is the primary site
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	case update:
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
@@ -943,20 +935,17 @@ func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, 
 }
 
 //checkIfPrimaryDrupalSite updates the status of the current Drupalsite to show if it is the primary site according to the DrupalProjectConfig
-func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileErr reconcileError) {
-	update = false
+func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) bool {
 	if dpc == nil {
-		return
+		return false
 	}
 	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
 	if drp.Name == dpc.Spec.PrimarySiteName && !drp.Status.IsPrimary {
-		update = true
 		drp.Status.IsPrimary = true
-		return
+		return true
 	} else if drp.Name != dpc.Spec.PrimarySiteName && drp.Status.IsPrimary {
-		update = true
 		drp.Status.IsPrimary = false
-		return
+		return true
 	}
-	return
+	return false
 }
