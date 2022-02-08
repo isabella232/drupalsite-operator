@@ -217,11 +217,19 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(err, "Failed to get DrupalSite")
 		return ctrl.Result{}, err
 	}
+	// Fetch the DrupalProjectConfig Resource
+	drupalProjectConfig, err := r.GetDrupalProjectConfig(ctx, drupalSite)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to retrieve DrupalProjectConfig", err))
+		// Although we log an Error, we will allow the reconcile to continue, as the absence of the resource does not mean DrupalSite cannot be processed
+		// Populate resource as nil
+		drupalProjectConfig = nil
+	}
 
 	//Handle deletion
 	if drupalSite.GetDeletionTimestamp() != nil {
 		if controllerutil.ContainsFinalizer(drupalSite, finalizerStr) {
-			return r.cleanupDrupalSite(ctx, log, drupalSite)
+			return r.cleanupDrupalSite(ctx, log, drupalSite, drupalProjectConfig)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -265,15 +273,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(err, fmt.Sprintf("%v failed to validate DrupalSite spec", err.Unwrap()))
 		setErrorCondition(drupalSite, err)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	}
-
-	// Retrieve the DrupalProjectConfig Resource
-	drupalProjectConfig, err := r.GetDrupalProjectConfig(ctx, drupalSite)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to retrieve DrupalProjectConfig", err))
-		// Although we log an Error, we will allow the reconcile to continue, as the absence of the resource does not mean DrupalSite cannot be processed
-		// Populate resource as nil
-		drupalProjectConfig = nil
 	}
 
 	// 2. Check all conditions and update if needed
@@ -548,8 +547,16 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 }
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
-func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
+// It also removes the site from the DrupalProjectConfig in case it was the primary site.
+func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (ctrl.Result, error) {
 	log.V(1).Info("Deleting DrupalSite")
+
+	// Remove site from DrupalProjectConfig if it was the primary site
+	if dpc != nil && dpc.Spec.PrimarySiteName == drp.Name {
+		dpc.Spec.PrimarySiteName = ""
+		return r.updateCRorFailReconcile(ctx, log, drp)
+	}
+
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
 	if err := r.ensureNoBackupSchedule(ctx, drp, log); err != nil {
 		return ctrl.Result{}, err
