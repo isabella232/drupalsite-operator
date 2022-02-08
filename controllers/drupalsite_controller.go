@@ -657,6 +657,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 }
 
 // UpdateNeeded checks if a code or DB update is required based on the image tag and releaseID in the CR spec and the drush status
+// Only safe to call `if d.ConditionTrue("Ready") && d.ConditionTrue("Initialized")`
 func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	deployment, err := r.getRunningdeployment(ctx, d)
 	if err != nil {
