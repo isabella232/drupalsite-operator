@@ -126,13 +126,16 @@ func removeDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) {
-	if err := r.Update(ctx, dpc); err != nil {
+func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) error {
+	err := r.Update(ctx, dpc)
+	if err != nil {
 		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			log.V(4).Info("DrupalProjectConfig changed while reconciling. Requeuing.")
+		} else {
+			log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
 		}
-		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
 	}
+	return err
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
@@ -140,7 +143,7 @@ func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log 
 	reconcile.Result, error) {
 	if err := r.Update(ctx, drp); err != nil {
 		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			log.V(4).Info("DrupalSite changed while reconciling. Requeuing.")
 			return reconcile.Result{Requeue: true}, nil
 		}
 		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
@@ -154,7 +157,7 @@ func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context
 	reconcile.Result, error) {
 	if err := r.Status().Update(ctx, drp); err != nil {
 		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("Object changed while reconciling. Requeuing.")
+			log.V(4).Info("DrupalSite.Status changed while reconciling. Requeuing.")
 			return reconcile.Result{Requeue: true}, nil
 		}
 		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))

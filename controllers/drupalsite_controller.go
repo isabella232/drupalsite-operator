@@ -247,7 +247,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(transientErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		return reconcile.Result{}, nil
 	}
-	handleNonfatalErr := func(nonfatalErr reconcileError, logstrFmt string, status string) {
+	// Log and schedule a new reconciliation
+	handleNonfatalErr := func(nonfatalErr reconcileError, logstrFmt string) {
+		if nonfatalErr == nil {
+			return
+		}
 		if nonfatalErr.Temporary() {
 			log.Error(nonfatalErr, fmt.Sprintf(logstrFmt, nonfatalErr.Unwrap()))
 		} else {
@@ -274,7 +278,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// 2. Check all conditions and update if needed
+	// 2. Check all conditions and update them if needed
 	update := false
 
 	// Set Current version
@@ -302,6 +306,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// In situations where there are no db updates, but 'DBUpdatesPending' is set without a 'DBUpdatesFailed' status, remove the 'DBUpdatesPending'
+	// TODO: probably this has to go, we confirm this later on
 	if drupalSite.ConditionTrue("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
 		sout, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, checkUpdbStatus()...)
 		if err != nil {
@@ -335,26 +340,92 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
-	update, reconcileErr := r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
+	updateProjectConfig, reconcileErr := r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
 	switch {
 	case err != nil:
 		log.Error(err, fmt.Sprintf("%v failed to declare this DrupalSite as Primary", reconcileErr.Unwrap()))
 		setErrorCondition(drupalSite, reconcileErr)
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	case update:
-		log.Info("Updating DrupalProjectConfig ")
-		r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig)
+	case updateProjectConfig:
+		log.Info("Proclaiming this site as primary in DrupalProjectConfig")
+		if err = r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig); err != nil {
+			handleNonfatalErr(newApplicationError(err, ErrClientK8s), "%v while updating DrupalProjectConfig")
+		}
 	}
-	// Check if current instance is the Primary Drupalsite
+
+	// Check if current instance is the Primary Drupalsite and update Status
 	update, reconcileErr = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
 	switch {
-	case err != nil:
-		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is Primary", reconcileErr.Unwrap()))
+	case reconcileErr != nil:
+		log.Error(err, fmt.Sprintf("%v failed to validate if DrupalSite is the primary site", reconcileErr.Unwrap()))
 		setErrorCondition(drupalSite, reconcileErr)
+		// NOTE: this is a fatal error because we don't want to take wrong actions if we can't assert if this is the primary site
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	case update:
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
+
+	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
+	switch {
+	case err != nil:
+		log.Error(err, fmt.Sprintf("%v failed to check for new backups", reconcileErr.Unwrap()))
+		return ctrl.Result{}, err
+	case !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups):
+		drupalSite.Status.AvailableBackups = backupList
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	}
+
+	// 2.1 Set conditions related to update
+
+	// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
+	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
+	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
+	codeUpdateNeeded := false
+	dbUpdateNeeded := false
+	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		codeUpdateNeeded, reconcileErr = r.updateNeeded(ctx, drupalSite)
+		if reconcileErr != nil {
+			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed")
+		}
+		dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
+		if reconcileErr != nil {
+			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
+		}
+		// 1. Decide the value of the annotation "updateInProgress"
+		switch {
+		case (codeUpdateNeeded || dbUpdateNeeded):
+			if setUpdateInProgress(drupalSite) {
+				return r.updateCRorFailReconcile(ctx, log, drupalSite)
+			}
+		case !(codeUpdateNeeded || dbUpdateNeeded):
+			// We only unset here, when the failSafe and current are the same i.e the update succeeded
+			if unsetUpdateInProgress(drupalSite) {
+				return r.updateCRorFailReconcile(ctx, log, drupalSite)
+			}
+		}
+		// 2. Set status condition DBUpdatesPending
+		switch {
+		case dbUpdateNeeded:
+			if setDBUpdatesPending(drupalSite) {
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			}
+		case !dbUpdateNeeded:
+			if removeDBUpdatesPending(drupalSite) {
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			}
+		}
+	}
+	if drupalSite.ConditionTrue("CodeUpdateFailed") {
+		if unsetUpdateInProgress(drupalSite) {
+			return r.updateCRorFailReconcile(ctx, log, drupalSite)
+		}
+		// Set condition unknown
+		if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
+	log.V(3).Info("Status up to date.")
 
 	// 3. After all conditions have been checked, perform actions relying on the Conditions for information.
 
@@ -388,59 +459,26 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{Requeue: true}, nil
 	}
 
-	// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
-	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
-	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
-	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
-		updateNeeded, reconcileErr := r.updateNeeded(ctx, drupalSite)
-		if reconcileErr != nil {
-			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed", "")
+	log.V(3).Info("Ensured all resources are present.")
+
+	// 4. Check DBOD has been provisioned and reconcile if needed
+
+	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
+		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
+			r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
-		dbUpdateNeeded, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
-		if reconcileErr != nil {
-			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed", "")
-		}
-		// 1. Decide the value of the annotation "updateInProgress"
-		switch {
-		case (updateNeeded || dbUpdateNeeded):
-			if setUpdateInProgress(drupalSite) {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
-		case !(updateNeeded || dbUpdateNeeded):
-			// We only unset here, when the failSafe and current are the same i.e the update succeeded
-			if unsetUpdateInProgress(drupalSite) {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
-		}
-		// 2. Set status condition DBUpdatesPending
-		switch {
-		case dbUpdateNeeded:
-			if setDBUpdatesPending(drupalSite) {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		case !dbUpdateNeeded:
-			if removeDBUpdatesPending(drupalSite) {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		}
-	}
-	if drupalSite.ConditionTrue("CodeUpdateFailed") {
-		if unsetUpdateInProgress(drupalSite) {
-			return r.updateCRorFailReconcile(ctx, log, drupalSite)
-		}
-		// Set condition unknown
-		if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
+		return reconcile.Result{Requeue: true}, nil
 	}
 
-	// Set "UpdateNeeded" and perform code update
+	// 5. Perform drupalsite updates
+
+	// Perform code update if needed
 	// 1. set the Status.ReleaseID.Failsafe
 	// 2. ensure updated deployment
 	// 3. set condition "CodeUpdateFailed" to true if there is an unrecoverable error & rollback
 
 	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
-	if isUpdateAnnotationSet && !drupalSite.ConditionTrue("CodeUpdateFailed") && !drupalSite.ConditionTrue("DBUpdatesPending") {
+	if isUpdateAnnotationSet && codeUpdateNeeded && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, deploymentConfig)
 		switch {
 		case err != nil:
@@ -464,33 +502,17 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Remove site from maintenance mode
 	// Restore backup in case of a failure
 
-	if isUpdateAnnotationSet && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+	if isUpdateAnnotationSet && dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		if update := r.updateDBSchema(ctx, drupalSite, log); update {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 	}
 
-	// 4. Check DBOD has been provisioned and reconcile if needed
-	if dbodReady := r.isDBODProvisioned(ctx, drupalSite); !dbodReady {
-		if update := setNotReady(drupalSite, newApplicationError(nil, ErrDBOD)); update {
-			r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-		return reconcile.Result{Requeue: true}, nil
-	}
-
 	// Update the Failsafe during the first instantiation and after a successful update
 	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
+		// TODO: this probably has to be changed after `ensureResources`, much before here
 		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	}
-
-	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups) {
-		drupalSite.Status.AvailableBackups = backupList
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
@@ -583,8 +605,9 @@ func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.L
 	// Remove site from DrupalProjectConfig if it was the primary site
 	if dpc != nil && dpc.Spec.PrimarySiteName == drp.Name {
 		dpc.Spec.PrimarySiteName = ""
-		r.updateDrupalProjectConfigCR(ctx, log, dpc)
-		return r.updateCRorFailReconcile(ctx, log, drp)
+		if err := r.updateDrupalProjectConfigCR(ctx, log, dpc); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
