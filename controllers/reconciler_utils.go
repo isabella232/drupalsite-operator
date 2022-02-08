@@ -351,9 +351,5 @@ func generateScheduleName(namespace string, siteName string) string {
 
 // getGracePeriodForPodToStartDuringUpgrade returns the time in minutes to wait for the new version of Drupal pod to start during version upgrade
 func getGracePeriodForPodToStartDuringUpgrade(d *webservicesv1a1.DrupalSite) float64 {
-	// Wait longer for S2I sites as the build takes longer to complete
-	if len(d.Spec.ExtraConfigurationRepo) > 0 {
-		return 10
-	}
-	return 3
+	return 10 // 10minutes
 }
