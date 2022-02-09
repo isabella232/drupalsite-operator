@@ -368,7 +368,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		webdav_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "webdav-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, webdav_secret, func() error {
-			log.V(3).Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
+			log.V(4).Info("Ensuring Resource", "Kind", webdav_secret.TypeMeta.Kind, "Resource.Namespace", webdav_secret.Namespace, "Resource.Name", webdav_secret.Name)
 			return secretForWebDAV(webdav_secret, d)
 		})
 		if err != nil {
@@ -417,7 +417,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			hash := md5.Sum([]byte(req))
 			OidcReturnURI := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURI, func() error {
-				log.V(3).Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
+				log.V(4).Info("Ensuring Resource", "Kind", OidcReturnURI.TypeMeta.Kind, "Resource.Namespace", OidcReturnURI.Namespace, "Resource.Name", OidcReturnURI.Name)
 				return newOidcReturnURI(OidcReturnURI, d, string(req), true)
 			})
 			if err != nil {
@@ -425,7 +425,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			}
 			OidcReturnURIHTTPS := &authz.OidcReturnURI{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-https-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
 			_, err = controllerruntime.CreateOrUpdate(ctx, r.Client, OidcReturnURIHTTPS, func() error {
-				log.V(3).Info("Ensuring Resource", "Kind", OidcReturnURIHTTPS.TypeMeta.Kind, "Resource.Namespace", OidcReturnURIHTTPS.Namespace, "Resource.Name", OidcReturnURIHTTPS.Name)
+				log.V(4).Info("Ensuring Resource", "Kind", OidcReturnURIHTTPS.TypeMeta.Kind, "Resource.Namespace", OidcReturnURIHTTPS.Namespace, "Resource.Name", OidcReturnURIHTTPS.Name)
 				return newOidcReturnURI(OidcReturnURIHTTPS, d, string(req), false)
 			})
 			if err != nil {
@@ -453,7 +453,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {
 			job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "clone-" + d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, job, func() error {
-				log.V(3).Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
+				log.V(4).Info("Ensuring Resource", "Kind", job.TypeMeta.Kind, "Resource.Namespace", job.Namespace, "Resource.Name", job.Name)
 				return jobForDrupalSiteClone(job, databaseSecret, d)
 			})
 			if err != nil {
@@ -467,7 +467,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 			taskRun := &pipelinev1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "easystart-" + d.Name, Namespace: d.Namespace}}
 			_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, taskRun, func() error {
-				log.V(3).Info("Ensuring Resource", "Kind", taskRun.TypeMeta.Kind, "Resource.Namespace", taskRun.Namespace, "Resource.Name", taskRun.Name)
+				log.V(4).Info("Ensuring Resource", "Kind", taskRun.TypeMeta.Kind, "Resource.Namespace", taskRun.Namespace, "Resource.Name", taskRun.Name)
 				return taskRunForEasystartRestore(taskRun, d)
 			})
 			if err != nil {
@@ -556,7 +556,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		// In order to shorten this name we'll have to change the deployment to enforce the volumes.
 		gitlab_trigger_secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "gitlab-trigger-secret-" + d.Name, Namespace: d.Namespace}}
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, gitlab_trigger_secret, func() error {
-			log.V(3).Info("Ensuring Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
+			log.V(4).Info("Ensuring Resource", "Kind", gitlab_trigger_secret.TypeMeta.Kind, "Resource.Namespace", gitlab_trigger_secret.Namespace, "Resource.Name", gitlab_trigger_secret.Name)
 			return secretForS2iGitlabTrigger(gitlab_trigger_secret, d)
 		})
 		if err != nil {
