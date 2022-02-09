@@ -305,18 +305,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// In situations where there are no db updates, but 'DBUpdatesPending' is set without a 'DBUpdatesFailed' status, remove the 'DBUpdatesPending'
-	// TODO: probably this has to go, we confirm this later on
-	if drupalSite.ConditionTrue("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") {
-		sout, err := r.execToServerPodErrOnStderr(ctx, drupalSite, "php-fpm", nil, checkUpdbStatus()...)
-		if err != nil {
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-		if sout == "" {
-			update = drupalSite.Status.Conditions.RemoveCondition("DBUpdatesPending") || update
-		}
-	}
-
 	// After a failed update, to be able to restore the site back to the last running version, the status error fields have to be removed if they are set
 	if drupalSite.Status.ReleaseID.Failsafe == releaseID(drupalSite) {
 		if drupalSite.ConditionTrue("CodeUpdateFailed") {
