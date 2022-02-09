@@ -350,7 +350,8 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	case err != nil:
 		log.Error(err, fmt.Sprintf("%v failed to check for new backups", reconcileErr.Unwrap()))
 		return ctrl.Result{}, err
-	case !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups):
+	// DeepEqual returns false when one of the slice is empty
+	case len(backupList) != len(drupalSite.Status.AvailableBackups) && !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups):
 		drupalSite.Status.AvailableBackups = backupList
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
@@ -367,9 +368,12 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if reconcileErr != nil {
 			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed")
 		}
-		dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
-		if reconcileErr != nil {
-			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
+		// Check for db updates only when codeUpdateNeeded is not inProgress
+		if !codeUpdateNeeded {
+			dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
+			if reconcileErr != nil {
+				handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
+			}
 		}
 		// 1. Decide the value of the annotation "updateInProgress"
 		switch {
@@ -683,7 +687,8 @@ func (r *DrupalSiteReconciler) codeUpdateNeeded(ctx context.Context, d *webservi
 		return false, newApplicationError(err, ErrClientK8s)
 	}
 	// Check if image is different, check if current site is ready and installed
-	if deployment.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) {
+	// Also check if failSafe and Current are different. If they are different, it means the deployment hasn't rolled out
+	if deployment.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) || (len(d.Status.ReleaseID.Failsafe) > 0 && d.Status.ReleaseID.Failsafe != d.Status.ReleaseID.Current) {
 		return true, nil
 	}
 	return false, nil
