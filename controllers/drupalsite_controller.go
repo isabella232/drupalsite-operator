@@ -687,7 +687,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 	return false, nil
 }
 
-// UpdateNeeded checks if a code or DB update is required based on the image tag and releaseID in the CR spec and the drush status
+// UpdateNeeded checks if a DB update is required based on the image tag and releaseID in the CR spec.
 // Only safe to call `if d.ConditionTrue("Ready") && d.ConditionTrue("Initialized")`
 func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	deployment, err := r.getRunningdeployment(ctx, d)
@@ -820,33 +820,22 @@ func (r *DrupalSiteReconciler) updateDrupalVersion(ctx context.Context, d *webse
 // 5. If there is a permanent unrecoverable error, restore the DB using the backup and set 'DBUpdateFailed' status
 // 6. If no error, remove the 'DBUpdatesPending' status and continue
 func (r *DrupalSiteReconciler) updateDBSchema(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
-	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
-	if err != nil {
+	// Take backup
+	backupFileName := "db_backup_update_rollback.sql"
+	// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
+	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
+		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
 		return true
 	}
-	if sout != "" {
-		// Set DBUpdatesPending status
-		if setDBUpdatesPending(d) {
-			return true
-		}
 
-		// Take backup
-		backupFileName := "db_backup_update_rollback.sql"
-		// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
-		if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
-			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
-			return true
-		}
-
-		// Run updb
-		// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
-		_, err = r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
-		if err != nil {
-			// Removing rollBackDBUpdate as we broken sites to keep up with updating
-			// We let the site administrators to rectify the problem manually
-			setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
-			return true
-		}
+	// Run updb
+	// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
+	_, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
+	if err != nil {
+		// Removing rollBackDBUpdate as we broken sites to keep up with updating
+		// We let the site administrators to rectify the problem manually
+		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
+		return true
 	}
 	// DB update successful, remove conditions
 	update = d.Status.Conditions.RemoveCondition("DBUpdatesPending")
