@@ -375,7 +375,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	codeUpdateNeeded := false
 	dbUpdateNeeded := false
 	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
-		codeUpdateNeeded, reconcileErr = r.updateNeeded(ctx, drupalSite)
+		codeUpdateNeeded, reconcileErr = r.codeUpdateNeeded(ctx, drupalSite)
 		if reconcileErr != nil {
 			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed")
 		}
@@ -689,13 +689,13 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 
 // UpdateNeeded checks if a DB update is required based on the image tag and releaseID in the CR spec.
 // Only safe to call `if d.ConditionTrue("Ready") && d.ConditionTrue("Initialized")`
-func (r *DrupalSiteReconciler) updateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
+func (r *DrupalSiteReconciler) codeUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
 	deployment, err := r.getRunningdeployment(ctx, d)
 	if err != nil {
 		return false, newApplicationError(err, ErrClientK8s)
 	}
 	// Check if image is different, check if current site is ready and installed
-	if deployment.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) || d.Status.Failsafe != d.Status.Current {
+	if deployment.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) {
 		return true, nil
 	}
 	return false, nil
