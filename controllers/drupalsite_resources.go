@@ -1824,7 +1824,8 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 			Duration: 14 * 24 * time.Hour,
 		},
 	}
-	currentobject.Spec.UseOwnerReferencesInBackup = pointer.BoolPtr(true)
+	// Set UseOwnerReferencesInBackup to False since we do not want the Backups to be deleted when Schedule object is deleted or modified
+	currentobject.Spec.UseOwnerReferencesInBackup = pointer.BoolPtr(false)
 	return nil
 }
 
