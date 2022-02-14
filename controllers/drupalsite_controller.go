@@ -636,6 +636,10 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		if drp.Spec.Configuration.DiskSize < sourceSite.Spec.Configuration.DiskSize {
 			drp.Spec.Configuration.DiskSize = sourceSite.Spec.Configuration.DiskSize
 		}
+		// The extraConfigurationRepo should be set in the clone site if defined in the source
+		if sourceSite.Spec.Configuration.ExtraConfigurationRepo != "" && drp.Spec.Configuration.ExtraConfigurationRepo == "" {
+			drp.Spec.Configuration.ExtraConfigurationRepo = sourceSite.Spec.Configuration.ExtraConfigurationRepo
+		}
 	}
 	// Initialize 'spec.version.releaseSpec' if empty
 	if len(drp.Spec.Version.ReleaseSpec) == 0 {
