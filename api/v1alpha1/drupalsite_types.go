@@ -45,7 +45,7 @@ type DrupalSiteSpec struct {
 	Version `json:"version"`
 
 	// Configuration of the DrupalSite for specific needs. A typical default value is given for every setting, so usually these won't need to change.
-	// +kubebuilder:default={"databaseClass":"standard","qosClass":"standard","diskSize":"2000Mi"}
+	// +kubebuilder:default={"databaseClass":"standard","qosClass":"standard"}
 	// +optional
 	Configuration `json:"configuration,omitempty"`
 }
@@ -92,10 +92,7 @@ type Configuration struct {
 	// +optional
 	CloneFrom `json:"cloneFrom,omitempty"`
 
-	// DiskSize is the max size of the site's files directory. The default value is "2000Mi".
-	// When `cloneFrom` is set, if this value is less than the source's, it will be *overwritten*,
-	// since the size has to be at least as large as the source.
-	// +kubebuilder:default="2000Mi"
+	// DiskSize is the max size of the site's files directory.
 	// +optional
 	// +kubebuilder:validation:Pattern=`^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$`
 	DiskSize string `json:"diskSize,omitempty"`
