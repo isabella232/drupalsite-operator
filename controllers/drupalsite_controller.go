@@ -622,6 +622,10 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
 		update = true
 	}
+	// Set default value for DiskSize to 2000Mi
+	if drp.Spec.Configuration.CloneFrom == "" && drp.Spec.Configuration.DiskSize == "" {
+		drp.Spec.Configuration.DiskSize = "2000Mi"
+	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
 		sourceSite := webservicesv1a1.DrupalSite{}
