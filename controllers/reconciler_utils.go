@@ -352,7 +352,7 @@ func generateScheduleName(namespace string, siteName string) string {
 	return namespace + "-" + hex.EncodeToString(siteNameHash[:])[0:4]
 }
 
-// getGracePeriodForPodToStartDuringUpgrade returns the time in minutes to wait for the new version of Drupal pod to start during version upgrade
-func getGracePeriodForPodToStartDuringUpgrade(d *webservicesv1a1.DrupalSite) float64 {
+// getGracePeriodMinutesForPodToStartDuringUpgrade returns the time in minutes to wait for the new version of Drupal pod to start during version upgrade
+func getGracePeriodMinutesForPodToStartDuringUpgrade(d *webservicesv1a1.DrupalSite) float64 {
 	return 10 // 10minutes
 }
