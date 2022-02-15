@@ -54,7 +54,7 @@ import (
 const (
 	// finalizerStr string that is going to added to every DrupalSite created
 	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
-	adminAnnotation = "drupal.cern.ch/admin-custom-edit"
+	debugAnnotation = "debug"
 	oidcSecretName  = "oidc-client-secret"
 )
 
