@@ -1188,6 +1188,7 @@ var _ = Describe("DrupalSite controller", func() {
 					return string(cr.Spec.Configuration.DatabaseClass) == string(drupalwebservicesv1alpha1.DBODStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
 				}, timeout, interval).Should(BeTrue())
 
@@ -1374,6 +1375,7 @@ var _ = Describe("DrupalSite controller", func() {
 					return string(cr.Spec.Configuration.DatabaseClass) == string(drupalwebservicesv1alpha1.DBODStandard)
 				}, timeout, interval).Should(BeTrue())
 				Eventually(func() bool {
+					k8sClient.Get(ctx, key, &cr)
 					return string(cr.Spec.Configuration.DiskSize) == "2000Mi"
 				}, timeout, interval).Should(BeTrue())
 
