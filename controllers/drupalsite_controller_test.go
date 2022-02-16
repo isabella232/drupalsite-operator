@@ -682,6 +682,41 @@ var _ = Describe("DrupalSite controller", func() {
 		})
 	})
 
+	Describe("Updating deployment object", func() {
+		Context("With debug annotations", func() {
+			It("Should not be updated successfully", func() {
+				By("Expecting drupalSite object created")
+				cr := drupalwebservicesv1alpha1.DrupalSite{}
+				Eventually(func() error {
+					return k8sClient.Get(ctx, key, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("Updating the drupalSite with debug annotation")
+				Eventually(func() error {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					if cr.Annotations == nil {
+						cr.Annotations = map[string]string{}
+					}
+					cr.Annotations[debugAnnotation] = "true"
+					return k8sClient.Update(ctx, &cr)
+				}, timeout, interval).Should(Succeed())
+
+				By("By updating deployment object")
+				deploy := appsv1.Deployment{}
+				k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+				deploy.Spec.Template.ObjectMeta.Annotations["pre.hook.backup.velero.io/container"] = "test-debug"
+				Eventually(func() error {
+					return k8sClient.Update(ctx, &deploy)
+				}, timeout, interval).Should(Succeed())
+
+				Eventually(func() bool {
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &deploy)
+					return deploy.Spec.Template.GetAnnotations()["pre.hook.backup.velero.io/container"] == "test-debug"
+				}, timeout, interval).ShouldNot(BeTrue())
+			})
+		})
+	})
+
 	Describe("Deleting the drupalsite object", func() {
 		Context("With basic spec", func() {
 			It("Should be deleted successfully", func() {

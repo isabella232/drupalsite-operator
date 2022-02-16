@@ -1175,6 +1175,12 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 		}
 	}
 
+	// Skip enforcing values when debug annotation is present
+	if len(currentobject.GetAnnotations()[debugAnnotation]) > 0 {
+		// Do nothing
+		return nil
+	}
+
 	// Settings on update
 	// We should not enforce image field on every reconcile for containers that rely on imagestreams. For imagestream, the image value will be resolved from the tag name to SHA value by openshift. This in turn causes indefinite rollouts.
 	_, annotExists := currentobject.Spec.Template.ObjectMeta.Annotations["releaseID"]
