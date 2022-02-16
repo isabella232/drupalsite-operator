@@ -622,6 +622,10 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		drp.Spec.Configuration.WebDAVPassword = generateRandomPassword()
 		update = true
 	}
+	// Set default value for DiskSize to 2000Mi
+	if drp.Spec.Configuration.CloneFrom == "" && drp.Spec.Configuration.DiskSize == "" {
+		drp.Spec.Configuration.DiskSize = "2000Mi"
+	}
 	// Validate that CloneFrom is an existing DrupalSite
 	if drp.Spec.Configuration.CloneFrom != "" {
 		sourceSite := webservicesv1a1.DrupalSite{}
@@ -635,6 +639,10 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		// The destination disk size must be at least as large as the source
 		if drp.Spec.Configuration.DiskSize < sourceSite.Spec.Configuration.DiskSize {
 			drp.Spec.Configuration.DiskSize = sourceSite.Spec.Configuration.DiskSize
+		}
+		// The extraConfigurationRepo should be set in the clone site if defined in the source
+		if sourceSite.Spec.Configuration.ExtraConfigurationRepo != "" && drp.Spec.Configuration.ExtraConfigurationRepo == "" {
+			drp.Spec.Configuration.ExtraConfigurationRepo = sourceSite.Spec.Configuration.ExtraConfigurationRepo
 		}
 	}
 	// Initialize 'spec.version.releaseSpec' if empty

@@ -39,7 +39,6 @@ spec:
               configuration:
                 default:
                   databaseClass: standard
-                  diskSize: 2000Mi
                   qosClass: standard
                 description: Configuration of the DrupalSite for specific needs. A
                   typical default value is given for every setting, so usually these
@@ -61,11 +60,7 @@ spec:
                     - standard
                     type: string
                   diskSize:
-                    default: 2000Mi
                     description: DiskSize is the max size of the site's files directory.
-                      The default value is "2000Mi". When `cloneFrom` is set, if this
-                      value is less than the source's, it will be *overwritten*, since
-                      the size has to be at least as large as the source.
                     pattern: ^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$
                     type: string
                   easystart:
