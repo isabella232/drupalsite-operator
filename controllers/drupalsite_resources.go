@@ -1214,9 +1214,9 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 						Command: customProbe("liveness"),
 					},
 				},
-				InitialDelaySeconds: 600, // Restarting soon after initialization can't fix anything
-				TimeoutSeconds:      60,
-				PeriodSeconds:       90,
+				InitialDelaySeconds: 1800, // Restarting soon after initialization can't fix anything
+				TimeoutSeconds:      202,
+				PeriodSeconds:       210,
 				FailureThreshold:    5,
 				SuccessThreshold:    1,
 			}
