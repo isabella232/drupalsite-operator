@@ -20,5 +20,4 @@ GoTest:
   stage: test
   image: golang:1.16
   script:
-    - cp -r chart/drupalsite-operator/runtime-config/ /tmp/
     - make test
