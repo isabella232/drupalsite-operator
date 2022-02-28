@@ -679,7 +679,7 @@ func (r *DrupalSiteReconciler) didVersionRollOutSucceed(ctx context.Context, d *
 	}
 	if pod.Status.Phase == corev1.PodPending {
 		currentTime := time.Now()
-		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodForPodToStartDuringUpgrade(d) {
+		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodMinutesForPodToStartDuringUpgrade(d) {
 			return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
 		}
 		return false, newApplicationError(errors.New("pod failed to start after grace period"), ErrDeploymentUpdateFailed)
