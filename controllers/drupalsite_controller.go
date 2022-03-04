@@ -135,7 +135,7 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {
 				log := r.Log.WithValues("Source", "Velero Backup event handler", "Namespace", a.GetNamespace())
-				projectName, exists := a.GetLabels()["drupal.webservices.cern.ch/project"]
+				projectName, exists := a.GetAnnotations()["drupal.webservices.cern.ch/project"]
 				if exists {
 					return fetchDrupalSitesInNamespace(mgr, log, projectName)
 				}

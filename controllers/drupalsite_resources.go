@@ -770,7 +770,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	default:
 		for i := range backupList.Items {
 			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
-				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: backupList.Items[i].Labels["drupal.webservices.cern.ch/drupalSite"]})
+				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: backupList.Items[i].Annotations["drupal.webservices.cern.ch/drupalSite"]})
 			}
 		}
 	}
@@ -1796,12 +1796,6 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 
 	hash := md5.Sum([]byte(d.Namespace))
 	currentobject.Labels["drupal.webservices.cern.ch/projectHash"] = hex.EncodeToString(hash[:])
-	// These labels need to be removed, as annotations support longer values.
-	// But this can be done only after upgrading velero to 1.5 or higher which supports propagating annotations
-	// from schedules to the backups.
-	// ref: https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/457
-	currentobject.Labels["drupal.webservices.cern.ch/project"] = d.Namespace
-	currentobject.Labels["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
 	currentobject.Annotations["drupal.webservices.cern.ch/project"] = d.Namespace
 	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name

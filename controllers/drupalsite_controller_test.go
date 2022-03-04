@@ -345,10 +345,11 @@ var _ = Describe("DrupalSite controller", func() {
 						Namespace: veleroNamespace,
 						Labels: map[string]string{
 							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
-							"drupal.webservices.cern.ch/project":     key.Namespace,
-							"drupal.webservices.cern.ch/drupalSite":  key.Name,
 						},
-						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+						Annotations: map[string]string{
+							"drupal.webservices.cern.ch/drupalSite": key.Name,
+							"drupal.webservices.cern.ch/project":    key.Namespace,
+						},
 					},
 					Status: velerov1.BackupStatus{
 						Phase: velerov1.BackupPhaseCompleted,
@@ -978,10 +979,11 @@ var _ = Describe("DrupalSite controller", func() {
 
 						Labels: map[string]string{
 							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
-							"drupal.webservices.cern.ch/project":     key.Namespace,
-							"drupal.webservices.cern.ch/drupalSite":  key.Name,
 						},
-						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+						Annotations: map[string]string{
+							"drupal.webservices.cern.ch/drupalSite": key.Name,
+							"drupal.webservices.cern.ch/project":    key.Namespace,
+						},
 					},
 					Status: velerov1.BackupStatus{
 						Phase: velerov1.BackupPhaseCompleted,
@@ -1822,10 +1824,11 @@ var _ = Describe("DrupalSite controller", func() {
 
 						Labels: map[string]string{
 							"drupal.webservices.cern.ch/projectHash": hex.EncodeToString(hash[:]),
-							"drupal.webservices.cern.ch/project":     key.Namespace,
-							"drupal.webservices.cern.ch/drupalSite":  key.Name,
 						},
-						Annotations: map[string]string{"drupal.webservices.cern.ch/drupalSite": key.Namespace + "/" + key.Name},
+						Annotations: map[string]string{
+							"drupal.webservices.cern.ch/drupalSite": key.Name,
+							"drupal.webservices.cern.ch/project":    key.Namespace,
+						},
 					},
 					Status: velerov1.BackupStatus{
 						Phase: velerov1.BackupPhaseCompleted,
