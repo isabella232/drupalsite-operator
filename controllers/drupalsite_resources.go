@@ -770,7 +770,7 @@ func (r *DrupalSiteReconciler) checkNewBackups(ctx context.Context, d *webservic
 	default:
 		for i := range backupList.Items {
 			if backupList.Items[i].Status.Phase == velerov1.BackupPhaseCompleted {
-				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: d.Name})
+				backups = append(backups, webservicesv1a1.Backup{BackupName: backupList.Items[i].Name, Date: backupList.Items[i].Status.CompletionTimestamp, Expires: backupList.Items[i].Status.Expiration, DrupalSiteName: backupList.Items[i].Labels["drupal.webservices.cern.ch/drupalSite"]})
 			}
 		}
 	}
