@@ -1796,6 +1796,9 @@ func scheduledBackupsForDrupalSite(currentobject *velerov1.Schedule, d *webservi
 
 	hash := md5.Sum([]byte(d.Namespace))
 	currentobject.Labels["drupal.webservices.cern.ch/projectHash"] = hex.EncodeToString(hash[:])
+	// Although labels don't suport more than 63 characters, according to https://gitlab.cern.ch/webservices/webframeworks-planning/-/issues/457 we should use annotations instead of labels. But since we restrict drupalSite names and projects to less than 50chars, it should be ok to still have labels. We still rely on annotations for fetching backups & reconciling Backup objects
+	currentobject.Labels["drupal.webservices.cern.ch/project"] = d.Namespace
+	currentobject.Labels["drupal.webservices.cern.ch/drupalSite"] = d.Name
 
 	currentobject.Annotations["drupal.webservices.cern.ch/project"] = d.Namespace
 	currentobject.Annotations["drupal.webservices.cern.ch/drupalSite"] = d.Name
