@@ -3,6 +3,8 @@ kind: DrupalSiteConfigOverride
 metadata:
   name: drupalsiteconfigoverride-sample
 spec:
+  # Increase the replicas
+  replicas: 4
   php:
     resources:
       requests:

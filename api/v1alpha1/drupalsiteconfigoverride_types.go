@@ -23,6 +23,8 @@ import (
 
 // DrupalSiteConfigOverrideSpec defines the desired state of DrupalSiteConfigOverride
 type DrupalSiteConfigOverrideSpec struct {
+	// Replicas overrides the number of pod replicas for the deployment
+	Replicas int32 `json:"replicas,omitempty"`
 	// Php includes configuration for the PHP container of the DrupalSite server pods
 	Php Resources `json:"php,omitempty"`
 	// Nginx includes configuration for the Nginx container of the DrupalSite server pods

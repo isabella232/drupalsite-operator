@@ -2215,6 +2215,9 @@ func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, d
 		if !reflect.DeepEqual(configOverride.DrupalLogs.Resources, corev1.ResourceRequirements{}) {
 			drupalLogsResources = configOverride.DrupalLogs.Resources
 		}
+		if configOverride.Replicas != 0 {
+			replicas = configOverride.Replicas
+		}
 	}
 
 	config = DeploymentConfig{replicas: replicas,
