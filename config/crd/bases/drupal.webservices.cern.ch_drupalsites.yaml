@@ -238,6 +238,13 @@ spec:
                 description: ServingPodImage reports the complete image name of the
                   PHP-FPM container that is being used in the deployment.
                 type: string
+              siteUrl:
+                description: SiteUrl defines the urls of a site
+                items:
+                  description: Url refers to where the site should be made available.
+                  pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                  type: string
+                type: array
             type: object
         required:
         - spec

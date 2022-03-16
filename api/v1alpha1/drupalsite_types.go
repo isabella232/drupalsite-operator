@@ -159,6 +159,10 @@ type DrupalSiteStatus struct {
 	// IsPrimary states if the Drupalsite is the main instance of the project
 	// +kubebuilder:default=false
 	IsPrimary bool `json:"isPrimary,omitempty"`
+
+	// SiteUrl defines the urls of a site
+	// +optional
+	SiteUrl []Url `json:"siteUrl,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

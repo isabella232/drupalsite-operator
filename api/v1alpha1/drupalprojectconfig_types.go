@@ -25,6 +25,9 @@ type DrupalProjectConfigSpec struct {
 	// PrimarySiteName defines the primary DrupalSite instance of a project
 	// +optional
 	PrimarySiteName string `json:"primarySiteName,omitempty"`
+	// PrimarySiteUrl defines the primary urls of a project
+	// +optional
+	PrimarySiteUrl []Url `json:"primarySiteUrl,omitempty"`
 }
 
 // DrupalProjectConfigStatus defines the observed state of DrupalProjectConfig

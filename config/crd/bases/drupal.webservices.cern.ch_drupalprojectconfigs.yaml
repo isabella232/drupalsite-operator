@@ -41,6 +41,13 @@ spec:
                 description: PrimarySiteName defines the primary DrupalSite instance
                   of a project
                 type: string
+              primarySiteUrl:
+                description: PrimarySiteUrl defines the primary urls of a project
+                items:
+                  description: Url refers to where the site should be made available.
+                  pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                  type: string
+                type: array
             type: object
           status:
             description: DrupalProjectConfigStatus defines the observed state of DrupalProjectConfig
