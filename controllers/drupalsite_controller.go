@@ -225,6 +225,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		drupalProjectConfig = nil
 	}
 
+	// Skip reconciliation if admin-pause annotation is present
+	if _, isAdminPauseAnnotationPresent := drupalSite.GetAnnotations()["admin-pause"]; isAdminPauseAnnotationPresent {
+		return ctrl.Result{}, nil
+	}
+
 	//Handle deletion
 	if drupalSite.GetDeletionTimestamp() != nil {
 		if controllerutil.ContainsFinalizer(drupalSite, finalizerStr) {
