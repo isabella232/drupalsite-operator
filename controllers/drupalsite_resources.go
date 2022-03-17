@@ -1254,6 +1254,10 @@ func deploymentForDrupalSite(currentobject *appsv1.Deployment, databaseSecret st
 					SubPath:   "config.ini",
 					ReadOnly:  true,
 				},
+				{
+					Name:      "empty-dir",
+					MountPath: "/var/run/",
+				},
 			}
 		case "drupal-logs":
 			currentobject.Spec.Template.Spec.Containers[i].Command = tailDrupalLogs()
