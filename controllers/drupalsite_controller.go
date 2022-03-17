@@ -53,9 +53,10 @@ import (
 
 const (
 	// finalizerStr string that is going to added to every DrupalSite created
-	finalizerStr    = "controller.drupalsite.webservices.cern.ch"
-	debugAnnotation = "debug"
-	oidcSecretName  = "oidc-client-secret"
+	finalizerStr         = "controller.drupalsite.webservices.cern.ch"
+	debugAnnotation      = "debug"
+	adminPauseAnnotation = "admin-pause-reconcile"
+	oidcSecretName       = "oidc-client-secret"
 )
 
 var (
@@ -260,6 +261,13 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// emitting error because the controller can count it in the error metrics,
 		// which we can monitor to notice transient problems affecting the entire infrastructure
 		requeueFlag = nonfatalErr
+	}
+
+	// 0. Skip reconciliation if admin-pause annotation is present
+
+	// This is a "short-circuit" mechanism to forcibly stop reconciling misbehaving websites
+	if _, isAdminPauseAnnotationPresent := drupalSite.GetAnnotations()[adminPauseAnnotation]; isAdminPauseAnnotationPresent {
+		return ctrl.Result{}, nil
 	}
 
 	// 1. Init: Check if finalizer is set. If not, set it, validate and update CR status
