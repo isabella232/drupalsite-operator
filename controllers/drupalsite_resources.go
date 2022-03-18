@@ -85,7 +85,7 @@ var (
 //	}
 //	log.Info("EXEC", "stdout", sout, "stderr", serr)
 // ````
-func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
+func (r *Reconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
 	pod, err := r.getRunningPodForVersion(ctx, d, releaseID(d))
 	if err != nil {
 		return "", "", err
@@ -94,7 +94,7 @@ func (r *DrupalSiteReconciler) execToServerPod(ctx context.Context, d *webservic
 }
 
 // getRunningPodForVersion fetches the list of the running pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
+func (r *Reconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
 	podList := corev1.PodList{}
 	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
@@ -127,7 +127,7 @@ func (r *DrupalSiteReconciler) getRunningPodForVersion(ctx context.Context, d *w
 }
 
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
-func (r *DrupalSiteReconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
+func (r *Reconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
 	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
 	if err != nil || stderr != "" {
 		return "", fmt.Errorf("STDERR: %s \n%w", stderr, err)
@@ -2143,7 +2143,7 @@ func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, qosClass web
 // getDeploymentConfiguration precalculates all the configuration that the server deployment needs, including:
 // pod replicas, resource req/lim
 // NOTE: this includes the default resource limits for PHP
-func (r *DrupalSiteReconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+func (r *Reconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
 	config = DeploymentConfig{}
 	requeue = false
 	updateStatus = false
@@ -2236,7 +2236,7 @@ type DeploymentConfig struct {
 	drupalLogsResources  corev1.ResourceRequirements
 }
 
-func (r *DrupalSiteReconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
+func (r *Reconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
 	configOverride := &webservicesv1a1.DrupalSiteConfigOverride{}
 	err := r.Get(ctx, types.NamespacedName{Name: drp.Name, Namespace: drp.Namespace}, configOverride)
 	switch {

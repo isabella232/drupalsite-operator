@@ -23,17 +23,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
-	buildv1 "github.com/openshift/api/build/v1"
 	"github.com/operator-framework/operator-lib/status"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+// Reconciler reconciles a DrupalSite object
+type Reconciler struct {
+	client.Client
+	Log    logr.Logger
+	Scheme *runtime.Scheme
+}
 
 func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
@@ -41,24 +50,29 @@ func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
 		Status: "True",
 	})
 }
+
 func setNotReady(drp *webservicesv1a1.DrupalSite, transientErr reconcileError) (update bool) {
 	return setConditionStatus(drp, "Ready", false, transientErr, false)
 }
+
 func setInitialized(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Initialized",
 		Status: "True",
 	})
 }
+
 func setNotInitialized(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "Initialized",
 		Status: "False",
 	})
 }
+
 func setErrorCondition(drp *webservicesv1a1.DrupalSite, err reconcileError) (update bool) {
 	return setConditionStatus(drp, "Error", true, err, false)
 }
+
 func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType status.ConditionType, statusFlag bool, err reconcileError, statusUnknown bool) (update bool) {
 	statusStr := func() corev1.ConditionStatus {
 		if statusUnknown {
@@ -123,71 +137,6 @@ func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 // removeDBUpdatesPending removes the 'DBUpdatesPending' status on the drupalSite object
 func removeDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.RemoveCondition("DBUpdatesPending")
-}
-
-// updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) error {
-	err := r.Update(ctx, dpc)
-	if err != nil {
-		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("DrupalProjectConfig changed while reconciling. Requeuing.")
-		} else {
-			log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
-		}
-	}
-	return err
-}
-
-// updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteReconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
-	reconcile.Result, error) {
-	if err := r.Update(ctx, drp); err != nil {
-		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("DrupalSite changed while reconciling. Requeuing.")
-			return reconcile.Result{Requeue: true}, nil
-		}
-		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
-// updateCRStatusOrFailReconcile tries to update the Custom Resource Status and logs any error
-func (r *DrupalSiteReconciler) updateCRStatusOrFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
-	reconcile.Result, error) {
-	if err := r.Status().Update(ctx, drp); err != nil {
-		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("DrupalSite.Status changed while reconciling. Requeuing.")
-			return reconcile.Result{Requeue: true}, nil
-		}
-		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
-		return reconcile.Result{}, err
-	}
-	return reconcile.Result{}, nil
-}
-
-// getBuildStatus gets the build status from one of the builds for a given resources
-func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource string, drp *webservicesv1a1.DrupalSite) (buildv1.BuildPhase, error) {
-	buildList := &buildv1.BuildList{}
-	buildLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchLabels: map[string]string{"openshift.io/build-config.name": resource + nameVersionHash(drp)},
-	})
-	if err != nil {
-		return "", newApplicationError(err, ErrFunctionDomain)
-	}
-	options := client.ListOptions{
-		LabelSelector: buildLabels,
-		Namespace:     drp.Namespace,
-	}
-	err = r.List(ctx, buildList, &options)
-	if err != nil {
-		return "", newApplicationError(err, ErrClientK8s)
-	}
-	// Check for one more build?
-	if len(buildList.Items) > 0 {
-		return buildList.Items[len(buildList.Items)-1].Status.Phase, nil
-	}
-	return "", newApplicationError(err, ErrClientK8s)
 }
 
 // nameVersionHash returns a hash using the drupalSite name and version
@@ -278,35 +227,6 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	}, newApplicationError(fmt.Errorf("undefined keys for the reqLimDict function"), ErrFunctionDomain)
 }
 
-// getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
-func (r *DrupalSiteReconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
-	podList := corev1.PodList{}
-	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
-	})
-	if err != nil {
-		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
-	}
-	options := client.ListOptions{
-		LabelSelector: podLabels,
-		Namespace:     d.Namespace,
-	}
-	err = r.List(ctx, &podList, &options)
-	switch {
-	case err != nil:
-		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
-	case len(podList.Items) == 0:
-		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
-	}
-	for _, v := range podList.Items {
-		if v.Annotations["releaseID"] == releaseID {
-			return v, nil
-		}
-	}
-	// iterate through the list and return the first pod that has the status condition ready
-	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
-}
-
 // generateRandomPassword generates a random password of length 10 by creating a hash of the current time
 func generateRandomPassword() string {
 	hash := md5.Sum([]byte(time.Now().String()))
@@ -355,4 +275,103 @@ func generateScheduleName(namespace string, siteName string) string {
 // getGracePeriodMinutesForPodToStartDuringUpgrade returns the time in minutes to wait for the new version of Drupal pod to start during version upgrade
 func getGracePeriodMinutesForPodToStartDuringUpgrade(d *webservicesv1a1.DrupalSite) float64 {
 	return 10 // 10minutes
+}
+
+// fetchDrupalSitesInNamespace fetches all the Drupalsites in a given namespace
+func fetchDrupalSitesInNamespace(mgr ctrl.Manager, log logr.Logger, namespace string) []reconcile.Request {
+	drupalSiteList := webservicesv1a1.DrupalSiteList{}
+	options := client.ListOptions{
+		Namespace: namespace,
+	}
+	err := mgr.GetClient().List(context.TODO(), &drupalSiteList, &options)
+	if err != nil {
+		log.Error(err, "Couldn't query drupalsites in the namespace")
+		return []reconcile.Request{}
+	}
+	requests := make([]reconcile.Request, len(drupalSiteList.Items))
+	for i, drupalSite := range drupalSiteList.Items {
+		requests[i].Name = drupalSite.Name
+		requests[i].Namespace = drupalSite.Namespace
+	}
+	return requests
+}
+
+// getenvOrDie checks for the given variable in the environm
+// addGitlabWebhookToStatus adds the Gitlab webhook URL for the s2i (extraconfig) buildconfig to the DrupalSite status
+// by querying the K8s API for API Server & Gitlab webhook trigger secret value
+func addGitlabWebhookToStatus(ctx context.Context, drp *webservicesv1a1.DrupalSite) bool {
+	// Fetch the gitlab webhook trigger secret value
+	gitlabTriggerSecret := "gitlab-trigger-secret-" + drp.Name
+	webHookUrl := "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + drp.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drp) + "/webhooks/" + gitlabTriggerSecret + "/gitlab"
+	if drp.Status.GitlabWebhookURL != webHookUrl {
+		drp.Status.GitlabWebhookURL = webHookUrl
+		return true
+	}
+	return false
+}
+
+//validateSpec validates the spec against the DrupalSiteSpec definition
+func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
+	_, err := govalidator.ValidateStruct(drpSpec)
+	if err != nil {
+		return newApplicationError(err, ErrInvalidSpec)
+	}
+	return nil
+}
+
+// getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
+func (r *Reconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
+	})
+	if err != nil {
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &podList, &options)
+	switch {
+	case err != nil:
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
+	}
+	for _, v := range podList.Items {
+		if v.Annotations["releaseID"] == releaseID {
+			return v, nil
+		}
+	}
+	// iterate through the list and return the first pod that has the status condition ready
+	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+}
+
+// updateCRorFailReconcile tries to update the Custom Resource and logs any error
+func (r *Reconciler) updateCRorFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
+	reconcile.Result, error) {
+	if err := r.Update(ctx, drp); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("DrupalSite changed while reconciling. Requeuing.")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
+}
+
+// updateCRStatusOrFailReconcile tries to update the Custom Resource Status and logs any error
+func (r *Reconciler) updateCRStatusOrFailReconcile(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (
+	reconcile.Result, error) {
+	if err := r.Status().Update(ctx, drp); err != nil {
+		if k8sapierrors.IsConflict(err) {
+			log.V(4).Info("DrupalSite.Status changed while reconciling. Requeuing.")
+			return reconcile.Result{Requeue: true}, nil
+		}
+		log.Error(err, fmt.Sprintf("%v failed to update the application status", ErrClientK8s))
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
 }

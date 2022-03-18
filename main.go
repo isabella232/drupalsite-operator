@@ -119,9 +119,11 @@ func main() {
 	}
 
 	if err = (&controllers.DrupalSiteReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
-		Scheme: mgr.GetScheme(),
+		Reconciler: controllers.Reconciler{
+			Client: mgr.GetClient(),
+			Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
+			Scheme: mgr.GetScheme(),
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DrupalSite")
 		os.Exit(1)
@@ -133,6 +135,17 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SupportedDrupalVersions")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.DrupalSiteUpdateReconciler{
+		Reconciler: controllers.Reconciler{
+			Client: mgr.GetClient(),
+			Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteUpdate"),
+			Scheme: mgr.GetScheme(),
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DrupalSiteUpdate")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

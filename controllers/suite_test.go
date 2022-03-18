@@ -141,9 +141,27 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&DrupalSiteReconciler{
+		Reconciler: Reconciler{
+			Client: k8sManager.GetClient(),
+			Scheme: k8sManager.GetScheme(),
+			Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
+		},
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&DrupalSiteUpdateReconciler{
+		Reconciler: Reconciler{
+			Client: k8sManager.GetClient(),
+			Scheme: k8sManager.GetScheme(),
+			Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteUpdate"),
+		},
+	}).SetupWithManager(k8sManager)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&SupportedDrupalVersionsReconciler{
 		Client: k8sManager.GetClient(),
 		Scheme: k8sManager.GetScheme(),
-		Log:    ctrl.Log.WithName("controllers").WithName("DrupalSite"),
+		Log:    ctrl.Log.WithName("controllers").WithName("SupportedDrupalVersions"),
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
