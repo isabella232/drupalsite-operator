@@ -437,7 +437,7 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Ensure all resources (server deployment is excluded here during updates)
-	if transientErrs := r.ensureResources(drupalSite, deploymentConfig, log); transientErrs != nil {
+	if transientErrs := r.ensureResources(drupalSite, drupalProjectConfig, deploymentConfig, log); transientErrs != nil {
 		transientErr := concat(transientErrs)
 		return handleTransientErr(transientErr, "%v while ensuring the resources", "Ready")
 	}
@@ -452,6 +452,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	log.V(3).Info("Ensured all resources are present.")
+
+	// Update status of drupalsite with primary urls
+	if drupalSite.Status.IsPrimary && !routesEqual(drupalSite.Status.SiteUrl, uniqueRoutes(drupalSite.Spec.SiteURL, drupalProjectConfig.Spec.PrimarySiteUrl)) {
+		drupalSite.Status.SiteUrl = uniqueRoutes(drupalSite.Spec.SiteURL, drupalProjectConfig.Spec.PrimarySiteUrl)
+		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	} else if !drupalSite.Status.IsPrimary {
+		drupalSite.Status.SiteUrl = drupalSite.Spec.SiteURL
+		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	}
 
 	// 4. Check DBOD has been provisioned and reconcile if needed
 

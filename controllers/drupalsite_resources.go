@@ -196,46 +196,46 @@ func (r *DrupalSiteReconciler) ensureDeploymentConfigmapHash(ctx context.Context
 ensureResources ensures the presence of all the resources that the DrupalSite needs to serve content.
 This includes BuildConfigs/ImageStreams, DB, PVC, PHP/Nginx deployment + service, site install job, Routes.
 */
-func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig, log logr.Logger) (transientErrs []reconcileError) {
+func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig, deploymentConfig DeploymentConfig, log logr.Logger) (transientErrs []reconcileError) {
 	ctx := context.TODO()
 
 	// 1. BuildConfigs and ImageStreams
 
 	if len(drp.Spec.Configuration.ExtraConfigurationRepo) > 0 {
-		if transientErr := r.ensureResourceX(ctx, drp, "is_s2i", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "is_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder ImageStream"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "bc_s2i", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "bc_s2i", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder BuildConfig"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "gitlab_trigger_secret", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "gitlab_trigger_secret", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for S2I SiteBuilder Secret"))
 		}
 	}
 	// 2. Data layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "pvc_drupal", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "pvc_drupal", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal PVC"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "dbod_cr", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "dbod_cr", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for DBOD resource"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "webdav_secret", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "webdav_secret", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for WebDAV Secret"))
 	}
 
 	// 3. Serving layer
 
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_php", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "cm_php", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP-FPM CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_nginx_global", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "cm_nginx_global", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_settings", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "cm_settings", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for settings.php CM"))
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "cm_php_cli", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "cm_php_cli", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for PHP Job CM"))
 	}
 	if r.isDBODProvisioned(ctx, drp) {
@@ -243,7 +243,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Drupal deployment"))
 		}
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "svc_nginx", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "svc_nginx", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Nginx SVC"))
 	}
 	/* A new drupalsite can be initialized with 3 different ways depending its Spec:
@@ -256,15 +256,15 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	if r.isDBODProvisioned(ctx, drp) && !(drp.ConditionTrue("Initialized")) {
 		switch {
 		case drp.Spec.Configuration.CloneFrom != "":
-			if transientErr := r.ensureResourceX(ctx, drp, "clone_job", log); transientErr != nil {
+			if transientErr := r.ensureResourceX(ctx, drp, dpc, "clone_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for clone Job"))
 			}
 		case drp.Spec.Configuration.Easystart == "enable":
-			if transientErr := r.ensureResourceX(ctx, drp, "easystart_taskrun", log); transientErr != nil {
+			if transientErr := r.ensureResourceX(ctx, drp, dpc, "easystart_taskrun", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for easystart TaskRun"))
 			}
 		default:
-			if transientErr := r.ensureResourceX(ctx, drp, "site_install_job", log); transientErr != nil {
+			if transientErr := r.ensureResourceX(ctx, drp, dpc, "site_install_job", log); transientErr != nil {
 				transientErrs = append(transientErrs, transientErr.Wrap("%v: for site install Job"))
 			}
 		}
@@ -274,15 +274,15 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	if drp.ConditionTrue("Initialized") {
 		// each function below ensures 1 route per entry in `spec.siteUrl[]`. This is understandably part of the job of "ensuring resource X".
-		if transientErr := r.ensureResourceX(ctx, drp, "route", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "route", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Route"))
 		}
-		if transientErr := r.ensureResourceX(ctx, drp, "oidc_return_uri", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "oidc_return_uri", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for OidcReturnURI"))
 		}
 
 		// each function below removes any unwanted routes
-		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, "drupal", log); transientErr != nil {
+		if transientErr := r.ensureNoExtraRouteResource(ctx, drp, dpc, "drupal", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while ensuring no extra routes"))
 		}
 		if transientErr := r.ensureNoExtraOidcReturnUriResource(ctx, drp, "drupal", log); transientErr != nil {
@@ -302,7 +302,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
 	// Create Velero schedule only after site is initialized in order for the first backup to not report 'Failed' or 'PartiallyFailed' status
 	if drp.ConditionTrue("Initialized") && (drp.Status.IsPrimary || drp.Spec.Configuration.ScheduledBackups == "enabled") {
-		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
+		if transientErr := r.ensureResourceX(ctx, drp, dpc, "backup_schedule", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 		}
 	} else {
@@ -310,7 +310,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: while deleting the Velero schedule"))
 		}
 	}
-	if transientErr := r.ensureResourceX(ctx, drp, "tekton_extra_perm_rbac", log); transientErr != nil {
+	if transientErr := r.ensureResourceX(ctx, drp, dpc, "tekton_extra_perm_rbac", log); transientErr != nil {
 		transientErrs = append(transientErrs, transientErr.Wrap("%v: for Tekton Extra Permissions ClusterRoleBinding"))
 	}
 	return transientErrs
@@ -339,7 +339,7 @@ ensureResourceX ensure the requested resource is created, with the following val
 	- tekton_extra_perm_rbac: ClusterRoleBinding for tekton tasks
 	- gitlab_trigger_secret: Secret for Gitlab trigger config in buildconfig
 */
-func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, resType string, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig, resType string, log logr.Logger) (transientErr reconcileError) {
 	switch resType {
 	case "is_s2i":
 		is := &imagev1.ImageStream{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + d.Name, Namespace: d.Namespace}}
@@ -398,6 +398,9 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		return nil
 	case "route":
 		routeRequestList := d.Spec.SiteURL
+		if d.Status.IsPrimary {
+			routeRequestList = uniqueRoutes(routeRequestList, dpc.Spec.PrimarySiteUrl)
+		}
 		for _, req := range routeRequestList {
 			hash := md5.Sum([]byte(req))
 			route := &routev1.Route{ObjectMeta: metav1.ObjectMeta{Name: d.Name + "-" + hex.EncodeToString(hash[0:4]), Namespace: d.Namespace}}
@@ -596,7 +599,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 }
 
 // ensureNoExtraRouteResource uses the current SiteURL resource as reference and deletes any extra route
-func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d *webservicesv1a1.DrupalSite, label string, log logr.Logger) (transientErr reconcileError) {
+func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig, label string, log logr.Logger) (transientErr reconcileError) {
 	ls := labelsForDrupalSite(d.Name)
 	ls["app"] = "drupal"
 	ls["route"] = label
@@ -618,6 +621,10 @@ func (r *DrupalSiteReconciler) ensureNoExtraRouteResource(ctx context.Context, d
 	}
 	routeRequestList := d.Spec.SiteURL
 	routesToRemove := []webservicesv1a1.Url{}
+	if d.Status.IsPrimary {
+		routeRequestList = uniqueRoutes(routeRequestList, dpc.Spec.PrimarySiteUrl)
+	}
+
 	for _, route := range existingRoutes.Items {
 		flag := false
 		for _, req := range routeRequestList {
@@ -2261,4 +2268,44 @@ func containerExists(name string, currentobject *appsv1.Deployment) {
 	if !containerExists {
 		currentobject.Spec.Template.Spec.Containers = append(currentobject.Spec.Template.Spec.Containers, corev1.Container{Name: name})
 	}
+}
+
+// uniqueRoutes returns the total routes of a drupalsite
+func uniqueRoutes(routeRequestList []webservicesv1a1.Url, primarySiteUrl []webservicesv1a1.Url) []webservicesv1a1.Url {
+	routeRequestList = append(routeRequestList, primarySiteUrl...)
+	keys := make(map[string]bool)
+	uniqueRouteRequestList := []webservicesv1a1.Url{}
+	for _, route := range routeRequestList {
+		if _, value := keys[string(route)]; !value {
+			keys[string(route)] = true
+			uniqueRouteRequestList = append(uniqueRouteRequestList, route)
+		}
+	}
+	return uniqueRouteRequestList
+}
+
+// routesEqual compares the urls of drupalsite.status.siteUrl with the total of
+// drupalsite.spec.siteUrl and drupalProjectConfig.spec.PrimaryUrl
+func routesEqual(currentRoutes []webservicesv1a1.Url, expectedRoutes []webservicesv1a1.Url) bool {
+	if len(currentRoutes) != len(expectedRoutes) {
+		return false
+	} else {
+		for _, currentRoute := range currentRoutes {
+			if !findUrl(expectedRoutes, string(currentRoute)) {
+				return false
+			}
+		}
+		return true
+	}
+
+}
+
+// Checks if a url exists in a Url slice
+func findUrl(urls []webservicesv1a1.Url, url string) bool {
+	for _, item := range urls {
+		if string(item) == url {
+			return true
+		}
+	}
+	return false
 }
