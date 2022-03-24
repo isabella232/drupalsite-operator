@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -217,4 +218,33 @@ func (r *DrupalSiteUpdateReconciler) updateDBSchema(ctx context.Context, d *webs
 	update = d.Status.Conditions.RemoveCondition("DBUpdatesPending")
 	update = d.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
 	return
+}
+
+// getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
+func (r *DrupalSiteUpdateReconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
+	})
+	if err != nil {
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &podList, &options)
+	switch {
+	case err != nil:
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
+	}
+	for _, v := range podList.Items {
+		if v.Annotations["releaseID"] == releaseID {
+			return v, nil
+		}
+	}
+	// iterate through the list and return the first pod that has the status condition ready
+	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
 }

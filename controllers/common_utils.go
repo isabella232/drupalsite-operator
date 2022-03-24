@@ -21,17 +21,22 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"reflect"
 	"time"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/go-logr/logr"
 	"github.com/operator-framework/operator-lib/status"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8sapiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -42,6 +47,16 @@ type Reconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+}
+
+type DeploymentConfig struct {
+	replicas             int32
+	phpResources         corev1.ResourceRequirements
+	nginxResources       corev1.ResourceRequirements
+	phpExporterResources corev1.ResourceRequirements
+	webDAVResources      corev1.ResourceRequirements
+	cronResources        corev1.ResourceRequirements
+	drupalLogsResources  corev1.ResourceRequirements
 }
 
 func setReady(drp *webservicesv1a1.DrupalSite) (update bool) {
@@ -319,33 +334,267 @@ func validateSpec(drpSpec webservicesv1a1.DrupalSiteSpec) reconcileError {
 	return nil
 }
 
-// getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
-func (r *Reconciler) getPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
-	podList := corev1.PodList{}
-	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
-		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
-	})
-	if err != nil {
-		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
-	}
-	options := client.ListOptions{
-		LabelSelector: podLabels,
-		Namespace:     d.Namespace,
-	}
-	err = r.List(ctx, &podList, &options)
-	switch {
-	case err != nil:
-		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
-	case len(podList.Items) == 0:
-		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
-	}
-	for _, v := range podList.Items {
-		if v.Annotations["releaseID"] == releaseID {
-			return v, nil
+// labelsForDrupalSite returns the labels for selecting the resources
+// belonging to the given drupalSite CR name.
+func labelsForDrupalSite(name string) map[string]string {
+	return map[string]string{"drupalSite": name}
+}
+
+// releaseID is the image tag to use depending on the version and releaseSpec
+func releaseID(d *webservicesv1a1.DrupalSite) string {
+	return d.Spec.Version.Name + "-" + d.Spec.Version.ReleaseSpec
+}
+
+// sitebuilderImageRefToUse returns which base image to use, depending on whether the field `ExtraConfigurationRepo` is set.
+// If yes, the S2I buildconfig will be used; sitebuilderImageRefToUse returns the output of imageStreamForDrupalSiteBuilderS2I().
+// Otherwise, returns the sitebuilder base
+func sitebuilderImageRefToUse(d *webservicesv1a1.DrupalSite, releaseID string) corev1.ObjectReference {
+	if len(d.Spec.Configuration.ExtraConfigurationRepo) > 0 {
+		return corev1.ObjectReference{
+			Kind: "ImageStreamTag",
+			Name: "image-registry.openshift-image-registry.svc:5000/" + d.Namespace + "/sitebuilder-s2i-" + d.Name + ":" + releaseID,
 		}
 	}
-	// iterate through the list and return the first pod that has the status condition ready
-	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	return corev1.ObjectReference{
+		Kind: "DockerImage",
+		Name: SiteBuilderImage + ":" + releaseID,
+	}
+}
+
+// addOwnerRefToObject appends the desired OwnerReference to the object
+func addOwnerRefToObject(obj metav1.Object, ownerRef metav1.OwnerReference) {
+	// If Owner already in object, we ignore
+	for _, o := range obj.GetOwnerReferences() {
+		if o.UID == ownerRef.UID {
+			return
+		}
+	}
+	obj.SetOwnerReferences(append(obj.GetOwnerReferences(), ownerRef))
+}
+
+// asOwner returns an OwnerReference set as the memcached CR
+func asOwner(d *webservicesv1a1.DrupalSite) metav1.OwnerReference {
+	trueVar := true
+	return metav1.OwnerReference{
+		APIVersion: d.APIVersion,
+		Kind:       d.Kind,
+		Name:       d.Name,
+		UID:        d.UID,
+		Controller: &trueVar,
+	}
+}
+
+// siteInstallJobForDrupalSite outputs the command needed for jobForDrupalSiteDrush
+func siteInstallJobForDrupalSite() []string {
+	// return []string{"sh", "-c", "echo"}
+	return []string{"/operations/ensure-site-install.sh"}
+}
+
+// enableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to enable maintenance mode
+func enableSiteMaintenanceModeCommandForDrupalSite() []string {
+	return []string{"/operations/enable-maintenance-mode.sh"}
+}
+
+// disableSiteMaintenanceModeCommandForDrupalSite outputs the command needed to disable maintenance mode
+func disableSiteMaintenanceModeCommandForDrupalSite() []string {
+	return []string{"/operations/disable-maintenance-mode.sh"}
+}
+
+// checkUpdbStatus outputs the command needed to check if a database update is required
+func checkUpdbStatus() []string {
+	return []string{"/operations/check-updb-status.sh"}
+}
+
+// runUpDBCommand outputs the command needed to update the database in drupal
+func runUpDBCommand() []string {
+	return []string{"/operations/run-updb.sh"}
+}
+
+// takeBackup outputs the command need to take the database backup to a given filename
+func takeBackup(filepath string) []string {
+	return []string{"/operations/database-backup.sh", "-p", filepath}
+}
+
+// restoreBackup outputs the command need to restore the database backup from a given filename
+func restoreBackup(filename string) []string {
+	return []string{"/operations/database-restore.sh", "-f", filename}
+}
+
+// cloneSource outputs the command need to clone a drupal site
+func cloneSource(filepath string) []string {
+	return []string{"/operations/clone.sh", "-p", filepath}
+}
+
+// encryptBasicAuthPassword encrypts a password for basic authentication
+// Since we are using SabreDAV, the specific format to follow: https://sabre.io/dav/authentication/#using-the-file-backend
+func encryptBasicAuthPassword(password string) string {
+	webdavHashPrefix := webDAVDefaultLogin + ":SabreDAV:"
+	hashedPassword := md5.Sum([]byte(webdavHashPrefix + password))
+	return webdavHashPrefix + hex.EncodeToString(hashedPassword[:])
+}
+
+// checkIfSiteIsInstalled outputs the command to check if a site is initialized or not
+func checkIfSiteIsInstalled() []string {
+	return []string{"/operations/check-if-installed.sh"}
+}
+
+// cacheReload outputs the command to reload cache on the drupalSite
+func cacheReload() []string {
+	return []string{"/operations/clear-cache.sh"}
+}
+
+// syncDrupalFilesToEmptydir outputs the command to sync the files from /app to the emptyDir
+func syncDrupalFilesToEmptydir() []string {
+	return []string{"/operations/sync-drupal-emptydir.sh"}
+}
+
+// tailDrupalLogs outputs the command to tail the drupal log file
+func tailDrupalLogs() []string {
+	return []string{"/operations/tail-drupal-logs.sh"}
+}
+
+// customProbe outputs the command to check the /user/login
+func customProbe(probe string) []string {
+	return []string{"/operations/probe-site.sh", "-p", probe}
+}
+
+// startupProbe outputs the command to check the /_site/_php-fpm-status
+func startupProbe() []string {
+	return []string{"/operations/startup-probe-site.sh"}
+}
+
+// backupListUpdateNeeded tells whether two arrays of velero Backups elements are the same or not.
+// A nil argument is equivalent to an empty slice.
+func backupListUpdateNeeded(veleroBackupsList []velerov1.Backup, statusBackupsList []webservicesv1a1.Backup) bool {
+	if len(veleroBackupsList) != len(statusBackupsList) {
+		return true
+	}
+	for i, v := range veleroBackupsList {
+		if v.Name != statusBackupsList[i].BackupName {
+			return true
+		}
+	}
+	return false
+}
+
+// expectedDeploymentReplicas calculates expected replicas of deployment
+func expectedDeploymentReplicas(currentnamespace *corev1.Namespace, qosClass webservicesv1a1.QoSClass) (int32, error) {
+	_, isBlockedTimestampAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/blocked-timestamp"]
+	_, isBlockedReasonAnnotationSet := currentnamespace.Annotations["blocked.webservices.cern.ch/reason"]
+	blocked := isBlockedTimestampAnnotationSet && isBlockedReasonAnnotationSet
+	notBlocked := !isBlockedTimestampAnnotationSet && !isBlockedReasonAnnotationSet
+	switch {
+	case !blocked && !notBlocked:
+		return 0, fmt.Errorf("both annotations blocked.webservices.cern.ch/blocked-timestamp and blocked.webservices.cern.ch/reason should be added/removed to block/unblock")
+	case blocked:
+		return 0, nil
+	default:
+		if qosClass == webservicesv1a1.QoSCritical {
+			return 3, nil
+		}
+		return 1, nil
+	}
+}
+
+// containerExists checks if a container exists on the deployment
+// if it doesn't exists, it adds it
+func containerExists(name string, currentobject *appsv1.Deployment) {
+	containerExists := false
+	for _, container := range currentobject.Spec.Template.Spec.Containers {
+		if container.Name == name {
+			containerExists = true
+			break
+		}
+	}
+	if !containerExists {
+		currentobject.Spec.Template.Spec.Containers = append(currentobject.Spec.Template.Spec.Containers, corev1.Container{Name: name})
+	}
+}
+
+// getDeploymentConfiguration precalculates all the configuration that the server deployment needs, including:
+// pod replicas, resource req/lim
+// NOTE: this includes the default resource limits for PHP
+func (r *Reconciler) getDeploymentConfiguration(ctx context.Context, drupalSite *webservicesv1a1.DrupalSite) (config DeploymentConfig, requeue bool, updateStatus bool, reconcileErr reconcileError) {
+	config = DeploymentConfig{}
+	requeue = false
+	updateStatus = false
+
+	// Get replicas
+	namespace := &corev1.Namespace{}
+	if err := r.Get(ctx, types.NamespacedName{Name: drupalSite.Namespace}, namespace); err != nil {
+		switch {
+		case k8sapierrors.IsNotFound(err):
+			return DeploymentConfig{}, true, false, nil
+		default:
+			return DeploymentConfig{}, false, false, newApplicationError(err, ErrClientK8s)
+		}
+	}
+	replicas, err := expectedDeploymentReplicas(namespace, drupalSite.Spec.QoSClass)
+	if err != nil {
+		return DeploymentConfig{}, false, false, newApplicationError(err, ErrInvalidSpec)
+	}
+	if drupalSite.Status.ExpectedDeploymentReplicas == nil || *drupalSite.Status.ExpectedDeploymentReplicas != replicas {
+		drupalSite.Status.ExpectedDeploymentReplicas = &replicas
+		updateStatus = true
+	}
+
+	nginxResources, err := reqLimDict("nginx", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	phpExporterResources, err := reqLimDict("php-fpm-exporter", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	phpResources, err := reqLimDict("php-fpm", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	//TODO: Check best resource consumption
+	webDAVResources, err := reqLimDict("webdav", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	cronResources, err := reqLimDict("cron", drupalSite.Spec.QoSClass)
+	drupalLogsResources, err := reqLimDict("drupal-logs", drupalSite.Spec.QoSClass)
+	if err != nil {
+		reconcileErr = newApplicationError(err, ErrFunctionDomain)
+	}
+	if reconcileErr != nil {
+		return
+	}
+
+	// Get config override (currently only PHP resources)
+
+	configOverride, reconcileErr := r.getConfigOverride(ctx, drupalSite)
+	if reconcileErr != nil {
+		return
+	}
+	if configOverride != nil {
+		if !reflect.DeepEqual(configOverride.Php.Resources, corev1.ResourceRequirements{}) {
+			phpResources = configOverride.Php.Resources
+		}
+		if !reflect.DeepEqual(configOverride.Nginx.Resources, corev1.ResourceRequirements{}) {
+			nginxResources = configOverride.Nginx.Resources
+		}
+		if !reflect.DeepEqual(configOverride.Webdav.Resources, corev1.ResourceRequirements{}) {
+			webDAVResources = configOverride.Webdav.Resources
+		}
+		if !reflect.DeepEqual(configOverride.PhpExporter.Resources, corev1.ResourceRequirements{}) {
+			phpExporterResources = configOverride.PhpExporter.Resources
+		}
+		if !reflect.DeepEqual(configOverride.Cron.Resources, corev1.ResourceRequirements{}) {
+			cronResources = configOverride.Cron.Resources
+		}
+		if !reflect.DeepEqual(configOverride.DrupalLogs.Resources, corev1.ResourceRequirements{}) {
+			drupalLogsResources = configOverride.DrupalLogs.Resources
+		}
+	}
+
+	config = DeploymentConfig{replicas: replicas,
+		phpResources: phpResources, nginxResources: nginxResources, phpExporterResources: phpExporterResources, webDAVResources: webDAVResources, cronResources: cronResources, drupalLogsResources: drupalLogsResources,
+	}
+	return
 }
 
 // updateCRorFailReconcile tries to update the Custom Resource and logs any error
@@ -374,4 +623,82 @@ func (r *Reconciler) updateCRStatusOrFailReconcile(ctx context.Context, log logr
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// execToServerPod executes a command to the first running server pod of the Drupal site.
+//
+// Commands are interpreted similar to how kubectl does it, eg to do "drush cr" either of these will work:
+// - "drush", "cr"
+// - "sh", "-c", "drush cr"
+// The last syntax allows passing an entire bash script as a string.
+//
+// Example:
+// ````
+//	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "sh", "-c", "drush version; ls")
+//	sout, serr, err := r.execToServerPod(ctx, drp, "php-fpm", nil, "drush", "version")
+//	if err != nil {
+//		log.Error(err, "Error while exec into pod")
+//	}
+//	log.Info("EXEC", "stdout", sout, "stderr", serr)
+// ````
+func (r *Reconciler) execToServerPod(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, stderr string, err error) {
+	pod, err := r.getRunningPodForVersion(ctx, d, releaseID(d))
+	if err != nil {
+		return "", "", err
+	}
+	return execToPodThroughAPI(containerName, pod.Name, d.Namespace, stdin, command...)
+}
+
+// getRunningPodForVersion fetches the list of the running pods for the current deployment and returns the first one from the list
+func (r *Reconciler) getRunningPodForVersion(ctx context.Context, d *webservicesv1a1.DrupalSite, releaseID string) (corev1.Pod, reconcileError) {
+	podList := corev1.PodList{}
+	podLabels, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+		MatchLabels: map[string]string{"drupalSite": d.Name, "app": "drupal"},
+	})
+	if err != nil {
+		return corev1.Pod{}, newApplicationError(err, ErrFunctionDomain)
+	}
+	options := client.ListOptions{
+		LabelSelector: podLabels,
+		Namespace:     d.Namespace,
+	}
+	err = r.List(ctx, &podList, &options)
+	switch {
+	case err != nil:
+		return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+	case len(podList.Items) == 0:
+		return corev1.Pod{}, newApplicationError(fmt.Errorf("No pod found with given labels: %s", podLabels), ErrTemporary)
+	}
+	for _, v := range podList.Items {
+		if v.Annotations["releaseID"] == releaseID {
+			if v.Status.Phase == corev1.PodRunning {
+				return v, nil
+			} else {
+				return v, newApplicationError(err, ErrPodNotRunning)
+			}
+		}
+	}
+	// iterate through the list and return the first pod that has the status condition ready
+	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+}
+
+// execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
+func (r *Reconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
+	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
+	if err != nil || stderr != "" {
+		return "", fmt.Errorf("STDERR: %s \n%w", stderr, err)
+	}
+	return stdout, nil
+}
+
+func (r *Reconciler) getConfigOverride(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalSiteConfigOverrideSpec, reconcileError) {
+	configOverride := &webservicesv1a1.DrupalSiteConfigOverride{}
+	err := r.Get(ctx, types.NamespacedName{Name: drp.Name, Namespace: drp.Namespace}, configOverride)
+	switch {
+	case k8sapierrors.IsNotFound(err):
+		return nil, nil
+	case err != nil:
+		return nil, newApplicationError(err, ErrClientK8s)
+	}
+	return &configOverride.Spec, nil
 }
