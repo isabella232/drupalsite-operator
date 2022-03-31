@@ -379,7 +379,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{Requeue: true}, nil
 	}
 
-	// 5. Perform drupalsite updates
+	// Update the ServingPodImage if different
+	if drupalSite.Status.ServingPodImage != sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name {
+		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+	}
 
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
 	// Ref https://gitlab.cern.ch/paas-tools/operators/authz-operator/-/merge_requests/76#note_4501887

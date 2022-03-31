@@ -111,6 +111,29 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// Check drupalsite has the right version
+
+	// 1. Checks if the rollout has succeeded
+	// 2. If there is a permanent unrecoverable error a 'CodeUpdateFailed' status is set on the CR
+
+	if !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		requeueNeeded, err := r.didVersionRollOutSucceed(ctx, drupalSite)
+		switch {
+		case err != nil:
+			if err.Temporary() {
+				// Temporary error while checking for version roll out
+				return handleTransientErr(err, "Temporary error while checking for version roll out", "")
+			} else {
+				err.Wrap("%v: Failed to update version " + releaseID(drupalSite))
+				setConditionStatus(drupalSite, "CodeUpdateFailed", true, err, false)
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			}
+		case requeueNeeded:
+			// Waiting for pod to start
+			return ctrl.Result{Requeue: true}, nil
+		}
+	}
+
 	// 2.1 Set conditions related to update
 
 	// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
@@ -153,6 +176,12 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if update := r.updateDBSchema(ctx, drupalSite, log); update {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
+	}
+
+	// Update the Failsafe during the first instantiation and after a successful update
+	if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
