@@ -116,33 +116,15 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
 	// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 	// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
-	codeUpdateNeeded := false
 	dbUpdateNeeded := false
 	if drupalSite.ConditionTrue("Ready") && drupalSite.ConditionTrue("Initialized") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
-		codeUpdateNeeded, reconcileErr := r.codeUpdateNeeded(ctx, drupalSite)
-		if reconcileErr != nil {
-			handleNonfatalErr(reconcileErr, "%v while checking if an update is needed")
-		}
+		var reconcileErr reconcileError
 		// Check for db updates only when codeUpdateNeeded is not inProgress
-		if !codeUpdateNeeded {
-			dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
-			if reconcileErr != nil {
-				handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
-			}
+		dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
+		if reconcileErr != nil {
+			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
 		}
-		// 1. Decide the value of the annotation "updateInProgress"
-		switch {
-		case (codeUpdateNeeded || dbUpdateNeeded):
-			if setUpdateInProgress(drupalSite) {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
-		case !(codeUpdateNeeded || dbUpdateNeeded):
-			// We only unset here, when the failSafe and current are the same i.e the update succeeded
-			if unsetUpdateInProgress(drupalSite) {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
-		}
-		// 2. Set status condition DBUpdatesPending
+		// 1. Set status condition DBUpdatesPending
 		switch {
 		case dbUpdateNeeded:
 			if setDBUpdatesPending(drupalSite) {
@@ -155,54 +137,9 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 	if drupalSite.ConditionTrue("CodeUpdateFailed") {
-		if unsetUpdateInProgress(drupalSite) {
-			return r.updateCRorFailReconcile(ctx, log, drupalSite)
-		}
 		// Set condition unknown
 		if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-	}
-
-	// log.V(3).Info("Status up to date.")
-
-	// 5. Perform drupalsite updates
-
-	// Perform code update if needed
-	// 1. set the Status.ReleaseID.Failsafe
-	// 2. ensure updated deployment
-	// 3. set condition "CodeUpdateFailed" to true if there is an unrecoverable error & rollback
-
-	_, isUpdateAnnotationSet := drupalSite.Annotations["updateInProgress"]
-	if isUpdateAnnotationSet && codeUpdateNeeded && !drupalSite.ConditionTrue("CodeUpdateFailed") {
-		// Deployment replicas and resources
-		deploymentConfig, requeue, updateStatus, reconcileErr := r.getDeploymentConfiguration(ctx, drupalSite)
-		switch {
-		case reconcileErr != nil:
-			if reconcileErr.Temporary() {
-				return handleTransientErr(reconcileErr, "Failed to calculate deployment configuration: %v", "")
-			} else {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		case requeue:
-			return reconcile.Result{Requeue: true}, nil
-		case updateStatus:
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		}
-		update, requeue, err, errorMessage := r.updateDrupalVersion(ctx, drupalSite, deploymentConfig)
-		switch {
-		case err != nil:
-			if err.Temporary() {
-				return handleTransientErr(err, errorMessage, "")
-			} else {
-				// NOTE: If error is permanent, there's nothing more we can do.
-				log.Error(err, err.Unwrap().Error())
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		case update:
-			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-		case requeue:
-			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 
@@ -212,7 +149,7 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// Remove site from maintenance mode
 	// Restore backup in case of a failure
 
-	if isUpdateAnnotationSet && dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+	if dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 		if update := r.updateDBSchema(ctx, drupalSite, log); update {
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}

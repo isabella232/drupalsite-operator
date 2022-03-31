@@ -407,13 +407,6 @@ var _ = Describe("DrupalSite controller", func() {
 					return k8sClient.Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
 
-				// Check if the drupalSiteObject has 'updateInProgress' annotation set
-				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					return cr.Annotations["updateInProgress"] == "true"
-				}, timeout, interval).Should(BeTrue())
-
 				// Check the annotation on the deployment
 				By("Expecting the new drupal Version on the pod annotation")
 				Eventually(func() bool {
@@ -1057,13 +1050,6 @@ var _ = Describe("DrupalSite controller", func() {
 					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
-
-				// Check if the drupalSiteObject has 'updateInProgress' annotation set
-				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					return cr.Annotations["updateInProgress"] == "true"
-				}, timeout, interval).Should(BeTrue())
 
 				// Check the annotation on the deployment
 				By("Expecting the new drupal Version on the pod annotation")
@@ -1889,13 +1875,6 @@ var _ = Describe("DrupalSite controller", func() {
 					cr.Spec.Version.ReleaseSpec = newReleaseSpec
 					return k8sClient.Update(ctx, &cr)
 				}, timeout, interval).Should(Succeed())
-
-				// Check if the drupalSiteObject has 'updateInProgress' annotation set
-				By("Expecting 'updateInProgress' annotation set on the drupalSiteObject")
-				Eventually(func() bool {
-					k8sClient.Get(ctx, key, &cr)
-					return cr.Annotations["updateInProgress"] == "true"
-				}, timeout, interval).Should(BeTrue())
 
 				// Check the annotation on the deployment
 				By("Expecting the new drupal Version on the pod annotation")
