@@ -60,7 +60,8 @@ var _ = Describe("DrupalSite controller", func() {
 		interval        = time.Millisecond * 250
 	)
 	var (
-		drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{}
+		drupalSiteObject    = &drupalwebservicesv1alpha1.DrupalSite{}
+		drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{}
 	)
 
 	ctx := context.Background()
@@ -96,6 +97,22 @@ var _ = Describe("DrupalSite controller", func() {
 				},
 			},
 		}
+		drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+				Kind:       "DrupalSite",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      key.Name,
+				Namespace: key.Namespace,
+			},
+			Spec: drupalwebservicesv1alpha1.DrupalProjectConfigSpec{
+				PrimarySiteName: key.Name,
+				PrimarySiteUrl: []drupalwebservicesv1alpha1.Url{
+					"test-primary.webtest.cern.ch",
+				},
+			},
+		}
 	})
 
 	Describe("Creating drupalSite object", func() {
@@ -117,6 +134,11 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By creating a new drupalSite")
 				Eventually(func() error {
 					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a drupalProjectConfig")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalProjectConfig)
 				}, timeout, interval).Should(Succeed())
 
 				By("Expecting drupalSite object created")
@@ -766,6 +788,22 @@ var _ = Describe("DrupalSite controller", func() {
 						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
+				drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalProjectConfigSpec{
+						PrimarySiteName: key.Name,
+						PrimarySiteUrl: []drupalwebservicesv1alpha1.Url{
+							"test-primary.webtest.cern.ch",
+						},
+					},
+				}
 
 				By("By creating the testing namespace")
 				Eventually(func() error {
@@ -777,6 +815,11 @@ var _ = Describe("DrupalSite controller", func() {
 				By("By creating a new drupalSite")
 				Eventually(func() error {
 					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a drupalProjectConfig")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalProjectConfig)
 				}, timeout, interval).Should(Succeed())
 
 				// Create drupalSite object
@@ -1496,12 +1539,33 @@ var _ = Describe("DrupalSite controller", func() {
 						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
 					},
 				}
+				drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalProjectConfigSpec{
+						PrimarySiteName: key.Name,
+						PrimarySiteUrl: []drupalwebservicesv1alpha1.Url{
+							"test-primary.webtest.cern.ch",
+						},
+					},
+				}
 
 				By("By creating the testing namespace")
 				Eventually(func() error {
 					return k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 						Name: key.Namespace},
 					})
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a drupalProjectConfig")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalProjectConfig)
 				}, timeout, interval).Should(Succeed())
 
 				By("By creating a new drupalSite")
