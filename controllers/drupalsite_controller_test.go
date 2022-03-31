@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -61,6 +62,7 @@ var _ = Describe("DrupalSite controller", func() {
 	)
 	var (
 		drupalSiteObject    = &drupalwebservicesv1alpha1.DrupalSite{}
+		drupalSiteObjectDev = &drupalwebservicesv1alpha1.DrupalSite{}
 		drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{}
 	)
 
@@ -2042,6 +2044,136 @@ var _ = Describe("DrupalSite controller", func() {
 				// If spec.primarySiteName!="", it is never auto-filled, not even with just one instance being created
 				// By default DrupalSite.status.isPrimary is false
 				// Editing DrupalProjectConfig will reflect changes on DrupalSite.status.isPrimary
+			})
+		})
+	})
+	Describe("Using DrupalProjectConfig", func() {
+		Context("Promoting a drupalsite to primary", func() {
+			It("Should update the status.siteUrl of each site", func() {
+				key = types.NamespacedName{
+					Name:      Name + "-primary",
+					Namespace: "drupalprojectconfig",
+				}
+				drupalSiteObject = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "v8.9-1",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:      "10Gi",
+							QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
+							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
+						},
+						SiteURL: []drupalwebservicesv1alpha1.Url{dummySiteUrl},
+					},
+				}
+				drupalSiteObjectDev = &drupalwebservicesv1alpha1.DrupalSite{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name + "dev",
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalSiteSpec{
+						Version: drupalwebservicesv1alpha1.Version{
+							Name:        "v8.9-1",
+							ReleaseSpec: "stable",
+						},
+						Configuration: drupalwebservicesv1alpha1.Configuration{
+							DiskSize:      "10Gi",
+							QoSClass:      drupalwebservicesv1alpha1.QoSStandard,
+							DatabaseClass: drupalwebservicesv1alpha1.DBODStandard,
+						},
+						SiteURL: []drupalwebservicesv1alpha1.Url{"test-dev.webtest.cern.ch"},
+					},
+				}
+				drupalProjectConfig = &drupalwebservicesv1alpha1.DrupalProjectConfig{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "drupal.webservices.cern.ch/v1alpha1",
+						Kind:       "DrupalSite",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      key.Name,
+						Namespace: key.Namespace,
+					},
+					Spec: drupalwebservicesv1alpha1.DrupalProjectConfigSpec{
+						PrimarySiteName: key.Name,
+						PrimarySiteUrl: []drupalwebservicesv1alpha1.Url{
+							"test-primary.webtest.cern.ch",
+						},
+					},
+				}
+
+				By("By creating the testing namespace")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+						Name: key.Namespace},
+					})
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a drupalProjectConfig")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalProjectConfig)
+				}, timeout, interval).Should(Succeed())
+
+				By("By creating a new drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObject)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting the isPrimary status field in drupalSite")
+				Eventually(func() bool {
+					cr := drupalwebservicesv1alpha1.DrupalSite{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					return cr.Status.IsPrimary == true
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the siteUrl status field in drupalSite")
+				Eventually(func() bool {
+					cr := drupalwebservicesv1alpha1.DrupalSite{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr)
+					return reflect.DeepEqual(cr.Status.SiteUrl, []drupalwebservicesv1alpha1.Url{dummySiteUrl, "test-primary.webtest.cern.ch"})
+				}, timeout, interval).Should(BeTrue())
+
+				By("Expecting the primarySiteName spec field in drupalSiteProjectConfig")
+				Eventually(func() bool {
+					dpc := drupalwebservicesv1alpha1.DrupalProjectConfig{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dpc)
+					return dpc.Spec.PrimarySiteName == key.Name
+				}, timeout, interval).Should(BeTrue())
+
+				By("By creating a second drupalSite")
+				Eventually(func() error {
+					return k8sClient.Create(ctx, drupalSiteObjectDev)
+				}, timeout, interval).Should(Succeed())
+
+				By("Changing the primary site")
+				Eventually(func() error {
+					dpc := drupalwebservicesv1alpha1.DrupalProjectConfig{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &dpc)
+					dpc.Spec.PrimarySiteName = key.Name + "dev"
+					return k8sClient.Update(ctx, &dpc)
+				}, timeout, interval).Should(Succeed())
+
+				By("Expecting the siteUrl status field to be uddated in both drupalSites")
+				Eventually(func() bool {
+					cr_old_primary := drupalwebservicesv1alpha1.DrupalSite{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name, Namespace: key.Namespace}, &cr_old_primary)
+					cr_new_primary := drupalwebservicesv1alpha1.DrupalSite{}
+					k8sClient.Get(ctx, types.NamespacedName{Name: key.Name + "dev", Namespace: key.Namespace}, &cr_new_primary)
+					return reflect.DeepEqual(cr_old_primary.Status.SiteUrl, []drupalwebservicesv1alpha1.Url{dummySiteUrl}) && reflect.DeepEqual(cr_new_primary.Status.SiteUrl, []drupalwebservicesv1alpha1.Url{"test-dev.webtest.cern.ch", "test-primary.webtest.cern.ch"})
+				}, timeout, interval).Should(BeTrue())
 			})
 		})
 	})
