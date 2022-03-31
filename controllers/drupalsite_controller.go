@@ -456,10 +456,10 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Update status of drupalsite with primary urls
 	if drupalSite.Status.IsPrimary && !routesEqual(drupalSite.Status.SiteUrl, uniqueRoutes(drupalSite.Spec.SiteURL, drupalProjectConfig.Spec.PrimarySiteUrl)) {
 		drupalSite.Status.SiteUrl = uniqueRoutes(drupalSite.Spec.SiteURL, drupalProjectConfig.Spec.PrimarySiteUrl)
-		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	} else if !drupalSite.Status.IsPrimary {
 		drupalSite.Status.SiteUrl = drupalSite.Spec.SiteURL
-		r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
 	// 4. Check DBOD has been provisioned and reconcile if needed
