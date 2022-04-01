@@ -89,8 +89,52 @@ func (r *DrupalSiteUpdateReconciler) ensureUpdatedDeployment(ctx context.Context
 	return "", newApplicationError(fmt.Errorf("database secret value empty"), ErrDBOD)
 }
 
+// checkUpatedDrupalDeployment updates the drupal version of the running site to the modified value in the spec
+// 1. Checks if the rollout has succeeded
+// 2. If the rollout succeeds, cache is reloaded on the new version
+// 3. If there is any temporary failure at any point, the process is repeated again after a timeout
+// 4. If there is a permanent unrecoverable error, the deployment is rolled back to the previous version
+// using the 'Failsafe' on the status and a 'CodeUpdateFailed' status is set on the CR
+func (r *DrupalSiteUpdateReconciler) checkUpatedDrupalDeployment(ctx context.Context, d *webservicesv1a1.DrupalSite, deploymentConfig DeploymentConfig) (update bool, requeue bool, err reconcileError, errorMessage string) {
+	// Check if deployment has rolled out
+	requeueNeeded, err := r.didVersionRollOutSucceed(ctx, d)
+	switch {
+	case err != nil:
+		if err.Temporary() {
+			// Temporary error while checking for version roll out
+			return false, false, err, "Temporary error while checking for version roll out"
+			// return false, true, nil, ""
+		} else {
+			setConditionStatus(d, "CodeUpdateFailed", true, err, false)
+			err.Wrap("%v: Failed to update version " + releaseID(d))
+			rollBackErr := r.rollBackCodeUpdate(ctx, d, deploymentConfig)
+			if rollBackErr != nil {
+				return false, false, rollBackErr, "Error while rolling back version"
+			}
+			return true, false, nil, ""
+		}
+	case requeueNeeded:
+		// Waiting for pod to start
+		return false, true, nil, ""
+	}
+
+	// When code updating set to false and everything runs fine, remove the status
+	if d.ConditionTrue("CodeUpdateFailed") {
+		d.Status.Conditions.RemoveCondition("CodeUpdateFailed")
+		return true, false, nil, ""
+	}
+	return false, false, nil, ""
+}
+
 // didVersionRollOutSucceed checks if the deployment has rolled out the new pods successfully and the new pods are running
 func (r *DrupalSiteUpdateReconciler) didVersionRollOutSucceed(ctx context.Context, d *webservicesv1a1.DrupalSite) (requeue bool, err reconcileError) {
+	// check first if replicas == updatedReplicas on the deployment
+	deploy := &appsv1.Deployment{}
+	fetchError := r.Get(ctx, types.NamespacedName{Name: d.Name, Namespace: d.Namespace}, deploy)
+	if fetchError != nil {
+		return false, newApplicationError(fetchError, ErrClientK8s)
+	}
+
 	pod, err := r.getPodForVersion(ctx, d, releaseID(d))
 	if err != nil && err.Temporary() {
 		return false, newApplicationError(err, ErrClientK8s)
@@ -98,7 +142,7 @@ func (r *DrupalSiteUpdateReconciler) didVersionRollOutSucceed(ctx context.Contex
 	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
 		return false, newApplicationError(errors.New("pod did not roll out successfully"), ErrDeploymentUpdateFailed)
 	}
-	if pod.Status.Phase == corev1.PodPending {
+	if deploy.Status.Replicas != deploy.Status.UpdatedReplicas && pod.Status.Phase == corev1.PodPending {
 		currentTime := time.Now()
 		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodMinutesForPodToStartDuringUpgrade(d) {
 			return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
