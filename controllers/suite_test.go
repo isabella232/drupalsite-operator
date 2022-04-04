@@ -81,7 +81,8 @@ var _ = BeforeSuite(func(done Done) {
 	PhpFpmExporterImage = "test-phpfpmexporter"
 	WebDAVImage = "test-webdav"
 	DefaultD8ReleaseSpec = "test-d8-spec"
-	DefaultD9ReleaseSpec = "test-d9-spec"
+	DefaultD93ReleaseSpec = "test-d93-spec"
+	DefaultD932ReleaseSpec = "test-d93-2-spec"
 	ClusterName = "test"
 	EasystartBackupName = "easystart-backup"
 
