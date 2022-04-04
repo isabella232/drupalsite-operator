@@ -70,12 +70,12 @@ var (
 	SMTPHost string
 	// VeleroNamespace refers to the namespace of the velero server to create backups
 	VeleroNamespace string
-	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
+	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal v8.9-2 to be defaulted incase it is empty
 	DefaultD8ReleaseSpec string
-	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 9.2 to be defaulted incase it is empty
-	DefaultD9ReleaseSpec string
-	// DefaultD93ReleaseSpec refers to the releaseSpec for Drupal 9.3 to be defaulted incase it is empty
+	// DefaultD93ReleaseSpec refers to the releaseSpec for Drupal v9.3-1 to be defaulted incase it is empty
 	DefaultD93ReleaseSpec string
+	// DefaultD932ReleaseSpec refers to the releaseSpec for Drupal v9.3-2 to be defaulted incase it is empty
+	DefaultD932ReleaseSpec string
 	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
 	ParallelThreadCount int
 	// EnableTopologySpread refers to enabling avaliability zone scheduling for critical site deployments
