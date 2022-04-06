@@ -70,12 +70,12 @@ var (
 	SMTPHost string
 	// VeleroNamespace refers to the namespace of the velero server to create backups
 	VeleroNamespace string
-	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal 8 to be defaulted incase it is empty
+	// DefaultD8ReleaseSpec refers to the releaseSpec for Drupal v8.9-2 to be defaulted incase it is empty
 	DefaultD8ReleaseSpec string
-	// DefaultD9ReleaseSpec refers to the releaseSpec for Drupal 9.2 to be defaulted incase it is empty
-	DefaultD9ReleaseSpec string
-	// DefaultD93ReleaseSpec refers to the releaseSpec for Drupal 9.3 to be defaulted incase it is empty
+	// DefaultD93ReleaseSpec refers to the releaseSpec for Drupal v9.3-1 to be defaulted incase it is empty
 	DefaultD93ReleaseSpec string
+	// DefaultD932ReleaseSpec refers to the releaseSpec for Drupal v9.3-2 to be defaulted incase it is empty
+	DefaultD932ReleaseSpec string
 	// ParallelThreadCount refers to the number of parallel reconciliations done by the Operator
 	ParallelThreadCount int
 	// EnableTopologySpread refers to enabling avaliability zone scheduling for critical site deployments
@@ -655,13 +655,14 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 	}
 	// Initialize 'spec.version.releaseSpec' if empty
 	if len(drp.Spec.Version.ReleaseSpec) == 0 {
-		if strings.HasPrefix(drp.Spec.Version.Name, "v8") {
+		switch {
+		case strings.HasPrefix(drp.Spec.Version.Name, "v8"):
 			drp.Spec.Version.ReleaseSpec = DefaultD8ReleaseSpec
-		} else if strings.HasPrefix(drp.Spec.Version.Name, "v9.2") {
-			drp.Spec.Version.ReleaseSpec = DefaultD9ReleaseSpec
-		} else if strings.HasPrefix(drp.Spec.Version.Name, "v9.3") {
+		case strings.HasPrefix(drp.Spec.Version.Name, "v9.3-1"):
 			drp.Spec.Version.ReleaseSpec = DefaultD93ReleaseSpec
-		} else {
+		case strings.HasPrefix(drp.Spec.Version.Name, "v9.3-2"):
+			drp.Spec.Version.ReleaseSpec = DefaultD932ReleaseSpec
+		default:
 			log.V(3).Info("Cannot set default ReleaseSpec for version " + drp.Spec.Version.Name)
 		}
 		update = true
