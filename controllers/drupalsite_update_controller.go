@@ -155,7 +155,7 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
 		dbUpdateNeeded := false
 		// Check for db updates only when codeUpdateNeeded is not inProgress
-		dbUpdateNeeded, reconcileErr = r.dbUpdateNeeded(ctx, drupalSite)
+		dbUpdateNeeded, annotationUpdate, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
 		if reconcileErr != nil {
 			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
 		}
@@ -169,6 +169,9 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if removeDBUpdatesPending(drupalSite) {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
+		}
+		if annotationUpdate {
+			return r.updateCRorFailReconcile(ctx, log, drupalSite)
 		}
 		if drupalSite.ConditionTrue("CodeUpdateFailed") {
 			// Set condition unknown

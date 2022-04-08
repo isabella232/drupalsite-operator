@@ -49,19 +49,30 @@ func (r *DrupalSiteUpdateReconciler) codeUpdateNeeded(ctx context.Context, d *we
 
 // dbUpdateNeeded checks updbst to see if DB updates are needed
 // If there is an error, the return value is false
-func (r *DrupalSiteUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, reconcileError) {
+func (r *DrupalSiteUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (bool, bool, reconcileError) {
+	if len(d.Annotations["updbstcheck"]) > 0 {
+		lastCheckedTime, _ := time.Parse(layout, d.Annotations["updbstcheck"])
+		if time.Now().Sub(lastCheckedTime).Hours() < 24 {
+			return false, false, nil
+		}
+	}
 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
 	if err != nil {
 		// When exec fails, we need to return false. Else it affects the other operations on the controller
 		// Returning true will also make local tests fails as execToPod is not possible to emulate
-		return false, newApplicationError(err, ErrPodExec)
+		return false, false, newApplicationError(err, ErrPodExec)
 	}
+	// Update "updbstcheck" timestamp
+	if d.Annotations == nil {
+		d.Annotations = map[string]string{}
+	}
+	d.Annotations["updbstcheck"] = time.Now().Format(layout)
 	// DB table updates needed
 	if sout != "" {
-		return true, nil
+		return true, true, nil
 	}
 	// No db table updates needed
-	return false, nil
+	return false, true, nil
 }
 
 // getRunningdeployment fetches the running drupal deployment
