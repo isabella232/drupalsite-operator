@@ -453,7 +453,7 @@ func (r *DrupalSiteReconciler) ensureDrupalDeployment(ctx context.Context, d *we
 
 	// Check if a deployment exists & if any of the given conditions satisfy
 	// In scenarios where, the deployment is deleted during a failed upgrade, this check is needed to bring it back
-	if err == nil && (d.Annotations["updateInProgress"] == "true" || d.ConditionTrue("CodeUpdateFailed") || d.ConditionTrue("DBUpdatesFailed")) {
+	if err == nil && (d.ConditionTrue("CodeUpdateFailed") || d.ConditionTrue("DBUpdatesFailed")) {
 		return nil
 	}
 	if databaseSecret := databaseSecretName(d); len(databaseSecret) != 0 {

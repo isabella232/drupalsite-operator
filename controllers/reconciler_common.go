@@ -116,31 +116,6 @@ func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType status.Co
 	return drp.Status.Conditions.SetCondition(condition())
 }
 
-// setUpdateInProgress sets the 'updateInProgress' annotation on the drupalSite object
-func setUpdateInProgress(drp *webservicesv1a1.DrupalSite) bool {
-	if len(drp.Annotations) == 0 {
-		drp.Annotations = map[string]string{}
-	}
-	if drp.Annotations["updateInProgress"] == "true" {
-		return false
-	}
-	drp.Annotations["updateInProgress"] = "true"
-	return true
-}
-
-// unsetUpdateInProgress removes the 'updateInProgress' annotation on the drupalSite object
-func unsetUpdateInProgress(drp *webservicesv1a1.DrupalSite) bool {
-	if len(drp.Annotations) != 0 {
-		_, isSet := drp.Annotations["updateInProgress"]
-		if isSet {
-			delete(drp.Annotations, "updateInProgress")
-			return true
-		}
-		return false
-	}
-	return false
-}
-
 // setDBUpdatesPending sets the 'DBUpdatesPending' status on the drupalSite object
 func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
