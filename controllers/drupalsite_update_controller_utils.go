@@ -66,6 +66,7 @@ func (r *DrupalSiteUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webs
 	if d.Annotations == nil {
 		d.Annotations = map[string]string{}
 	}
+	// Update "updbstcheck" timestamp
 	d.Annotations["updbstcheck"] = time.Now().Format(layout)
 	// DB table updates needed
 	if sout != "" {
