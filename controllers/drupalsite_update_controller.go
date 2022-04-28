@@ -31,23 +31,30 @@ import (
 // 	log = logf.Log.WithName("controller_supported_drupal_versions")
 // )
 
-// DrupalSiteUpdateReconciler reconciles a DrupalSite object
-type DrupalSiteUpdateReconciler struct {
+// DrupalSiteDBUpdateReconciler reconciles a DrupalSite object
+type DrupalSiteDBUpdateReconciler struct {
 	Reconciler
 }
+
+const (
+	// 24 Hours
+	successfulUpDBStCheckTimeOut = 24
+	// 10 Minutes
+	errorUpDBStCheckTimeOut = 10
+)
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 
 // SetupWithManager adds a manager which watches the resources
-func (r *DrupalSiteUpdateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DrupalSiteDBUpdateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
 		Complete(r)
 }
 
-func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// _ = context.Background()
 	log := r.Log.WithValues("Request.Namespace", req.NamespacedName, "Request.Name", req.Name)
 	log.V(1).Info("Reconciling request for DrupalSite update")
@@ -101,7 +108,7 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// 2. Check all conditions and update them if needed
 	update := false
 
-	// After a failed update, to be able to restore the site back to the last running version, the status error fields have to be removed if they are set
+	// This is a mechanism to restore a failed update. If we reset the spec to the failsafe, then the Failed conditions are cleared
 	if drupalSite.Status.ReleaseID.Failsafe == releaseID(drupalSite) {
 		if drupalSite.ConditionTrue("CodeUpdateFailed") {
 			update = drupalSite.Status.Conditions.RemoveCondition("CodeUpdateFailed") || update
@@ -132,7 +139,7 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
 
-		update, requeue, err, errorMessage := r.checkUpatedDrupalDeployment(ctx, drupalSite, deploymentConfig)
+		update, requeue, err, errorMessage := r.checkUpdatedDrupalDeployment(ctx, drupalSite, deploymentConfig)
 		switch {
 		case err != nil:
 			if err.Temporary() {
@@ -157,25 +164,25 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Check for db updates only when codeUpdateNeeded is not inProgress
 		dbUpdateNeeded, annotationUpdate, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
 		if reconcileErr != nil {
+			if setConditionStatus(drupalSite, "DBUpdatesPending", false, reconcileErr, true) {
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			}
 			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
 		}
 		// 1. Set status condition DBUpdatesPending
 		switch {
 		case dbUpdateNeeded:
-			if setDBUpdatesPending(drupalSite) {
+			// note: NO RETURN since we want to update the Spec & Status in the same switch case
+			result, err := r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			// If the status update was successful, then we try to update the annotation too in the same reconciliation
+			if !result.Requeue && err == nil && annotationUpdate {
+				return r.updateCRorFailReconcile(ctx, log, drupalSite)
+			}
+			if setDBUpdatesPending(drupalSite, "True") {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		case !dbUpdateNeeded:
-			if removeDBUpdatesPending(drupalSite) {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		}
-		if annotationUpdate {
-			return r.updateCRorFailReconcile(ctx, log, drupalSite)
-		}
-		if drupalSite.ConditionTrue("CodeUpdateFailed") {
-			// Set condition unknown
-			if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
+			if setDBUpdatesPending(drupalSite, "False") {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		}
@@ -186,19 +193,26 @@ func (r *DrupalSiteUpdateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		// Remove site from maintenance mode
 		// Restore backup in case of a failure
 
-		if dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		if dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") {
 			if update := r.updateDBSchema(ctx, drupalSite, log); update {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		}
 
 		// Update the Failsafe during the first instantiation and after a successful update
-		if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && !drupalSite.ConditionTrue("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
+		if drupalSite.Status.ReleaseID.Current != drupalSite.Status.ReleaseID.Failsafe && drupalSite.ConditionFalse("DBUpdatesPending") && !drupalSite.ConditionTrue("DBUpdatesFailed") && !drupalSite.ConditionTrue("CodeUpdateFailed") {
 			drupalSite.Status.ReleaseID.Failsafe = releaseID(drupalSite)
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		}
-
 	}
+
+	if drupalSite.ConditionTrue("CodeUpdateFailed") {
+		// Set condition unknown
+		if setConditionStatus(drupalSite, "DBUpdatesPending", false, nil, true) {
+			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+		}
+	}
+
 	// Returning err with Reconcile functions causes a requeue by default following exponential backoff
 	// Ref https://gitlab.cern.ch/paas-tools/operators/authz-operator/-/merge_requests/76#note_4501887
 	return ctrl.Result{}, requeueFlag

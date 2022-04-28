@@ -149,7 +149,7 @@ var _ = BeforeSuite(func(done Done) {
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
-	err = (&DrupalSiteUpdateReconciler{
+	err = (&DrupalSiteDBUpdateReconciler{
 		Reconciler: Reconciler{
 			Client: k8sManager.GetClient(),
 			Scheme: k8sManager.GetScheme(),

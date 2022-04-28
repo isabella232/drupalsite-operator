@@ -140,6 +140,7 @@ type DrupalSiteStatus struct {
 	ReleaseID `json:"releaseID,omitempty"`
 
 	// ServingPodImage reports the complete image name of the PHP-FPM container that is being used in the deployment.
+	// This can be different from the image version that is set on the Spec during the update process.
 	// +optional
 	ServingPodImage string `json:"servingPodImage,omitempty"`
 

@@ -138,7 +138,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.DrupalSiteUpdateReconciler{
+	if err = (&controllers.DrupalSiteDBUpdateReconciler{
 		Reconciler: controllers.Reconciler{
 			Client: mgr.GetClient(),
 			Log:    ctrl.Log.WithName("controllers").WithName("DrupalSiteUpdate"),

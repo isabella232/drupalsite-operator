@@ -117,10 +117,10 @@ func setConditionStatus(drp *webservicesv1a1.DrupalSite, conditionType status.Co
 }
 
 // setDBUpdatesPending sets the 'DBUpdatesPending' status on the drupalSite object
-func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite) (update bool) {
+func setDBUpdatesPending(drp *webservicesv1a1.DrupalSite, value corev1.ConditionStatus) (update bool) {
 	return drp.Status.Conditions.SetCondition(status.Condition{
 		Type:   "DBUpdatesPending",
-		Status: "True",
+		Status: value,
 	})
 }
 
@@ -660,8 +660,12 @@ func (r *Reconciler) getRunningPodForVersion(ctx context.Context, d *webservices
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
 func (r *Reconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
 	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
-	if err != nil || stderr != "" {
-		return "", fmt.Errorf("STDERR: %s \n%w", stderr, err)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("%v failed to run exec", ErrClientK8s))
+		return "", ErrClientK8s
+	}
+	if stderr != "" {
+		return "", fmt.Errorf("STDERR: %s", stderr)
 	}
 	return stdout, nil
 }
