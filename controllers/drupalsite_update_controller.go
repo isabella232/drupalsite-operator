@@ -38,9 +38,9 @@ type DrupalSiteDBUpdateReconciler struct {
 
 const (
 	// 24 Hours
-	successfulUpDBStCheckTimeOut = 24
+	periodicUpDBStCheckTimeOutHours = 24
 	// 10 Minutes
-	errorUpDBStCheckTimeOut = 10
+	errorUpDBStCheckTimeOutMinutes = 10
 )
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
@@ -194,7 +194,11 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// Restore backup in case of a failure
 
 		if dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") {
-			if update := r.updateDBSchema(ctx, drupalSite, log); update {
+			update, err := r.updateDBSchema(ctx, drupalSite, log)
+			if err != nil {
+				handleTransientErr(newApplicationError(err, ErrClientK8s), "Failed to update DB Schema", "")
+			}
+			if update {
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		}

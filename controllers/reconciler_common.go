@@ -658,6 +658,7 @@ func (r *Reconciler) getRunningPodForVersion(ctx context.Context, d *webservices
 }
 
 // execToServerPodErrOnStder works like `execToServerPod`, but puts the contents of stderr in the error, if not empty
+// If any error while trying to exec, the function returns a ErrClientK8s
 func (r *Reconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
 	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
 	if err != nil {

@@ -52,9 +52,12 @@ func (r *DrupalSiteDBUpdateReconciler) codeUpdateNeeded(ctx context.Context, d *
 func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (updatedNeeded bool, requeue bool, reconcileErr reconcileError) {
 	if len(d.Annotations["drupal.cern.ch/DBUpdatesLastCheckTimestamp"]) > 0 {
 		lastCheckedTime, _ := time.Parse(layout, d.Annotations["drupal.cern.ch/DBUpdatesLastCheckTimestamp"])
-		// If the last check happened > 10m ago, we check if the Status condition DBUpdatesNeeded is set to status: Unknown. In this case, we try again
-		// If the last check happened < 24h ago, we skip the check
-		if !(time.Since(lastCheckedTime).Minutes() < errorUpDBStCheckTimeOut && d.Status.Conditions.GetCondition("DBUpdatesNeeded").Status != corev1.ConditionFalse) && time.Since(lastCheckedTime).Hours() < successfulUpDBStCheckTimeOut {
+		// If the last check happened < errorUpDBStCheckTimeOutMinutes ago we skip checking
+		if time.Since(lastCheckedTime).Minutes() < errorUpDBStCheckTimeOutMinutes {
+			return false, false, nil
+		}
+		// If the errorUpDBStCheckTimeOutMinutes < last check > periodicUpDBStCheckTimeOutHours, we check if the Status condition DBUpdatesNeeded is set to not status: Unknown. In this case, we skip
+		if errorUpDBStCheckTimeOutMinutes < time.Since(lastCheckedTime).Minutes() && time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours && d.Status.Conditions.GetCondition("DBUpdatesNeeded").Status != corev1.ConditionUnknown {
 			return false, false, nil
 		}
 	}
@@ -191,34 +194,38 @@ func (r *DrupalSiteDBUpdateReconciler) rollBackCodeUpdate(ctx context.Context, d
 }
 
 // updateDBSchema updates the drupal schema of the running site after a version update
-// 1. Checks if there is any DB tables to be updated
-// 2. If nothing, exit
-// 3. If error while checking, set status reconcile
-// 4. If any updates pending, set 'DBUpdatesPending' in the status, take DB backup, run 'drush updb',
-// 5. If there is a permanent unrecoverable error, restore the DB using the backup and set 'DBUpdateFailed' status
-// 6. If no error, remove the 'DBUpdatesPending' status and continue
-func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool) {
+// 1. Takes Backup of the current database state
+// 2. Then runs `drush updb -y` to update the database schema
+// 3. If there is a permanent unrecoverable error, DBUpdatesFailed status is set with the error
+// 4. If temporary error (i.e ErrClientK8s), error is propagated & tried again
+// 5. If no error remove the 'DBUpdatesPending' status and continue
+func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *webservicesv1a1.DrupalSite, log logr.Logger) (update bool, err error) {
 	// Take backup
 	backupFileName := "db_backup_update_rollback.sql"
 	// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
-	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil && err != ErrClientK8s {
+	// Handle transient error with switch statements when err == ErrCLientK8s
+	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
+		if err == ErrClientK8s {
+			return false, err
+		}
 		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
-		return true
+		return true, nil
 	}
 
 	// Run updb
 	// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
-	_, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...)
-	if err != nil && err != ErrClientK8s {
+	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...); err != nil {
+		if err != ErrClientK8s {
+			return false, err
+		}
 		// Removing rollBackDBUpdate as we broken sites to keep up with updating
 		// We let the site administrators to rectify the problem manually
 		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
-		return true
+		return true, nil
 	}
 	// DB update successful, remove conditions
-	update = setDBUpdatesPending(d, "Unknown")
 	update = d.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
-	return
+	return true, nil
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
