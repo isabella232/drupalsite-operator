@@ -161,7 +161,7 @@ func (r *DrupalSiteDBUpdateReconciler) checkVersionRolloutSuccess(ctx context.Co
 		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
 			return false, newApplicationError(errors.New("pod did not roll out successfully"), ErrDeploymentUpdateFailed)
 		}
-		if deploy.Status.Replicas != deploy.Status.UpdatedReplicas && pod.Status.Phase == corev1.PodPending {
+		if pod.Status.Phase == corev1.PodPending {
 			currentTime := time.Now()
 			if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodMinutesForPodToStartDuringUpgrade(d) {
 				return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
@@ -171,11 +171,7 @@ func (r *DrupalSiteDBUpdateReconciler) checkVersionRolloutSuccess(ctx context.Co
 		return
 	}
 
-	// here, deployment is stable
-	// here we can check something about the running pod. By this point, the pod will be of 1 configuration only
-	// meaning that we DON'T need to identify the version (in case this simplifies the `getPodForVersion` (maybe it's fine already))
-
-	return false, nil
+	return true, nil
 }
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called
