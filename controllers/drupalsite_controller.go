@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -381,7 +382,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Update the ServingPodImage if different
 	if drupalSite.Status.ServingPodImage != sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name {
-		drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
+		deploy := &appsv1.Deployment{}
+		fetchError := r.Get(ctx, types.NamespacedName{Name: drupalSite.Name, Namespace: drupalSite.Namespace}, deploy)
+		if fetchError != nil {
+			// return false, newApplicationError(fetchError, ErrClientK8s)
+			return handleTransientErr(newApplicationError(fetchError, ErrClientK8s), "Failed to fetch deployment object", "")
+		}
+		if deploy.Status.Replicas == deploy.Status.UpdatedReplicas {
+			drupalSite.Status.ServingPodImage = sitebuilderImageRefToUse(drupalSite, releaseID(drupalSite)).Name
+		}
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 

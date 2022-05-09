@@ -49,16 +49,22 @@ func (r *DrupalSiteDBUpdateReconciler) codeUpdateNeeded(ctx context.Context, d *
 
 // dbUpdateNeeded checks updbst to see if DB updates are needed
 // If there is an error, the return value is false
-func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (updatedNeeded bool, requeue bool, reconcileErr reconcileError) {
-	if len(d.Annotations["drupal.cern.ch/DBUpdatesLastCheckTimestamp"]) > 0 {
-		lastCheckedTime, _ := time.Parse(layout, d.Annotations["drupal.cern.ch/DBUpdatesLastCheckTimestamp"])
+func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (statusUpdatedNeeded bool, reconcileErr reconcileError) {
+	if len(d.Status.DBUpdatesLastCheckTimestamp) > 0 {
+		lastCheckedTime, err := time.Parse(layout, d.Status.DBUpdatesLastCheckTimestamp)
+		if err != nil {
+			setConditionStatus(d, "DBUpdatesPending", false, newApplicationError(err, ErrTemporary), true)
+			return true, newApplicationError(err, ErrTemporary)
+		}
 		// If the last check happened < errorUpDBStCheckTimeOutMinutes ago we skip checking
-		if time.Since(lastCheckedTime).Minutes() < errorUpDBStCheckTimeOutMinutes {
-			return false, false, nil
+		if d.Status.Conditions.GetCondition("DBUpdatesPending") != nil && d.Status.Conditions.GetCondition("DBUpdatesPending").Status == corev1.ConditionUnknown {
+			if time.Since(d.Status.Conditions.GetCondition("DBUpdatesPending").LastTransitionTime.Time).Minutes() < errorUpDBStCheckTimeOutMinutes {
+				return false, nil
+			}
 		}
 		// If the errorUpDBStCheckTimeOutMinutes < last check > periodicUpDBStCheckTimeOutHours, we check if the Status condition DBUpdatesNeeded is set to not status: Unknown. In this case, we skip
 		if errorUpDBStCheckTimeOutMinutes < time.Since(lastCheckedTime).Minutes() && time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours && d.Status.Conditions.GetCondition("DBUpdatesNeeded").Status != corev1.ConditionUnknown {
-			return false, false, nil
+			return false, nil
 		}
 	}
 
@@ -66,20 +72,20 @@ func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *we
 	if err != nil {
 		// When exec fails, we need to return false. Else it affects the other operations on the controller
 		// Returning true will also make local tests fails as execToPod is not possible to emulate
-		return false, false, newApplicationError(err, ErrPodExec)
+		setConditionStatus(d, "DBUpdatesPending", false, newApplicationError(err, ErrPodExec), true)
+		return true, newApplicationError(err, ErrPodExec)
 	}
-	// Update "updbstcheck" timestamp
-	if d.Annotations == nil {
-		d.Annotations = map[string]string{}
-	}
-	// Update "drupal.cern.ch/DBUpdatesLastCheckTimestamp" annotation value
-	d.Annotations["drupal.cern.ch/DBUpdatesLastCheckTimestamp"] = time.Now().Format(layout)
+	// Update "DBUpdatesLastCheckTimestamp" status value
+	loc, _ := time.LoadLocation("")
+	d.Status.DBUpdatesLastCheckTimestamp = time.Now().In(loc).Format(layout)
 	// DB table updates needed
 	if sout != "" {
-		return true, true, nil
+		// setDBUpdatesPending(d, "True")
+		return setDBUpdatesPending(d, "True"), nil
 	}
 	// No db table updates needed
-	return false, true, nil
+	// setDBUpdatesPending(d, "False")
+	return setDBUpdatesPending(d, "False"), nil
 }
 
 // getRunningdeployment fetches the running drupal deployment
@@ -153,28 +159,24 @@ func (r *DrupalSiteDBUpdateReconciler) checkVersionRolloutSuccess(ctx context.Co
 		return false, newApplicationError(fetchError, ErrClientK8s)
 	}
 
-	deploymentStable := deploy.Status.Replicas == deploy.Status.UpdatedReplicas
-	if !deploymentStable {
-		// we know that rollout is still ongoing
-		// here we identify the condition: did it start? are we past the grace period? and return the appropriate error / condition
-		pod, err := r.getPodForVersion(ctx, d, releaseID(d))
-		if err != nil && err.Temporary() {
-			return false, newApplicationError(err, ErrClientK8s)
-		}
-		if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
-			return false, newApplicationError(errors.New("pod did not roll out successfully"), ErrDeploymentUpdateFailed)
-		}
-		if pod.Status.Phase == corev1.PodPending {
-			currentTime := time.Now()
-			if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodMinutesForPodToStartDuringUpgrade(d) {
-				return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
-			}
-			return false, newApplicationError(errors.New("pod failed to start after grace period"), ErrDeploymentUpdateFailed)
-		}
-		return
+	if deploy.Spec.Template.ObjectMeta.Annotations["releaseID"] != releaseID(d) {
+		return false, newApplicationError(errors.New("Deployment did not rollout yet"), ErrTemporary)
 	}
-
-	return true, nil
+	pod, err := r.getPodForVersion(ctx, d, releaseID(d))
+	if err != nil && err.Temporary() {
+		return false, newApplicationError(err, ErrClientK8s)
+	}
+	if pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodUnknown {
+		return false, newApplicationError(errors.New("pod did not roll out successfully"), ErrDeploymentUpdateFailed)
+	}
+	if pod.Status.Phase == corev1.PodPending {
+		currentTime := time.Now()
+		if currentTime.Sub(pod.GetCreationTimestamp().Time).Minutes() < getGracePeriodMinutesForPodToStartDuringUpgrade(d) {
+			return true, newApplicationError(errors.New("waiting for pod to start"), ErrPodNotRunning)
+		}
+		return false, newApplicationError(errors.New("pod failed to start after grace period"), ErrDeploymentUpdateFailed)
+	}
+	return false, nil
 }
 
 // rollBackCodeUpdate rolls back the code update process to the previous version when it is called
@@ -225,6 +227,7 @@ func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *we
 	}
 	// DB update successful, remove conditions
 	update = d.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
+	update = setDBUpdatesPending(d, "False") || update
 	return true, nil
 }
 

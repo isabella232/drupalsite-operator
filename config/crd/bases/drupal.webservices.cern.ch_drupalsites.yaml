@@ -204,6 +204,10 @@ spec:
                   - type
                   type: object
                 type: array
+              dBUpdatesLastCheckTimestamp:
+                description: DBUpdatesLastCheckTimestamp reports the time when the
+                  site was checked for db updates
+                type: string
               expectedDeploymentReplicas:
                 description: ExpectedDeploymentReplicas specifies the deployment replicas
                   for the current DrupalSite
@@ -236,7 +240,9 @@ spec:
                 type: object
               servingPodImage:
                 description: ServingPodImage reports the complete image name of the
-                  PHP-FPM container that is being used in the deployment.
+                  PHP-FPM container that is being used in the deployment. This can
+                  be different from the image version that is set on the Spec during
+                  the update process.
                 type: string
             type: object
         required:

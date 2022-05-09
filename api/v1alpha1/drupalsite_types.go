@@ -160,6 +160,9 @@ type DrupalSiteStatus struct {
 	// IsPrimary states if the Drupalsite is the main instance of the project
 	// +kubebuilder:default=false
 	IsPrimary bool `json:"isPrimary,omitempty"`
+
+	// DBUpdatesLastCheckTimestamp reports the time when the site was checked for db updates
+	DBUpdatesLastCheckTimestamp string `json:"dBUpdatesLastCheckTimestamp,omitempty"`
 }
 
 // ReleaseID reports the actual release of CERN Drupal Distribution that is being used in the deployment.

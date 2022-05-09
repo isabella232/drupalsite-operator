@@ -22,6 +22,7 @@ import (
 
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 
+	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -159,41 +160,25 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
 		// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
-		// Check for an update, only when the site is initialized and ready to prevent checks during an installation/ upgrade
-		dbUpdateNeeded := false
-		// Check for db updates only when codeUpdateNeeded is not inProgress
-		dbUpdateNeeded, annotationUpdate, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
-		if reconcileErr != nil {
-			if setConditionStatus(drupalSite, "DBUpdatesPending", false, reconcileErr, true) {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-			handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
-		}
-		// 1. Set status condition DBUpdatesPending
-		switch {
-		case dbUpdateNeeded:
-			// note: NO RETURN since we want to update the Spec & Status in the same switch case
-			result, err := r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			// If the status update was successful, then we try to update the annotation too in the same reconciliation
-			if !result.Requeue && err == nil && annotationUpdate {
-				return r.updateCRorFailReconcile(ctx, log, drupalSite)
-			}
-			if setDBUpdatesPending(drupalSite, "True") {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		case !dbUpdateNeeded:
-			if setDBUpdatesPending(drupalSite, "False") {
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-			}
-		}
+		dbUpdatesPending := drupalSite.Status.Conditions.GetCondition("DBUpdatesPending")
 
+		if dbUpdatesPending == nil || dbUpdatesPending.Status != corev1.ConditionTrue {
+			statusUpdatedNeeded, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
+			// 1. Set status condition DBUpdatesPending
+			switch {
+			case reconcileErr != nil:
+				handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			case statusUpdatedNeeded:
+				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+			}
+		}
 		// Take db Backup on PVC
 		// Put site in maintenance mode
 		// Run drush updatedb
 		// Remove site from maintenance mode
 		// Restore backup in case of a failure
-
-		if dbUpdateNeeded && !drupalSite.ConditionTrue("DBUpdatesFailed") {
+		if dbUpdatesPending != nil && dbUpdatesPending.Status == corev1.ConditionTrue && !drupalSite.ConditionTrue("DBUpdatesFailed") {
 			update, err := r.updateDBSchema(ctx, drupalSite, log)
 			if err != nil {
 				handleTransientErr(newApplicationError(err, ErrClientK8s), "Failed to update DB Schema", "")
