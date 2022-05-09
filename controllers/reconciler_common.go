@@ -292,7 +292,7 @@ func fetchDrupalSitesInNamespace(mgr ctrl.Manager, log logr.Logger, namespace st
 func addGitlabWebhookToStatus(ctx context.Context, drp *webservicesv1a1.DrupalSite) bool {
 	// Fetch the gitlab webhook trigger secret value
 	gitlabTriggerSecret := "gitlab-trigger-secret-" + drp.Name
-	webHookUrl := "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + drp.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + nameVersionHash(drp) + "/webhooks/" + gitlabTriggerSecret + "/gitlab"
+	webHookUrl := "https://api." + ClusterName + ".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/" + drp.Namespace + "/buildconfigs/" + "sitebuilder-s2i-" + drp.Name + "/webhooks/" + gitlabTriggerSecret + "/gitlab"
 	if drp.Status.GitlabWebhookURL != webHookUrl {
 		drp.Status.GitlabWebhookURL = webHookUrl
 		return true

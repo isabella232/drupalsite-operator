@@ -227,7 +227,7 @@ func (r *DrupalSiteReconciler) ensureResourceX(ctx context.Context, d *webservic
 		}
 		return nil
 	case "bc_s2i":
-		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + nameVersionHash(d), Namespace: d.Namespace}}
+		bc := &buildv1.BuildConfig{ObjectMeta: metav1.ObjectMeta{Name: "sitebuilder-s2i-" + d.Name, Namespace: d.Namespace}}
 		// We don't really benefit from udating here, because of https://docs.openshift.com/container-platform/4.6/builds/triggering-builds-build-hooks.html#builds-configuration-change-triggers_triggering-builds-build-hooks
 		_, err := controllerruntime.CreateOrUpdate(ctx, r.Client, bc, func() error {
 			return buildConfigForDrupalSiteBuilderS2I(bc, d)
@@ -643,27 +643,6 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 			CommonSpec: buildv1.CommonSpec{
 				Resources:                 BuildResources,
 				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
-				Source: buildv1.BuildSource{
-					Git: &buildv1.GitBuildSource{
-						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
-						Ref: "master",
-						URI: d.Spec.Configuration.ExtraConfigurationRepo,
-					},
-				},
-				Strategy: buildv1.BuildStrategy{
-					SourceStrategy: &buildv1.SourceBuildStrategy{
-						From: corev1.ObjectReference{
-							Kind: "DockerImage",
-							Name: SiteBuilderImage + ":" + releaseID(d),
-						},
-					},
-				},
-				Output: buildv1.BuildOutput{
-					To: &corev1.ObjectReference{
-						Kind: "ImageStreamTag",
-						Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID(d),
-					},
-				},
 			},
 			Triggers: []buildv1.BuildTriggerPolicy{
 				{
@@ -677,6 +656,27 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 				},
 			},
 		}
+	}
+	currentobject.Spec.CommonSpec.Source = buildv1.BuildSource{
+		Git: &buildv1.GitBuildSource{
+			// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+			Ref: "master",
+			URI: d.Spec.Configuration.ExtraConfigurationRepo,
+		},
+	}
+	currentobject.Spec.Strategy = buildv1.BuildStrategy{
+		SourceStrategy: &buildv1.SourceBuildStrategy{
+			From: corev1.ObjectReference{
+				Kind: "DockerImage",
+				Name: SiteBuilderImage + ":" + releaseID(d),
+			},
+		},
+	}
+	currentobject.Spec.Output = buildv1.BuildOutput{
+		To: &corev1.ObjectReference{
+			Kind: "ImageStreamTag",
+			Name: "sitebuilder-s2i-" + d.Name + ":" + releaseID(d),
+		},
 	}
 	if currentobject.Labels == nil {
 		currentobject.Labels = map[string]string{}

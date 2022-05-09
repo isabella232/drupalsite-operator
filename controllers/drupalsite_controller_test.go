@@ -871,7 +871,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check sitebuilder-s2i imageStream
 				By("Expecting sitebuilder-s2i imageStream created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + key.Name, Namespace: key.Namespace}, &is)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + cr.Name, Namespace: cr.Namespace}, &is)
 					return is.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -885,7 +885,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check S2I buildConfig
 				By("Expecting S2I buildConfig created")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + nameVersionHash(drupalSiteObject), Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + cr.Name, Namespace: cr.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
@@ -946,7 +946,7 @@ var _ = Describe("DrupalSite controller", func() {
 				// Check gitlab webhook URL updated on the drupalSite status
 				By("Expecting Gitlab webhook secret listed in the DrupalSite status")
 				Eventually(func() bool {
-					return cr.Status.GitlabWebhookURL == "https://api."+ClusterName+".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/"+drupalSiteObject.Namespace+"/buildconfigs/"+"sitebuilder-s2i-"+nameVersionHash(drupalSiteObject)+"/webhooks/"+string(secret.Name)+"/gitlab"
+					return cr.Status.GitlabWebhookURL == "https://api."+ClusterName+".okd.cern.ch:443/apis/build.openshift.io/v1/namespaces/"+drupalSiteObject.Namespace+"/buildconfigs/"+"sitebuilder-s2i-"+cr.Name+"/webhooks/"+string(secret.Name)+"/gitlab"
 				}, timeout, interval).Should(BeTrue())
 			})
 		})
@@ -1047,7 +1047,7 @@ var _ = Describe("DrupalSite controller", func() {
 
 				By("Expecting new S2I buildConfig to be updated")
 				Eventually(func() []metav1.OwnerReference {
-					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + nameVersionHash(&cr), Namespace: key.Namespace}, &bc)
+					k8sClient.Get(ctx, types.NamespacedName{Name: "sitebuilder-s2i-" + cr.Name, Namespace: cr.Namespace}, &bc)
 					return bc.ObjectMeta.OwnerReferences
 				}, timeout, interval).Should(ContainElement(expectedOwnerReference))
 
