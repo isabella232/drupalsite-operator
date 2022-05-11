@@ -88,9 +88,9 @@ spec:
                     type: string
                   scheduledBackups:
                     default: enabled
-                    description: ScheduledBackups [deprecated] when "true" will enable
-                      Scheduled Velero backups for the site and when "false" will
-                      disable scheduled backups
+                    description: ScheduledBackups when "enabled" will enable Scheduled
+                      Velero backups for the site and when "disabled" will disable
+                      scheduled backups
                     enum:
                     - enabled
                     - disabled
@@ -218,11 +218,6 @@ spec:
                   of the site's image after changes on its source Gitlab "extraConfigurationRepo".
                   It should be copied to Gitlab.
                 type: string
-              isPrimary:
-                default: false
-                description: IsPrimary states if the Drupalsite is the main instance
-                  of the project
-                type: boolean
               releaseID:
                 description: ReleaseID reports the actual release of CERN Drupal Distribution
                   that is being used in the deployment.

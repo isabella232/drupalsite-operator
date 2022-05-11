@@ -78,24 +78,6 @@ rules:
 - apiGroups:
   - drupal.webservices.cern.ch
   resources:
-  - drupalprojectconfigs
-  verbs:
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - drupal.webservices.cern.ch
-  resources:
-  - drupalprojectconfigs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - drupal.webservices.cern.ch
-  resources:
   - drupalsiteconfigoverrides
   verbs:
   - get

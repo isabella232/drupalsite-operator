@@ -103,7 +103,7 @@ type Configuration struct {
 	// +optional
 	WebDAVPassword string `json:"webDAVPassword,omitempty"`
 
-	// ScheduledBackups [deprecated] when "true" will enable Scheduled Velero backups for the site and when "false" will disable scheduled backups
+	// ScheduledBackups when "enabled" will enable Scheduled Velero backups for the site and when "disabled" will disable scheduled backups
 	// +kubebuilder:validation:Enum:=enabled;disabled
 	// +kubebuilder:default=enabled
 	// +optional
@@ -156,10 +156,6 @@ type DrupalSiteStatus struct {
 	// It should be copied to Gitlab.
 	// +optional
 	GitlabWebhookURL string `json:"gitlabWebhookURL,omitempty"`
-
-	// IsPrimary states if the Drupalsite is the main instance of the project
-	// +kubebuilder:default=false
-	IsPrimary bool `json:"isPrimary,omitempty"`
 
 	// DBUpdatesLastCheckTimestamp reports the time when the site was checked for db updates
 	DBUpdatesLastCheckTimestamp string `json:"dBUpdatesLastCheckTimestamp,omitempty"`

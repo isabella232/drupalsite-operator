@@ -1,6 +1,0 @@
-apiVersion: drupal.webservices.cern.ch/v1alpha1
-kind: DrupalProjectConfig
-metadata:
-  name: drupalprojectconfig-sample
-spec:
-  primarySiteName: test-site

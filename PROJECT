@@ -33,12 +33,4 @@ resources:
   kind: SupportedDrupalVersions
   path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
   version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: cern.ch
-  group: drupal.webservices
-  kind: DrupalProjectConfig
-  path: gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1
-  version: v1alpha1
 version: "3"
