@@ -22,10 +22,14 @@ import (
 
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // var (
@@ -40,18 +44,28 @@ type DrupalSiteDBUpdateReconciler struct {
 const (
 	// 24 Hours
 	periodicUpDBStCheckTimeOutHours = 24
-	// 10 Minutes
-	errorUpDBStCheckTimeOutMinutes = 10
 )
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
+// +kubebuilder:rbac:groups=app,resources=deployments,verbs=*
 
 // SetupWithManager adds a manager which watches the resources
 func (r *DrupalSiteDBUpdateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webservicesv1a1.DrupalSite{}).
+		Watches(&source.Kind{Type: &appsv1.Deployment{}}, handler.EnqueueRequestsFromMapFunc(
+			// Reconcile every DrupalSite in the project referred to by the Backup
+			func(a client.Object) []reconcile.Request {
+				log := r.Log.WithValues("Source", "Drupal Deployments event handler", "Namespace", a.GetNamespace())
+				_, exists := a.GetLabels()["drupalSite"]
+				if exists {
+					return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
+				}
+				return []reconcile.Request{}
+			}),
+		).
 		Complete(r)
 }
 
@@ -156,13 +170,14 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{Requeue: true}, nil
 		}
 
-		// 2.1 Set conditions related to update
-
-		// Check for updates after all resources are ensured. Else, this blocks the other logic like ensure resources, blocking sites when the controller can not exec/ run updb
-		// Condition `UpdateNeeded` <- either image not matching `releaseID` or `drush updb` needed
 		dbUpdatesPending := drupalSite.Status.Conditions.GetCondition("DBUpdatesPending")
-
-		if dbUpdatesPending == nil || dbUpdatesPending.Status != corev1.ConditionTrue {
+		// We first check if `drush updbst` is needed based on DrupalSite status values
+		check, err := r.checkIfDBUpdatesAreNeeded(ctx, drupalSite)
+		if err != nil {
+			handleTransientErr(err, "Failed to parse DBUpdatesLastCheckTimestamp while checking if dbUpdates check is required", "")
+		}
+		// If the `drush updbst` is needed, we go ahead and run it
+		if check {
 			statusUpdatedNeeded, reconcileErr := r.dbUpdateNeeded(ctx, drupalSite)
 			// 1. Set status condition DBUpdatesPending
 			switch {
@@ -173,11 +188,7 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}
 		}
-		// Take db Backup on PVC
-		// Put site in maintenance mode
-		// Run drush updatedb
-		// Remove site from maintenance mode
-		// Restore backup in case of a failure
+		// We run `drush updb` when the specific conditions match
 		if dbUpdatesPending != nil && dbUpdatesPending.Status == corev1.ConditionTrue && !drupalSite.ConditionTrue("DBUpdatesFailed") {
 			update, err := r.updateDBSchema(ctx, drupalSite, log)
 			if err != nil {

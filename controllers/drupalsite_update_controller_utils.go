@@ -50,24 +50,6 @@ func (r *DrupalSiteDBUpdateReconciler) codeUpdateNeeded(ctx context.Context, d *
 // dbUpdateNeeded checks updbst to see if DB updates are needed
 // If there is an error, the return value is false
 func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (statusUpdatedNeeded bool, reconcileErr reconcileError) {
-	if len(d.Status.DBUpdatesLastCheckTimestamp) > 0 {
-		lastCheckedTime, err := time.Parse(layout, d.Status.DBUpdatesLastCheckTimestamp)
-		if err != nil {
-			setConditionStatus(d, "DBUpdatesPending", false, newApplicationError(err, ErrTemporary), true)
-			return true, newApplicationError(err, ErrTemporary)
-		}
-		// If the last check happened < errorUpDBStCheckTimeOutMinutes ago we skip checking
-		if d.Status.Conditions.GetCondition("DBUpdatesPending") != nil && d.Status.Conditions.GetCondition("DBUpdatesPending").Status == corev1.ConditionUnknown {
-			if time.Since(d.Status.Conditions.GetCondition("DBUpdatesPending").LastTransitionTime.Time).Minutes() < errorUpDBStCheckTimeOutMinutes {
-				return false, nil
-			}
-		}
-		// If the errorUpDBStCheckTimeOutMinutes < last check > periodicUpDBStCheckTimeOutHours, we check if the Status condition DBUpdatesNeeded is set to not status: Unknown. In this case, we skip
-		if errorUpDBStCheckTimeOutMinutes < time.Since(lastCheckedTime).Minutes() && time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours && d.Status.Conditions.GetCondition("DBUpdatesNeeded").Status != corev1.ConditionUnknown {
-			return false, nil
-		}
-	}
-
 	sout, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, checkUpdbStatus()...)
 	if err != nil {
 		// When exec fails, we need to return false. Else it affects the other operations on the controller
@@ -258,4 +240,25 @@ func (r *DrupalSiteDBUpdateReconciler) getPodForVersion(ctx context.Context, d *
 	}
 	// iterate through the list and return the first pod that has the status condition ready
 	return corev1.Pod{}, newApplicationError(err, ErrClientK8s)
+}
+
+// checkIfDBUpdatesAreNeeded checks if a `drush updbst` check is needed based on the DrupalSite conditions & last checked timestamp
+// If the DBUpdatesLastCheckTimestamp is > 24hours, we return true
+// If the DBUpdatesLastCheckTimestamp is < 24hours, we check if 'DBUpdatesPending' status is true. If not, we return true
+func (r *DrupalSiteDBUpdateReconciler) checkIfDBUpdatesAreNeeded(ctx context.Context, d *webservicesv1a1.DrupalSite) (check bool, reconcileErr reconcileError) {
+	dbUpdatesPending := d.Status.Conditions.GetCondition("DBUpdatesPending")
+	if len(d.Status.DBUpdatesLastCheckTimestamp) == 0 {
+		return true, nil
+	}
+	lastCheckedTime, parseErr := time.Parse(layout, d.Status.DBUpdatesLastCheckTimestamp)
+	if parseErr != nil {
+		setConditionStatus(d, "DBUpdatesPending", false, newApplicationError(parseErr, ErrTemporary), true)
+		return false, newApplicationError(parseErr, ErrTemporary)
+	}
+	// If the errorUpDBStCheckTimeOutMinutes < last check > periodicUpDBStCheckTimeOutHours, we check if the Status condition DBUpdatesNeeded is set to not status: Unknown. In this case, we skip
+	// errorUpDBStCheckTimeOutMinutes < time.Since(lastCheckedTime).Minutes() &&
+	if time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours || (dbUpdatesPending != nil && dbUpdatesPending.Status != corev1.ConditionTrue) {
+		return true, nil
+	}
+	return false, nil
 }
