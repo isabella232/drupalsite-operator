@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -41,19 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
-
-// updateCRorFailReconcile tries to update the Custom Resource and logs any error
-func (r *DrupalSiteReconciler) updateDrupalProjectConfigCR(ctx context.Context, log logr.Logger, dpc *webservicesv1a1.DrupalProjectConfig) error {
-	err := r.Update(ctx, dpc)
-	if err != nil {
-		if k8sapierrors.IsConflict(err) {
-			log.V(4).Info("DrupalProjectConfig changed while reconciling. Requeuing.")
-		} else {
-			log.Error(err, fmt.Sprintf("%v failed to update the application", ErrClientK8s))
-		}
-	}
-	return err
-}
 
 // getBuildStatus gets the build status from one of the builds for a given resources
 func (r *DrupalSiteReconciler) getBuildStatus(ctx context.Context, resource string, drp *webservicesv1a1.DrupalSite) (buildv1.BuildPhase, error) {
@@ -154,17 +140,8 @@ func databaseSecretName(d *webservicesv1a1.DrupalSite) string {
 }
 
 // cleanupDrupalSite checks and removes if a finalizer exists on the resource
-// It also removes the site from the DrupalProjectConfig in case it was the primary site.
-func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (ctrl.Result, error) {
+func (r *DrupalSiteReconciler) cleanupDrupalSite(ctx context.Context, log logr.Logger, drp *webservicesv1a1.DrupalSite) (ctrl.Result, error) {
 	log.V(1).Info("Deleting DrupalSite")
-
-	// Remove site from DrupalProjectConfig if it was the primary site
-	if dpc != nil && dpc.Spec.PrimarySiteName == drp.Name {
-		dpc.Spec.PrimarySiteName = ""
-		if err := r.updateDrupalProjectConfigCR(ctx, log, dpc); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
 
 	controllerutil.RemoveFinalizer(drp, finalizerStr)
 	if err := r.ensureNoBackupSchedule(ctx, drp, log); err != nil {
@@ -223,63 +200,6 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		update = true
 	}
 	return update, nil
-}
-
-// GetDrupalProjectConfig gets the DrupalProjectConfig for a Project
-func (r *DrupalSiteReconciler) GetDrupalProjectConfig(ctx context.Context, drp *webservicesv1a1.DrupalSite) (*webservicesv1a1.DrupalProjectConfig, reconcileError) {
-	// Fetch the DrupalProjectConfigList on the Namespace
-	drupalProjectConfigList := &webservicesv1a1.DrupalProjectConfigList{}
-	if err := r.List(ctx, drupalProjectConfigList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		return nil, newApplicationError(errors.New("fetching drupalProjectConfigList failed"), ErrClientK8s)
-	}
-	if len(drupalProjectConfigList.Items) == 0 {
-		r.Log.Info("Warning: Project " + drp.Namespace + " does not contain any DrupalProjectConfig!")
-		return nil, nil
-	}
-	// We get the first DrupalProjectConfig in the Namespace, only one is expected per project!
-	return &drupalProjectConfigList.Items[0], nil
-}
-
-// proclaimPrimarySiteIfExists will check for Drupalsites in a project, if only one DrupalSite is in place then we consider that primary exists and can be set on the DrupalProjectConfig, otherwise nothing to do as there is no clear Primary site
-func (r *DrupalSiteReconciler) proclaimPrimarySiteIfExists(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) (update bool, reconcileError reconcileError) {
-	update = false
-	if dpc == nil {
-		return
-	}
-	// Check how many DrupalSites are in place on the project
-	drupalSiteList := &webservicesv1a1.DrupalSiteList{}
-	if err := r.List(ctx, drupalSiteList, &client.ListOptions{Namespace: drp.Namespace}); err != nil {
-		reconcileError = newApplicationError(errors.New("fetching drupalSiteList failed"), ErrClientK8s)
-		return
-	}
-	if len(drupalSiteList.Items) > 1 {
-		// Nothing to do in case there's more than one DrupalSite in the project
-		return
-	}
-
-	if dpc.Spec.PrimarySiteName == "" {
-		dpc.Spec.PrimarySiteName = drp.Name
-		r.Log.Info("Project" + dpc.Namespace + "contains only 1 drupalsite\"" + drp.Name + "\", which is considered the primary production site")
-		update = true
-		return
-	}
-	return
-}
-
-//checkIfPrimaryDrupalSite updates the status of the current Drupalsite to show if it is the primary site according to the DrupalProjectConfig
-func (r *DrupalSiteReconciler) checkIfPrimaryDrupalsite(ctx context.Context, drp *webservicesv1a1.DrupalSite, dpc *webservicesv1a1.DrupalProjectConfig) bool {
-	if dpc == nil {
-		return false
-	}
-	// We get the first DrupalProjectConfig in the Namespace, only one is expected per cluster!
-	if drp.Name == dpc.Spec.PrimarySiteName && !drp.Status.IsPrimary {
-		drp.Status.IsPrimary = true
-		return true
-	} else if drp.Name != dpc.Spec.PrimarySiteName && drp.Status.IsPrimary {
-		drp.Status.IsPrimary = false
-		return true
-	}
-	return false
 }
 
 func (r *DrupalSiteReconciler) getDeployConfigmap(ctx context.Context, d *webservicesv1a1.DrupalSite) (deploy appsv1.Deployment,

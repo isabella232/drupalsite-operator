@@ -176,7 +176,7 @@ func (r *DrupalSiteReconciler) ensureResources(drp *webservicesv1a1.DrupalSite, 
 
 	// 5. Cluster-scoped: Backup schedule, Tekton RBAC
 	// Create Velero schedule only after site is initialized in order for the first backup to not report 'Failed' or 'PartiallyFailed' status
-	if drp.ConditionTrue("Initialized") && (drp.Status.IsPrimary || drp.Spec.Configuration.ScheduledBackups == "enabled") {
+	if drp.ConditionTrue("Initialized") && drp.Spec.Configuration.ScheduledBackups == "enabled" {
 		if transientErr := r.ensureResourceX(ctx, drp, "backup_schedule", log); transientErr != nil {
 			transientErrs = append(transientErrs, transientErr.Wrap("%v: for Velero Schedule"))
 		}

@@ -87,8 +87,6 @@ type DrupalSiteReconciler struct {
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites/finalizers,verbs=update
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsiteconfigoverrides,verbs=get;list;watch
-// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalprojectconfigs,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalprojectconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=app,resources=deployments,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=buildconfigs,verbs=*
 // +kubebuilder:rbac:groups=build.openshift.io,resources=builds,verbs=get;list;watch
@@ -154,13 +152,6 @@ func (r *DrupalSiteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return req
 			}),
 		).
-		Watches(&source.Kind{Type: &webservicesv1a1.DrupalProjectConfig{}}, handler.EnqueueRequestsFromMapFunc(
-			// Reconcile every DrupalSite in a given namespace
-			func(a client.Object) []reconcile.Request {
-				log := r.Log.WithValues("Source", "Namespace event handler", "Namespace", a.GetNamespace())
-				return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
-			}),
-		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: ParallelThreadCount,
 		}).
@@ -188,19 +179,11 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(err, "Failed to get DrupalSite")
 		return ctrl.Result{}, err
 	}
-	// Fetch the DrupalProjectConfig Resource
-	drupalProjectConfig, err := r.GetDrupalProjectConfig(ctx, drupalSite)
-	if err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to retrieve DrupalProjectConfig", err))
-		// Although we log an Error, we will allow the reconcile to continue, as the absence of the resource does not mean DrupalSite cannot be processed
-		// Populate resource as nil
-		drupalProjectConfig = nil
-	}
 
 	//Handle deletion
 	if drupalSite.GetDeletionTimestamp() != nil {
 		if controllerutil.ContainsFinalizer(drupalSite, finalizerStr) {
-			return r.cleanupDrupalSite(ctx, log, drupalSite, drupalProjectConfig)
+			return r.cleanupDrupalSite(ctx, log, drupalSite)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -218,20 +201,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		log.Error(transientErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
 		return reconcile.Result{}, nil
-	}
-	// Log and schedule a new reconciliation
-	handleNonfatalErr := func(nonfatalErr reconcileError, logstrFmt string) {
-		if nonfatalErr == nil {
-			return
-		}
-		if nonfatalErr.Temporary() {
-			log.Error(nonfatalErr, fmt.Sprintf(logstrFmt, nonfatalErr.Unwrap()))
-		} else {
-			log.Error(nonfatalErr, "Permanent error marked as transient! Permanent errors should not bubble up to the reconcile loop.")
-		}
-		// emitting error because the controller can count it in the error metrics,
-		// which we can monitor to notice transient problems affecting the entire infrastructure
-		requeueFlag = nonfatalErr
 	}
 
 	// 0. Skip reconciliation if admin-pause annotation is present
@@ -301,33 +270,15 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		update = addGitlabWebhookToStatus(ctx, drupalSite) || update
 	}
 
-	// Check if current instance is the Primary Drupalsite and update Status
-	update = r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig) || update
-
 	// Update status with all the conditions that were checked
 	if update {
 		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 	}
 
-	// Check if DrupalProjectConfig has not a primary website + This DrupalSite instance is unique -> Become Primary Website
-	updateProjectConfig, reconcileErr := r.proclaimPrimarySiteIfExists(ctx, drupalSite, drupalProjectConfig)
-	switch {
-	case err != nil:
-		log.Error(err, fmt.Sprintf("%v failed to declare this DrupalSite as Primary", reconcileErr.Unwrap()))
-		setErrorCondition(drupalSite, reconcileErr)
-		return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
-	case updateProjectConfig:
-		log.Info("Proclaiming this site as primary in DrupalProjectConfig")
-		r.checkIfPrimaryDrupalsite(ctx, drupalSite, drupalProjectConfig)
-		if err = r.updateDrupalProjectConfigCR(ctx, log, drupalProjectConfig); err != nil {
-			handleNonfatalErr(newApplicationError(err, ErrClientK8s), "%v while updating DrupalProjectConfig")
-		}
-	}
-
 	backupList, err := r.checkNewBackups(ctx, drupalSite, log)
 	switch {
 	case err != nil:
-		log.Error(err, fmt.Sprintf("%v failed to check for new backups", reconcileErr.Unwrap()))
+		log.Error(err, fmt.Sprintf("%v failed to check for new backups", err))
 		return ctrl.Result{}, err
 	// DeepEqual returns false when one of the slice is empty
 	case len(backupList) != len(drupalSite.Status.AvailableBackups) && !reflect.DeepEqual(backupList, drupalSite.Status.AvailableBackups):
