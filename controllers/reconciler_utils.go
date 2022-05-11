@@ -255,12 +255,12 @@ func reqLimDict(container string, qosClass webservicesv1a1.QoSClass) (corev1.Res
 	case "nginx":
 		if qosClass == webservicesv1a1.QoSCritical {
 			// We haven't seen any Nginx bottlenecks with critical sites so far
-			return ResourceRequestLimit("20Mi", "60m", "50Mi", "1500m")
+			return ResourceRequestLimit("20Mi", "60m", "55Mi", "1500m")
 		}
 		if qosClass == webservicesv1a1.QoSTest {
-			return ResourceRequestLimit("5Mi", "20m", "20Mi", "400m")
+			return ResourceRequestLimit("5Mi", "20m", "25Mi", "400m")
 		}
-		return ResourceRequestLimit("10Mi", "30m", "20Mi", "700m")
+		return ResourceRequestLimit("10Mi", "30m", "25Mi", "700m")
 	case "php-fpm-exporter":
 		return ResourceRequestLimit("15Mi", "4m", "25Mi", "40m")
 	case "webdav":
