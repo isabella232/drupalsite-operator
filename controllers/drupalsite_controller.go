@@ -284,16 +284,6 @@ func (r *DrupalSiteReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// After a failed update, to be able to restore the site back to the last running version, the status error fields have to be removed if they are set
-	if drupalSite.Status.ReleaseID.Failsafe == releaseID(drupalSite) {
-		if drupalSite.ConditionTrue("CodeUpdateFailed") {
-			update = drupalSite.Status.Conditions.RemoveCondition("CodeUpdateFailed") || update
-		}
-		if drupalSite.ConditionTrue("DBUpdatesFailed") {
-			update = drupalSite.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
-		}
-	}
-
 	// If it's a site with extraConfig Spec, add the gitlab webhook trigger to the Status
 	// The URL is dependent on BuildConfig name, which is based on nameVersionHash() function. Therefore it needs to be updated when there is a ReleaseID update
 	// For consistency, we update the field on every reconcile
