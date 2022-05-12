@@ -59,7 +59,7 @@ func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *we
 	}
 	// Update "DBUpdatesLastCheckTimestamp" status value
 	loc, _ := time.LoadLocation("")
-	d.Status.DBUpdatesLastCheckTimestamp = time.Now().In(loc).Format(layout)
+	d.Status.DBUpdatesLastCheckTimestamp = time.Now().In(loc).Format(timeLayout)
 	// DB table updates needed
 	if sout != "" {
 		// setDBUpdatesPending(d, "True")
@@ -250,7 +250,7 @@ func (r *DrupalSiteDBUpdateReconciler) checkIfDBUpdatesAreNeeded(ctx context.Con
 	if len(d.Status.DBUpdatesLastCheckTimestamp) == 0 {
 		return true, nil
 	}
-	lastCheckedTime, parseErr := time.Parse(layout, d.Status.DBUpdatesLastCheckTimestamp)
+	lastCheckedTime, parseErr := time.Parse(timeLayout, d.Status.DBUpdatesLastCheckTimestamp)
 	if parseErr != nil {
 		setConditionStatus(d, "DBUpdatesPending", false, newApplicationError(parseErr, ErrTemporary), true)
 		return false, newApplicationError(parseErr, ErrTemporary)

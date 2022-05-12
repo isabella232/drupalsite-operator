@@ -44,6 +44,7 @@ type DrupalSiteDBUpdateReconciler struct {
 const (
 	// 24 Hours
 	periodicUpDBStCheckTimeOutHours = 24
+	timeLayout                      = "Jan 2, 2006 at 3:04pm (UTC)"
 )
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete

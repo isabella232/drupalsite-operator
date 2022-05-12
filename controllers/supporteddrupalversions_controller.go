@@ -39,7 +39,7 @@ import (
 	drupalwebservicesv1alpha1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 )
 
-const layout = "Jan 2, 2006 at 3:04pm (UTC)"
+const layout = "2006.01.02T15-04-05Z"
 
 var (
 	log = logf.Log.WithName("controller_supported_drupal_versions")
