@@ -19,14 +19,18 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	webservicesv1a1 "gitlab.cern.ch/drupal/paas/drupalsite-operator/api/v1alpha1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -45,6 +49,8 @@ const (
 	// 24 Hours
 	periodicUpDBStCheckTimeOutHours = 24
 	timeLayout                      = "Jan 2, 2006 at 3:04pm (UTC)"
+	baseDelay                       = time.Second * 5
+	maxDelay                        = time.Minute * 3
 )
 
 // +kubebuilder:rbac:groups=drupal.webservices.cern.ch,resources=drupalsites,verbs=get;list;watch;create;update;patch;delete
@@ -59,14 +65,23 @@ func (r *DrupalSiteDBUpdateReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Watches(&source.Kind{Type: &appsv1.Deployment{}}, handler.EnqueueRequestsFromMapFunc(
 			// Reconcile every DrupalSite in the project referred to by the Backup
 			func(a client.Object) []reconcile.Request {
-				log := r.Log.WithValues("Source", "Drupal Deployments event handler", "Namespace", a.GetNamespace())
-				_, exists := a.GetLabels()["drupalSite"]
+				label, exists := a.GetLabels()["drupalSite"]
 				if exists {
-					return fetchDrupalSitesInNamespace(mgr, log, a.GetNamespace())
+					return []reconcile.Request{
+						{
+							types.NamespacedName{
+								Namespace: a.GetNamespace(),
+								Name:      label,
+							},
+						},
+					}
 				}
 				return []reconcile.Request{}
 			}),
 		).
+		WithOptions(controller.Options{
+			RateLimiter: workqueue.NewItemExponentialFailureRateLimiter(baseDelay, maxDelay),
+		}).
 		Complete(r)
 }
 
@@ -168,6 +183,7 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 		case update:
 			return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 		case requeue:
+			log.Error(ErrTemporary, errorMessage)
 			return ctrl.Result{Requeue: true}, nil
 		}
 
@@ -184,7 +200,7 @@ func (r *DrupalSiteDBUpdateReconciler) Reconcile(ctx context.Context, req ctrl.R
 			switch {
 			case reconcileErr != nil:
 				handleNonfatalErr(reconcileErr, "%v while checking if a DB update is needed")
-				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
+				return ctrl.Result{Requeue: true}, nil
 			case statusUpdatedNeeded:
 				return r.updateCRStatusOrFailReconcile(ctx, log, drupalSite)
 			}

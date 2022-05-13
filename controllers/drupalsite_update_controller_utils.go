@@ -62,11 +62,9 @@ func (r *DrupalSiteDBUpdateReconciler) dbUpdateNeeded(ctx context.Context, d *we
 	d.Status.DBUpdatesLastCheckTimestamp = time.Now().In(loc).Format(timeLayout)
 	// DB table updates needed
 	if sout != "" {
-		// setDBUpdatesPending(d, "True")
 		return setDBUpdatesPending(d, "True"), nil
 	}
 	// No db table updates needed
-	// setDBUpdatesPending(d, "False")
 	return setDBUpdatesPending(d, "False"), nil
 }
 
@@ -105,6 +103,9 @@ func (r *DrupalSiteDBUpdateReconciler) checkUpdatedDrupalDeployment(ctx context.
 	// Check if deployment has rolled out
 	requeueNeeded, err := r.checkVersionRolloutSuccess(ctx, d)
 	switch {
+	case requeueNeeded:
+		// Waiting for pod to start
+		return false, true, nil, "Temporary error while checking for version roll out"
 	case err != nil:
 		if err.Temporary() {
 			// Temporary error while checking for version roll out
@@ -119,9 +120,6 @@ func (r *DrupalSiteDBUpdateReconciler) checkUpdatedDrupalDeployment(ctx context.
 			}
 			return true, false, nil, ""
 		}
-	case requeueNeeded:
-		// Waiting for pod to start
-		return false, true, nil, ""
 	}
 
 	// When code updating set to false and everything runs fine, remove the status
@@ -189,7 +187,7 @@ func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *we
 	// We set Backup on "Drupal-data" so the DB backup is stored on the PV of the website
 	// Handle transient error with switch statements when err == ErrCLientK8s
 	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, takeBackup("/drupal-data/"+backupFileName)...); err != nil {
-		if err == ErrClientK8s {
+		if err == ErrPodExec {
 			return false, err
 		}
 		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrPodExec), false)
@@ -199,7 +197,7 @@ func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *we
 	// Run updb
 	// The updb scripts, puts the site in maintenance mode, runs updb and removes the site from maintenance mode
 	if _, err := r.execToServerPodErrOnStderr(ctx, d, "php-fpm", nil, runUpDBCommand()...); err != nil {
-		if err != ErrClientK8s {
+		if err == ErrPodExec {
 			return false, err
 		}
 		// Removing rollBackDBUpdate as we broken sites to keep up with updating
@@ -207,10 +205,8 @@ func (r *DrupalSiteDBUpdateReconciler) updateDBSchema(ctx context.Context, d *we
 		setConditionStatus(d, "DBUpdatesFailed", true, newApplicationError(err, ErrDBUpdateFailed), false)
 		return true, nil
 	}
-	// DB update successful, remove conditions
-	update = d.Status.Conditions.RemoveCondition("DBUpdatesFailed") || update
 	update = setDBUpdatesPending(d, "False") || update
-	return true, nil
+	return update, nil
 }
 
 // getPodForVersion fetches the list of the pods for the current deployment and returns the first one from the list
@@ -257,7 +253,7 @@ func (r *DrupalSiteDBUpdateReconciler) checkIfDBUpdatesAreNeeded(ctx context.Con
 	}
 	// If the errorUpDBStCheckTimeOutMinutes < last check > periodicUpDBStCheckTimeOutHours, we check if the Status condition DBUpdatesNeeded is set to not status: Unknown. In this case, we skip
 	// errorUpDBStCheckTimeOutMinutes < time.Since(lastCheckedTime).Minutes() &&
-	if time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours || (dbUpdatesPending != nil && dbUpdatesPending.Status != corev1.ConditionTrue) {
+	if time.Since(lastCheckedTime).Hours() > periodicUpDBStCheckTimeOutHours || dbUpdatesPending == nil || dbUpdatesPending.Status != corev1.ConditionTrue {
 		return true, nil
 	}
 	return false, nil

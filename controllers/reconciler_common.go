@@ -662,8 +662,8 @@ func (r *Reconciler) getRunningPodForVersion(ctx context.Context, d *webservices
 func (r *Reconciler) execToServerPodErrOnStderr(ctx context.Context, d *webservicesv1a1.DrupalSite, containerName string, stdin io.Reader, command ...string) (stdout string, err error) {
 	stdout, stderr, err := r.execToServerPod(ctx, d, containerName, stdin, command...)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("%v failed to run exec", ErrClientK8s))
-		return "", ErrClientK8s
+		log.Error(err, fmt.Sprintf("%v failed to run exec", ErrPodExec))
+		return "", ErrPodExec
 	}
 	if stderr != "" {
 		return "", fmt.Errorf("STDERR: %s", stderr)
