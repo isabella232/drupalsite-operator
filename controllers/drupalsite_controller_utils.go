@@ -207,6 +207,11 @@ func (r *DrupalSiteReconciler) ensureSpecFinalizer(ctx context.Context, drp *web
 		if sourceSite.Spec.Configuration.ExtraConfigurationRepo != "" && drp.Spec.Configuration.ExtraConfigurationRepo == "" {
 			drp.Spec.Configuration.ExtraConfigurationRepo = sourceSite.Spec.Configuration.ExtraConfigurationRepo
 		}
+		// The extraConfigurationRepository should be set in the clone site if defined in the source
+		if sourceSite.Spec.Configuration.ExtraConfigurationRepository.Branch != "" && sourceSite.Spec.Configuration.ExtraConfigurationRepository.RepositoryUrl != "" && drp.Spec.Configuration.ExtraConfigurationRepository.Branch == "" && drp.Spec.Configuration.ExtraConfigurationRepository.RepositoryUrl != "" {
+			drp.Spec.Configuration.ExtraConfigurationRepository.Branch = sourceSite.Spec.Configuration.ExtraConfigurationRepository.Branch
+			drp.Spec.Configuration.ExtraConfigurationRepository.RepositoryUrl = sourceSite.Spec.Configuration.ExtraConfigurationRepository.RepositoryUrl
+		}
 	}
 	// Initialize 'spec.version.releaseSpec' if empty
 	if len(drp.Spec.Version.ReleaseSpec) == 0 {
