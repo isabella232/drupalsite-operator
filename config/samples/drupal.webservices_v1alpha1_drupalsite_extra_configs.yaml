@@ -10,6 +10,9 @@ spec:
     releaseSpec: "RELEASE-2021.11.19T01-52-19Z"
   configuration:
     extraConfigurationRepo: "https://gitlab.cern.ch/drupal/paas/example-drupalsite-d8-extraconfig.git"
+    extraConfigurationRepository:
+      branch: "master"
+      repositoryUrl: "https://gitlab.cern.ch/drupal/paas/example-drupalsite-d8-extraconfig.git"
     qosClass: "standard"
     databaseClass: "standard"
     diskSize: "1Gi"
