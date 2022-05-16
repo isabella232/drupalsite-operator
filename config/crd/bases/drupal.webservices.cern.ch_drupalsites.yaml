@@ -77,6 +77,20 @@ spec:
                       through a Git repo, following these docs
                     pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
                     type: string
+                  extraConfigurationRepository:
+                    description: ExtraConfigurationRepository injects the composer
+                      project and other supported configuration from the given git
+                      repo to the site, by building an image specific to this site
+                      from the generic CERN one.
+                    properties:
+                      branch:
+                        description: Branch specifies the branch of the repository
+                        type: string
+                      repositoryUrl:
+                        description: RepositoryUrl specifies the URL of the repository
+                        pattern: '[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
+                        type: string
+                    type: object
                   qosClass:
                     default: standard
                     description: QoSClass specifies the website's performance and

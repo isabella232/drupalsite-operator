@@ -72,7 +72,11 @@ type Configuration struct {
 	// +kubebuilder:validation:Pattern=`[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)`
 	// +optional
 	ExtraConfigurationRepo string `json:"extraConfigurationRepo,omitempty"`
-	// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
+
+	// ExtraConfigurationRepository injects the composer project and other supported configuration from the given git repo to the site,
+	// by building an image specific to this site from the generic CERN one.
+	// +optional
+	ExtraConfigurationRepository `json:"extraConfigurationRepository,omitempty"`
 
 	// QoSClass specifies the website's performance and availability requirements.  The default value is "standard".
 	// +kubebuilder:validation:Enum:=critical;test;standard
@@ -113,6 +117,14 @@ type Configuration struct {
 	// +kubebuilder:validation:Enum:=enable
 	// +optional
 	Easystart string `json:"easystart,omitempty"`
+}
+
+// ExtraConfigurationRepository injects the composer project and other supported configuration from a git repository
+type ExtraConfigurationRepository struct {
+	// Branch specifies the branch of the repository
+	Branch string `json:"branch,omitempty"`
+	// RepositoryUrl specifies the URL of the repository
+	RepositoryUrl Url `json:"repositoryUrl,omitempty"`
 }
 
 // QoSClass specifies the website's performance and availability requirements
