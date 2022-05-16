@@ -645,8 +645,7 @@ func buildConfigForDrupalSiteBuilderS2I(currentobject *buildv1.BuildConfig, d *w
 				CompletionDeadlineSeconds: pointer.Int64Ptr(1200),
 				Source: buildv1.BuildSource{
 					Git: &buildv1.GitBuildSource{
-						// TODO: support branches https://gitlab.cern.ch/drupal/paas/drupalsite-operator/-/issues/28
-						Ref: "master",
+						Ref: d.Spec.Configuration.ExtraConfigurationRepository.Branch,
 						URI: d.Spec.Configuration.ExtraConfigurationRepo,
 					},
 				},
